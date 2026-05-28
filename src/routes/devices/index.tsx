@@ -226,11 +226,6 @@ function DevicesListPage() {
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
       <header className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">
-          {/* {currentProject ? (
-            <span className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
-              Project · {currentProject.name.toUpperCase()}
-            </span>
-          ) : null} */}
           <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
           <p className="text-sm text-muted-foreground">
             Physical units in the field. Status reflects the last heartbeat from

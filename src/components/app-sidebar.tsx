@@ -9,14 +9,16 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { CpuIcon } from "lucide-react"
+import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
-const navMain = [
-  { title: "Devices", url: "/devices", icon: <CpuIcon /> },
-]
+const navMain = [{ title: "Devices", url: "/devices", icon: <CpuIcon /> }]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const authUser = useAuthStore((s) => s.user)
@@ -30,6 +32,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild className="gap-1">
+              <a href="/dashboard">
+                <div className="flex aspect-square size-9 items-center justify-center rounded-md text-primary">
+                  <XorgateLogo className="size-6!" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">xorgate</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    AI-Native IoT Infrastructure
+                  </span>
+                </div>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <OrganizationSwitcher />
         <ProjectSwitcher />
       </SidebarHeader>

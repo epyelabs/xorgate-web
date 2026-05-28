@@ -24,6 +24,18 @@ function resolvePageTitle(pathname: string): string {
   return "xorgate"
 }
 
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-svh items-center justify-center">
+      <span className="animate-pulse font-mono text-xs text-muted-foreground">
+        Loading...
+      </span>
+    </div>
+  )
+}
+
+const AUTH_ROUTES = ["/login", "/signup"]
+
 function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -34,14 +46,10 @@ function RootLayout() {
     initialize()
   }, [initialize])
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center">
-        <span className="text-muted-foreground animate-pulse font-mono text-xs">
-          loading...
-        </span>
-      </div>
-    )
+  const isOnAuthRoute = AUTH_ROUTES.includes(location.pathname)
+
+  if (isLoading || (isAuthenticated && isOnAuthRoute)) {
+    return <LoadingScreen />
   }
 
   if (!isAuthenticated) {

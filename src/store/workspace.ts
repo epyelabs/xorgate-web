@@ -5,6 +5,7 @@ import {
   createProject as apiCreateProject,
   listProjects as apiListProjects,
   registerOrgIdGetter,
+  registerProjectIdGetter,
   type Organization,
   type Project,
 } from "@/lib/api"
@@ -132,6 +133,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 )
 
 registerOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
+registerProjectIdGetter(() => useWorkspaceStore.getState().currentProjectId)
 
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.isAuthenticated && !state.isAuthenticated) {

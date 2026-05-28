@@ -17,8 +17,11 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard",
+function resolvePageTitle(pathname: string): string {
+  if (pathname === "/dashboard") return "Dashboard"
+  if (pathname === "/devices") return "Devices"
+  if (pathname.startsWith("/devices/")) return "Device Detail"
+  return "xorgate"
 }
 
 function RootLayout() {
@@ -45,7 +48,7 @@ function RootLayout() {
     return <Outlet />
   }
 
-  const pageTitle = PAGE_TITLES[location.pathname] ?? "xorgate"
+  const pageTitle = resolvePageTitle(location.pathname)
 
   return (
     <SidebarProvider>

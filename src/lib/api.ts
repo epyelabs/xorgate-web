@@ -3,9 +3,14 @@ import { getIdToken } from "./cognito"
 const API_URL = import.meta.env.VITE_API_BASE_URL as string
 
 let currentOrgIdGetter: () => string | null = () => null
+let currentProjectIdGetter: () => string | null = () => null
 
 export function registerOrgIdGetter(fn: () => string | null) {
   currentOrgIdGetter = fn
+}
+
+export function registerProjectIdGetter(fn: () => string | null) {
+  currentProjectIdGetter = fn
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -33,6 +38,8 @@ export async function apiRequest<T>(
   const headers = await authHeaders()
   const orgId = currentOrgIdGetter()
   if (orgId) headers["X-Organization-Id"] = orgId
+  const projectId = currentProjectIdGetter()
+  if (projectId) headers["X-Project-Id"] = projectId
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -123,4 +130,35 @@ export async function createProject(input: {
     method: "POST",
     body: JSON.stringify(input),
   })
+}
+
+export type DeviceStatus =
+  | "provisioned"
+  | "online"
+  | "offline"
+  | "decommissioned"
+
+export interface Device {
+  id: string
+  projectId: string
+  deviceModelId: string
+  serial: string
+  name: string | null
+  firmwareVersion: string | null
+  simIccid: string | null
+  status: DeviceStatus
+  lastSeenAt: string | null
+  lastLatitude: string | null
+  lastLongitude: string | null
+  lastAccuracyM: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function listDevices(): Promise<{ devices: Device[] }> {
+  return apiRequest("/devices")
+}
+
+export async function getDevice(id: string): Promise<{ device: Device }> {
+  return apiRequest(`/devices/${id}`)
 }

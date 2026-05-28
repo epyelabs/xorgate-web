@@ -62,6 +62,38 @@ export const createProjectSchema = z.object({
   description: z.string().max(280, "Description is too long").optional(),
 })
 
+export const deviceStatusSchema = z.enum([
+  "provisioned",
+  "online",
+  "offline",
+  "decommissioned",
+])
+
+export const deviceSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  deviceModelId: z.string(),
+  serial: z.string(),
+  name: z.string().nullable(),
+  firmwareVersion: z.string().nullable(),
+  simIccid: z.string().nullable(),
+  status: deviceStatusSchema,
+  lastSeenAt: z.string().nullable(),
+  lastLatitude: z.string().nullable(),
+  lastLongitude: z.string().nullable(),
+  lastAccuracyM: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const listDevicesResponseSchema = z.object({
+  devices: z.array(deviceSchema),
+})
+
+export const getDeviceResponseSchema = z.object({
+  device: deviceSchema,
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>

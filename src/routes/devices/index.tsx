@@ -35,6 +35,7 @@ import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
+import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 import {
   ColHead,
   DevicesTableSkeleton,
@@ -142,6 +143,7 @@ function DevicesListPage() {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | "any">("any")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [provisionOpen, setProvisionOpen] = useState(false)
   const currentProjectId = useWorkspaceStore((s) => s.currentProjectId)
   const currentProject = useWorkspaceStore((s) =>
     s.projects.find((p) => p.id === s.currentProjectId)
@@ -220,7 +222,7 @@ function DevicesListPage() {
     })
   }
 
-  const handleProvision = () => toast.info("Provisioning flow coming soon")
+  const handleProvision = () => setProvisionOpen(true)
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -392,6 +394,11 @@ function DevicesListPage() {
           </Table>
         )}
       </div>
+
+      <ProvisionDeviceDialog
+        open={provisionOpen}
+        onOpenChange={setProvisionOpen}
+      />
     </div>
   )
 }

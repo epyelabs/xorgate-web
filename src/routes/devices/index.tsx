@@ -226,11 +226,11 @@ function DevicesListPage() {
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
       <header className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">
-          {currentProject ? (
+          {/* {currentProject ? (
             <span className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
               Project · {currentProject.name.toUpperCase()}
             </span>
-          ) : null}
+          ) : null} */}
           <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
           <p className="text-sm text-muted-foreground">
             Physical units in the field. Status reflects the last heartbeat from
@@ -263,7 +263,7 @@ function DevicesListPage() {
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-full max-w-sm">
-            <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -313,7 +313,7 @@ function DevicesListPage() {
                   <input
                     type="checkbox"
                     aria-label="Select all"
-                    className="size-3.5 cursor-pointer accent-primary align-middle"
+                    className="size-3.5 cursor-pointer align-middle accent-primary"
                     checked={allFilteredSelected}
                     ref={(el) => {
                       if (el) el.indeterminate = someFilteredSelected
@@ -339,7 +339,7 @@ function DevicesListPage() {
                     <input
                       type="checkbox"
                       aria-label={`Select ${device.serial}`}
-                      className="size-3.5 cursor-pointer accent-primary align-middle"
+                      className="size-3.5 cursor-pointer align-middle accent-primary"
                       checked={selected.has(device.id)}
                       onChange={() => toggleOne(device.id)}
                     />

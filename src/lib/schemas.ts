@@ -45,6 +45,25 @@ export const meResponseSchema = z.object({
   organizations: z.array(organizationSchema),
 })
 
+const slugField = z
+  .string()
+  .min(1, "Slug is required")
+  .max(60, "Slug is too long")
+  .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only")
+
+export const createOrganizationSchema = z.object({
+  name: z.string().min(1, "Name is required").max(80, "Name is too long"),
+  slug: slugField,
+})
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, "Name is required").max(80, "Name is too long"),
+  slug: slugField,
+  description: z.string().max(280, "Description is too long").optional(),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>
+export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
+export type CreateProjectInput = z.infer<typeof createProjectSchema>

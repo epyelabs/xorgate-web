@@ -1,9 +1,9 @@
 import * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavUser } from "@/components/nav-user"
-import { TeamSwitcher } from "@/components/team-switcher"
+import { OrganizationSwitcher } from "@/components/organization-switcher"
+import { ProjectSwitcher } from "@/components/project-switcher"
 import {
   Sidebar,
   SidebarContent,
@@ -12,36 +12,12 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
-  GalleryVerticalEndIcon,
-  AudioLinesIcon,
-  TerminalIcon,
   TerminalSquareIcon,
   BotIcon,
   BookOpenIcon,
   Settings2Icon,
-  FrameIcon,
-  PieChartIcon,
-  MapIcon,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth"
-
-const teams = [
-  {
-    name: "Acme Inc",
-    logo: <GalleryVerticalEndIcon />,
-    plan: "Enterprise",
-  },
-  {
-    name: "Acme Corp.",
-    logo: <AudioLinesIcon />,
-    plan: "Startup",
-  },
-  {
-    name: "Evil Corp.",
-    logo: <TerminalIcon />,
-    plan: "Free",
-  },
-]
 
 const navMain = [
   {
@@ -89,12 +65,6 @@ const navMain = [
   },
 ]
 
-const projects = [
-  { name: "Design Engineering", url: "#", icon: <FrameIcon /> },
-  { name: "Sales & Marketing", url: "#", icon: <PieChartIcon /> },
-  { name: "Travel", url: "#", icon: <MapIcon /> },
-]
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const authUser = useAuthStore((s) => s.user)
 
@@ -107,11 +77,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={teams} />
+        <OrganizationSwitcher />
+        <ProjectSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navMain} />
-        <NavProjects projects={projects} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

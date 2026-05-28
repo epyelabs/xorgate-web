@@ -2,6 +2,12 @@ import { getIdToken } from "./cognito"
 
 const API_URL = import.meta.env.VITE_API_BASE_URL as string
 
+let currentOrgIdGetter: () => string | null = () => null
+
+export function registerOrgIdGetter(fn: () => string | null) {
+  currentOrgIdGetter = fn
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getIdToken()
   if (!token) throw new Error("Not authenticated")
@@ -25,6 +31,8 @@ export async function apiRequest<T>(
   init: RequestInit = {}
 ): Promise<T> {
   const headers = await authHeaders()
+  const orgId = currentOrgIdGetter()
+  if (orgId) headers["X-Organization-Id"] = orgId
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -68,6 +76,16 @@ export interface Organization {
   updated_at: string
 }
 
+export interface Project {
+  id: string
+  organization_id: string
+  name: string
+  slug: string
+  description: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface MeResponse {
   user: MeUser
   memberships: Membership[]
@@ -76,4 +94,33 @@ export interface MeResponse {
 
 export async function getMe(): Promise<MeResponse> {
   return apiRequest<MeResponse>("/me")
+}
+
+export async function listOrganizations(): Promise<{ organizations: Organization[] }> {
+  return apiRequest("/organizations")
+}
+
+export async function createOrganization(input: {
+  name: string
+  slug: string
+}): Promise<{ organization: Organization }> {
+  return apiRequest("/organizations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function listProjects(): Promise<{ projects: Project[] }> {
+  return apiRequest("/projects")
+}
+
+export async function createProject(input: {
+  name: string
+  slug: string
+  description?: string
+}): Promise<{ project: Project }> {
+  return apiRequest("/projects", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
 }

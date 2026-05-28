@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError, getDevice, type Device, type DeviceStatus } from "@/lib/api"
 import { getDeviceResponseSchema } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
@@ -117,9 +118,14 @@ function DeviceDetailPage() {
           ) : error ? (
             <p className="text-destructive text-sm">{error}</p>
           ) : device === null ? (
-            <p className="text-muted-foreground animate-pulse text-sm">
-              Loading...
-            </p>
+            <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-1">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-4 w-40" />
+                </div>
+              ))}
+            </dl>
           ) : (
             <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Serial" value={device.serial} />

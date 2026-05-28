@@ -19,6 +19,7 @@ import {
   ChevronsUpDownIcon,
   PlusIcon,
 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { CreateOrganizationDialog } from "@/components/create-organization-dialog"
@@ -26,6 +27,7 @@ import { CreateOrganizationDialog } from "@/components/create-organization-dialo
 export function OrganizationSwitcher() {
   const { isMobile } = useSidebar()
   const organizations = useAuthStore((s) => s.organizations)
+  const isAuthLoading = useAuthStore((s) => s.isLoading)
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
@@ -36,6 +38,7 @@ export function OrganizationSwitcher() {
 
   const activeOrg =
     organizations.find((o) => o.id === currentOrganizationId) ?? null
+  const isLoadingOrgs = isAuthLoading && organizations.length === 0
 
   return (
     <>
@@ -51,12 +54,21 @@ export function OrganizationSwitcher() {
                   <Building2Icon />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">
-                    {activeOrg?.name ?? "No organization"}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {activeOrg?.slug ?? "Create one to get started"}
-                  </span>
+                  {isLoadingOrgs ? (
+                    <>
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="mt-1 h-3 w-16" />
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate font-medium">
+                        {activeOrg?.name ?? "No organization"}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {activeOrg?.slug ?? "Create one to get started"}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <ChevronsUpDownIcon className="ml-auto" />
               </SidebarMenuButton>
@@ -70,14 +82,24 @@ export function OrganizationSwitcher() {
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 Organizations
               </DropdownMenuLabel>
-              {organizations.length === 0 && (
+              {isLoadingOrgs ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 p-2"
+                  >
+                    <Skeleton className="size-6 rounded-md" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))
+              ) : organizations.length === 0 ? (
                 <DropdownMenuItem
                   disabled
                   className="text-muted-foreground italic"
                 >
                   No organizations yet
                 </DropdownMenuItem>
-              )}
+              ) : null}
               {organizations.map((org) => {
                 const isActive = org.id === currentOrganizationId
                 return (

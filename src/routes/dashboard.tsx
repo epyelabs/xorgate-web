@@ -58,13 +58,13 @@ function DashboardPage() {
         </CardHeader>
         <CardContent>
           {error ? (
-            <p className="text-destructive text-sm">{error}</p>
+            <p className="text-sm text-destructive">{error}</p>
           ) : me ? (
-            <pre className="bg-muted overflow-auto rounded-md p-4 font-mono text-xs">
+            <pre className="overflow-auto rounded-md bg-muted p-4 font-mono text-xs">
               {JSON.stringify(me, null, 2)}
             </pre>
           ) : (
-            <p className="text-muted-foreground animate-pulse text-sm">
+            <p className="animate-pulse text-sm text-muted-foreground">
               Loading...
             </p>
           )}

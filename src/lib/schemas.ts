@@ -35,8 +35,8 @@ export const organizationSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 })
 
 export const meResponseSchema = z.object({

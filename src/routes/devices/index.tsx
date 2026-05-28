@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { listDevices, type Device, type DeviceStatus } from "@/lib/api"
 import { listDevicesResponseSchema } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
@@ -100,9 +101,38 @@ function DevicesListPage() {
           {error ? (
             <p className="text-destructive text-sm">{error}</p>
           ) : devices === null ? (
-            <p className="text-muted-foreground animate-pulse text-sm">
-              Loading...
-            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Serial</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last seen</TableHead>
+                  <TableHead>Updated</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-32" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : devices.length === 0 ? (
             <p className="text-muted-foreground text-sm">No devices yet.</p>
           ) : (

@@ -19,6 +19,7 @@ import {
   FolderIcon,
   PlusIcon,
 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useWorkspaceStore } from "@/store/workspace"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
 
@@ -38,7 +39,6 @@ export function ProjectSwitcher() {
 
   const triggerLabel = (() => {
     if (!currentOrganizationId) return "Select an organization"
-    if (isLoading) return "Loading projects..."
     if (activeProject) return activeProject.name
     if (projects.length === 0) return "No projects yet"
     return "Select a project"
@@ -60,10 +60,19 @@ export function ProjectSwitcher() {
                   <FolderIcon className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{triggerLabel}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {triggerSubLabel}
-                  </span>
+                  {isLoading ? (
+                    <>
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="mt-1 h-3 w-16" />
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate font-medium">{triggerLabel}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {triggerSubLabel}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <ChevronsUpDownIcon className="ml-auto" />
               </SidebarMenuButton>
@@ -77,14 +86,21 @@ export function ProjectSwitcher() {
               <DropdownMenuLabel className="text-xs text-muted-foreground">
                 Projects
               </DropdownMenuLabel>
-              {projects.length === 0 && (
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2">
+                    <Skeleton className="size-6 rounded-md" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ))
+              ) : projects.length === 0 ? (
                 <DropdownMenuItem
                   disabled
                   className="text-muted-foreground italic"
                 >
-                  {isLoading ? "Loading..." : "No projects yet"}
+                  No projects yet
                 </DropdownMenuItem>
-              )}
+              ) : null}
               {projects.map((project) => {
                 const isActive = project.id === currentProjectId
                 return (

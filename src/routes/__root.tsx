@@ -67,12 +67,12 @@ function RootLayout() {
             <SidebarTrigger className="-ml-1" />
             <Separator
               orientation="vertical"
-              className="mr-2 data-[orientation=vertical]:h-4"
+              className="mr-2 data-vertical:h-4 data-vertical:self-center"
             />
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/devices">xorgate</BreadcrumbLink>
+                  <BreadcrumbLink href="/devices">Home</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>

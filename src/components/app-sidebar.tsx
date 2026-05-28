@@ -27,6 +27,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     name: authUser?.name ?? authUser?.email ?? "Guest",
     email: authUser?.email ?? "",
     avatar: "",
+    tier: authUser?.tier ?? "free",
   }
 
   return (
@@ -35,8 +36,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="gap-1">
-              <a href="/dashboard">
-                <div className="flex aspect-square size-9 items-center justify-center rounded-md text-primary">
+              <a href="/devices">
+                <div className="flex aspect-square size-9 items-center justify-center rounded-md text-sidebar-primary">
                   <XorgateLogo className="size-6!" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">

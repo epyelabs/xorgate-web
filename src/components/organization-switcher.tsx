@@ -16,7 +16,7 @@ import {
 import {
   Building2Icon,
   CheckIcon,
-  ChevronsUpDownIcon,
+  ChevronDownIcon,
   PlusIcon,
 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -47,30 +47,19 @@ export function OrganizationSwitcher() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
-                size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                className="border border-sidebar-border bg-background hover:bg-background data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
               >
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Building2Icon />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
+                <Building2Icon className="text-muted-foreground" />
+                <div className="flex flex-1 text-left text-sm leading-tight">
                   {isLoadingOrgs ? (
-                    <>
-                      <Skeleton className="h-4 w-28" />
-                      <Skeleton className="mt-1 h-3 w-16" />
-                    </>
+                    <Skeleton className="h-4 w-28" />
                   ) : (
-                    <>
-                      <span className="truncate font-medium">
-                        {activeOrg?.name ?? "No organization"}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {activeOrg?.slug ?? "Create one to get started"}
-                      </span>
-                    </>
+                    <span className="truncate font-normal">
+                      {activeOrg?.name ?? "No organization"}
+                    </span>
                   )}
                 </div>
-                <ChevronsUpDownIcon className="ml-auto" />
+                <ChevronDownIcon className="ml-auto text-muted-foreground" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   CheckIcon,
-  ChevronsUpDownIcon,
+  ChevronDownIcon,
   FolderIcon,
   PlusIcon,
 } from "lucide-react"
@@ -44,8 +44,6 @@ export function ProjectSwitcher() {
     return "Select a project"
   })()
 
-  const triggerSubLabel = activeProject?.slug ?? "Project"
-
   return (
     <>
       <SidebarMenu>
@@ -53,28 +51,17 @@ export function ProjectSwitcher() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild disabled={!currentOrganizationId}>
               <SidebarMenuButton
-                size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                className="border border-sidebar-border bg-background hover:bg-background data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
               >
-                <div className="flex aspect-square size-8 items-center justify-center rounded-md border">
-                  <FolderIcon className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
+                <FolderIcon className="text-muted-foreground" />
+                <div className="flex flex-1 text-left text-sm leading-tight">
                   {isLoading ? (
-                    <>
-                      <Skeleton className="h-4 w-28" />
-                      <Skeleton className="mt-1 h-3 w-16" />
-                    </>
+                    <Skeleton className="h-4 w-28" />
                   ) : (
-                    <>
-                      <span className="truncate font-medium">{triggerLabel}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {triggerSubLabel}
-                      </span>
-                    </>
+                    <span className="truncate font-normal">{triggerLabel}</span>
                   )}
                 </div>
-                <ChevronsUpDownIcon className="ml-auto" />
+                <ChevronDownIcon className="ml-auto text-muted-foreground" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent

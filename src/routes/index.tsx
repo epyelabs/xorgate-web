@@ -1,4 +1,10 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { useEffect } from "react"
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/store/auth"
 
@@ -6,13 +12,22 @@ export const Route = createFileRoute("/")({
   beforeLoad: () => {
     const { isAuthenticated, isLoading } = useAuthStore.getState()
     if (!isLoading && isAuthenticated) {
-      throw redirect({ to: "/dashboard" })
+      throw redirect({ to: "/devices" })
     }
   },
   component: LandingPage,
 })
 
 function LandingPage() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate({ to: "/devices", replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
   return (
     <div className="flex min-h-svh items-center justify-center px-6">
       <div className="flex max-w-xl flex-col items-center gap-6 text-center">

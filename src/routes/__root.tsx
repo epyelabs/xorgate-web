@@ -72,7 +72,7 @@ function RootLayout() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/dashboard">xorgate</BreadcrumbLink>
+                  <BreadcrumbLink href="/devices">xorgate</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>

@@ -145,12 +145,8 @@ export interface Device {
   serial: string
   name: string | null
   firmwareVersion: string | null
-  simIccid: string | null
   status: DeviceStatus
   lastSeenAt: string | null
-  lastLatitude: string | null
-  lastLongitude: string | null
-  lastAccuracyM: number | null
   createdAt: string
   updatedAt: string
 }

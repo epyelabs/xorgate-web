@@ -142,24 +142,11 @@ function DeviceDetailPage() {
                 label="Firmware version"
                 value={device.firmwareVersion ?? "-"}
               />
-              <Field label="SIM ICCID" value={device.simIccid ?? "-"} />
               <Field label="Project ID" value={device.projectId} />
               <Field label="Device model ID" value={device.deviceModelId} />
               <Field
                 label="Last seen"
                 value={formatTimestamp(device.lastSeenAt)}
-              />
-              <Field
-                label="Last location"
-                value={
-                  device.lastLatitude && device.lastLongitude
-                    ? `${device.lastLatitude}, ${device.lastLongitude}`
-                    : "Unknown"
-                }
-              />
-              <Field
-                label="Last accuracy (m)"
-                value={device.lastAccuracyM ?? "-"}
               />
               <Field
                 label="Created"

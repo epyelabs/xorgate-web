@@ -76,12 +76,8 @@ export const deviceSchema = z.object({
   serial: z.string(),
   name: z.string().nullable(),
   firmwareVersion: z.string().nullable(),
-  simIccid: z.string().nullable(),
   status: deviceStatusSchema,
   lastSeenAt: z.string().nullable(),
-  lastLatitude: z.string().nullable(),
-  lastLongitude: z.string().nullable(),
-  lastAccuracyM: z.number().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

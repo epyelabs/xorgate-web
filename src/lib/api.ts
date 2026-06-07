@@ -158,3 +158,45 @@ export async function listDevices(): Promise<{ devices: Device[] }> {
 export async function getDevice(id: string): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`)
 }
+
+export interface IoCapabilities {
+  schemaVersion?: number
+  media?: {
+    video?: { key: string; label?: string }[]
+    audio?: unknown[]
+  }
+  sensors?: { imu?: { axes?: string[] } }
+  comm?: {
+    module?: string
+    gps?: { fields?: string[] }
+    signal?: { fields?: string[] }
+  }
+  system?: { fields?: string[] }
+}
+
+export interface DeviceModel {
+  id: string
+  name: string
+  sku: string
+  ioCapabilities: IoCapabilities | null
+  firmwareChannel: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function getDeviceModel(
+  id: string
+): Promise<{ device_model: DeviceModel }> {
+  return apiRequest(`/device-models/${id}`)
+}
+
+// Attaches the browser IoT policy to the caller's Cognito identity. Required
+// before MQTT-over-WSS: AWS IoT authorizes Cognito identities via an attached
+// IoT policy, not the IAM role. Idempotent.
+export async function attachIotPolicy(): Promise<{
+  attached: boolean
+  identityId: string
+  policyName: string
+}> {
+  return apiRequest("/iot/attach-policy", { method: "POST" })
+}

@@ -20,6 +20,7 @@ import {
 function resolvePageTitle(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard"
   if (pathname === "/devices") return "Devices"
+  if (pathname.endsWith("/live")) return "Live Telemetry"
   if (pathname.startsWith("/devices/")) return "Device Detail"
   return "xorgate"
 }

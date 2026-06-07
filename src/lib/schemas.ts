@@ -90,6 +90,69 @@ export const getDeviceResponseSchema = z.object({
   device: deviceSchema,
 })
 
+// --- Device model capabilities (P2): drives which live widgets render ---
+// Unknown nested fields (codec, maxWidth, …) are stripped — we only read what
+// gates a widget. Note zod v4 `z.record` takes (keySchema, valueSchema).
+export const ioCapabilitiesSchema = z.object({
+  schemaVersion: z.number().optional(),
+  media: z
+    .object({
+      video: z
+        .array(z.object({ key: z.string(), label: z.string().optional() }))
+        .optional(),
+      audio: z.array(z.unknown()).optional(),
+    })
+    .optional(),
+  sensors: z
+    .object({ imu: z.object({ axes: z.array(z.string()).optional() }).optional() })
+    .optional(),
+  comm: z
+    .object({
+      module: z.string().optional(),
+      gps: z.object({ fields: z.array(z.string()).optional() }).optional(),
+      signal: z.object({ fields: z.array(z.string()).optional() }).optional(),
+    })
+    .optional(),
+  system: z.object({ fields: z.array(z.string()).optional() }).optional(),
+})
+
+export const deviceModelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sku: z.string(),
+  ioCapabilities: ioCapabilitiesSchema.nullable().optional(),
+  firmwareChannel: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const getDeviceModelResponseSchema = z.object({
+  device_model: deviceModelSchema,
+})
+
+// --- Live telemetry payload (P2): matches the device §1.3 contract over MQTT ---
+const numericLeaf = z.object({ value: z.number(), unit: z.string().optional() })
+const boolLeaf = z.object({ value: z.boolean() })
+
+export const telemetryPayloadSchema = z.object({
+  v: z.literal(1),
+  deviceId: z.string(),
+  ts: z.number(),
+  seq: z.number().optional(),
+  metrics: z.record(z.string(), z.record(z.string(), numericLeaf)).default({}),
+  media: z
+    .object({
+      kvs: boolLeaf.optional(),
+      recording: boolLeaf.optional(),
+      streams: z.array(z.string()).optional(),
+    })
+    .optional(),
+})
+
+export type IoCapabilities = z.infer<typeof ioCapabilitiesSchema>
+export type DeviceModel = z.infer<typeof deviceModelSchema>
+export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>

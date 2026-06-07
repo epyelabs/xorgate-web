@@ -15,6 +15,8 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
+import { Route as DevicesIdIndexRouteImport } from './routes/devices/$id.index'
+import { Route as DevicesIdLiveRouteImport } from './routes/devices/$id.live'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -46,22 +48,35 @@ const DevicesIdRoute = DevicesIdRouteImport.update({
   path: '/devices/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevicesIdIndexRoute = DevicesIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
+const DevicesIdLiveRoute = DevicesIdLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/devices/$id': typeof DevicesIdRoute
+  '/devices/$id': typeof DevicesIdRouteWithChildren
   '/devices/': typeof DevicesIndexRoute
+  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id/': typeof DevicesIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/devices/$id': typeof DevicesIdRoute
   '/devices': typeof DevicesIndexRoute
+  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id': typeof DevicesIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -69,8 +84,10 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/devices/$id': typeof DevicesIdRoute
+  '/devices/$id': typeof DevicesIdRouteWithChildren
   '/devices/': typeof DevicesIndexRoute
+  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id/': typeof DevicesIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -81,8 +98,17 @@ export interface FileRouteTypes {
     | '/signup'
     | '/devices/$id'
     | '/devices/'
+    | '/devices/$id/live'
+    | '/devices/$id/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/signup' | '/devices/$id' | '/devices'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/signup'
+    | '/devices'
+    | '/devices/$id/live'
+    | '/devices/$id'
   id:
     | '__root__'
     | '/'
@@ -91,6 +117,8 @@ export interface FileRouteTypes {
     | '/signup'
     | '/devices/$id'
     | '/devices/'
+    | '/devices/$id/live'
+    | '/devices/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -98,7 +126,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
-  DevicesIdRoute: typeof DevicesIdRoute
+  DevicesIdRoute: typeof DevicesIdRouteWithChildren
   DevicesIndexRoute: typeof DevicesIndexRoute
 }
 
@@ -146,15 +174,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/devices/$id/': {
+      id: '/devices/$id/'
+      path: '/'
+      fullPath: '/devices/$id/'
+      preLoaderRoute: typeof DevicesIdIndexRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
+    '/devices/$id/live': {
+      id: '/devices/$id/live'
+      path: '/live'
+      fullPath: '/devices/$id/live'
+      preLoaderRoute: typeof DevicesIdLiveRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
   }
 }
+
+interface DevicesIdRouteChildren {
+  DevicesIdLiveRoute: typeof DevicesIdLiveRoute
+  DevicesIdIndexRoute: typeof DevicesIdIndexRoute
+}
+
+const DevicesIdRouteChildren: DevicesIdRouteChildren = {
+  DevicesIdLiveRoute: DevicesIdLiveRoute,
+  DevicesIdIndexRoute: DevicesIdIndexRoute,
+}
+
+const DevicesIdRouteWithChildren = DevicesIdRoute._addFileChildren(
+  DevicesIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
-  DevicesIdRoute: DevicesIdRoute,
+  DevicesIdRoute: DevicesIdRouteWithChildren,
   DevicesIndexRoute: DevicesIndexRoute,
 }
 export const routeTree = rootRouteImport

@@ -200,3 +200,21 @@ export async function attachIotPolicy(): Promise<{
 }> {
   return apiRequest("/iot/attach-policy", { method: "POST" })
 }
+
+// --- Live video (P3): KVS WebRTC signaling channels for the browser viewer ---
+export interface KvsChannel {
+  streamKey: string
+  channelName: string
+  channelArn: string
+  region: string
+}
+
+// Returns the device's KVS signaling channels (one per provisioned video stream).
+// The browser mints its own scoped AWS creds via the Cognito identity pool — KVS
+// uses standard IAM/SigV4 — so this endpoint returns channel metadata only.
+// An empty array means the device is not provisioned yet.
+export async function getKvsChannels(
+  deviceId: string
+): Promise<{ channels: KvsChannel[] }> {
+  return apiRequest(`/devices/${deviceId}/kvs-channels`)
+}

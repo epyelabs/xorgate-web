@@ -149,9 +149,22 @@ export const telemetryPayloadSchema = z.object({
     .optional(),
 })
 
+// --- Live video (P3): KVS signaling channels from GET /devices/{id}/kvs-channels ---
+export const kvsChannelSchema = z.object({
+  streamKey: z.string(),
+  channelName: z.string(),
+  channelArn: z.string(),
+  region: z.string(),
+})
+
+export const getKvsChannelsResponseSchema = z.object({
+  channels: z.array(kvsChannelSchema),
+})
+
 export type IoCapabilities = z.infer<typeof ioCapabilitiesSchema>
 export type DeviceModel = z.infer<typeof deviceModelSchema>
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>
+export type KvsChannelData = z.infer<typeof kvsChannelSchema>
 
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>

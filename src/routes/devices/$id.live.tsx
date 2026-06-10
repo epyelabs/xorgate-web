@@ -18,6 +18,7 @@ import { useIotTelemetry, type ConnStatus } from "@/hooks/use-iot-telemetry"
 import { TelemetryGauges } from "@/components/telemetry-gauges"
 import { TelemetryChart } from "@/components/telemetry-chart"
 import { GpsMap } from "@/components/gps-map"
+import { LiveVideoGrid } from "@/components/live-video-grid"
 
 export const Route = createFileRoute("/devices/$id/live")({
   beforeLoad: () => {
@@ -107,6 +108,7 @@ function DeviceLivePage() {
   const imu = imuMetrics(caps)
   const sysChart = systemChartMetrics(caps)
   const hasGps = Boolean(caps?.comm?.gps)
+  const videoCaps = caps?.media?.video ?? []
   const gpsLat = latest["gps.lat"]?.value
   const gpsLon = latest["gps.lon"]?.value
 
@@ -127,7 +129,7 @@ function DeviceLivePage() {
 
       <div>
         <h1 className="text-lg font-semibold">
-          {device?.name ?? device?.serial ?? "Device"} — Live telemetry
+          {device?.name ?? device?.serial ?? "Device"} — Live
         </h1>
         <p className="text-muted-foreground text-xs">{id}</p>
       </div>
@@ -136,6 +138,10 @@ function DeviceLivePage() {
         <p className="text-destructive text-sm">{connError}</p>
       ) : null}
       {loadError ? <p className="text-destructive text-sm">{loadError}</p> : null}
+
+      {videoCaps.length > 0 ? (
+        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
+      ) : null}
 
       <TelemetryGauges latest={latest} metrics={gauges} />
 

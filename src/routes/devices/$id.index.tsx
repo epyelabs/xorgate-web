@@ -95,13 +95,22 @@ function DeviceDetailPage() {
         >
           ← Back to devices
         </Link>
-        <Link
-          to="/devices/$id/live"
-          params={{ id }}
-          className="text-primary text-xs font-medium hover:underline"
-        >
-          Live telemetry →
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/devices/$id/live"
+            params={{ id }}
+            className="text-primary text-xs font-medium hover:underline"
+          >
+            Live telemetry →
+          </Link>
+          <Link
+            to="/devices/$id/history"
+            params={{ id }}
+            className="text-primary text-xs font-medium hover:underline"
+          >
+            Historical telemetry →
+          </Link>
+        </div>
       </div>
       <Card>
         <CardHeader>

@@ -218,3 +218,42 @@ export async function getKvsChannels(
 ): Promise<{ channels: KvsChannel[] }> {
   return apiRequest(`/devices/${deviceId}/kvs-channels`)
 }
+
+// --- Telemetry history (P4): reads over telemetry_readings + device_latest ---
+export interface TelemetryReadingRow {
+  ts: string
+  metric: string
+  value: number | null
+  unit: string | null
+}
+
+export interface TelemetryHistoryResponse {
+  readings: TelemetryReadingRow[]
+  // Echo of `interval`; null when raw (un-bucketed) rows were returned.
+  bucketSeconds: number | null
+  // True when the server row cap was hit — narrow the range or coarsen interval.
+  truncated: boolean
+}
+
+export async function getTelemetry(
+  deviceId: string,
+  params: { from: string; to: string; metric?: string; interval?: number }
+): Promise<TelemetryHistoryResponse> {
+  const qs = new URLSearchParams({ from: params.from, to: params.to })
+  if (params.metric) qs.set("metric", params.metric)
+  if (params.interval !== undefined) qs.set("interval", String(params.interval))
+  return apiRequest(`/devices/${deviceId}/telemetry?${qs.toString()}`)
+}
+
+export interface DeviceLatestRow {
+  metric: string
+  value: number | null
+  unit: string | null
+  ts: string
+}
+
+export async function getTelemetryLatest(
+  deviceId: string
+): Promise<{ latest: DeviceLatestRow[] }> {
+  return apiRequest(`/devices/${deviceId}/telemetry/latest`)
+}

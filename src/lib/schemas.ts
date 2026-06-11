@@ -161,10 +161,36 @@ export const getKvsChannelsResponseSchema = z.object({
   channels: z.array(kvsChannelSchema),
 })
 
+// --- Telemetry history (P4): GET /devices/{id}/telemetry(+/latest) ---
+export const telemetryReadingSchema = z.object({
+  ts: z.string(),
+  metric: z.string(),
+  value: z.number().nullable(),
+  unit: z.string().nullable(),
+})
+
+export const getTelemetryResponseSchema = z.object({
+  readings: z.array(telemetryReadingSchema),
+  bucketSeconds: z.number().nullable(),
+  truncated: z.boolean(),
+})
+
+export const deviceLatestRowSchema = z.object({
+  metric: z.string(),
+  value: z.number().nullable(),
+  unit: z.string().nullable(),
+  ts: z.string(),
+})
+
+export const getTelemetryLatestResponseSchema = z.object({
+  latest: z.array(deviceLatestRowSchema),
+})
+
 export type IoCapabilities = z.infer<typeof ioCapabilitiesSchema>
 export type DeviceModel = z.infer<typeof deviceModelSchema>
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>
 export type KvsChannelData = z.infer<typeof kvsChannelSchema>
+export type TelemetryReading = z.infer<typeof telemetryReadingSchema>
 
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>

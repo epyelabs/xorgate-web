@@ -17,6 +17,7 @@ import {
 } from "@/lib/schemas"
 import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
 import { useAuthStore } from "@/store/auth"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryHistory } from "@/hooks/use-telemetry-history"
 import { TelemetryChart } from "@/components/telemetry-chart"
 import { GpsTrackMap } from "@/components/gps-track-map"
@@ -98,6 +99,11 @@ function DeviceHistoryPage() {
         }
         if (cancelled) return
         setDevice(parsedDevice.data.device)
+        useBreadcrumbStore
+          .getState()
+          .setDeviceName(
+            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
+          )
 
         const rawModel = await getDeviceModel(
           parsedDevice.data.device.deviceModelId

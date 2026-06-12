@@ -14,6 +14,7 @@ import {
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
   gaugeMetrics,
   imuMetrics,
@@ -63,6 +64,11 @@ function DeviceLivePage() {
         }
         if (cancelled) return
         setDevice(parsedDevice.data.device)
+        useBreadcrumbStore
+          .getState()
+          .setDeviceName(
+            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
+          )
 
         const rawModel = await getDeviceModel(
           parsedDevice.data.device.deviceModelId

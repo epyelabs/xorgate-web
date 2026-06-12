@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError, getDevice, type Device, type DeviceStatus } from "@/lib/api"
 import { getDeviceResponseSchema } from "@/lib/schemas"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 export const Route = createFileRoute("/devices/$id/")({
   component: DeviceDetailPage,
@@ -70,7 +71,13 @@ function DeviceDetailPage() {
         if (!parsed.success) {
           throw new Error("Unexpected /devices/:id response shape")
         }
-        if (!cancelled) setDevice(parsed.data.device)
+        if (!cancelled) {
+          const fetched = parsed.data.device
+          setDevice(fetched)
+          useBreadcrumbStore
+            .getState()
+            .setDeviceName(fetched.name ?? fetched.serial)
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           if (!cancelled) setNotFound(true)

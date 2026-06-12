@@ -1,6 +1,7 @@
-import { useEffect } from "react"
+import { Fragment, useEffect } from "react"
 import { createRootRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { useAuthStore } from "@/store/auth"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   Breadcrumb,
@@ -17,12 +18,27 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 
-function resolvePageTitle(pathname: string): string {
-  if (pathname === "/dashboard") return "Dashboard"
-  if (pathname === "/devices") return "Devices"
-  if (pathname.endsWith("/live")) return "Live Telemetry"
-  if (pathname.startsWith("/devices/")) return "Device Detail"
-  return "xorgate"
+interface Crumb {
+  label: string
+  href?: string
+}
+
+function resolveCrumbs(pathname: string, deviceName: string | null): Crumb[] {
+  if (pathname === "/dashboard") return [{ label: "Dashboard" }]
+  if (pathname === "/devices") return [{ label: "Devices" }]
+  if (pathname.startsWith("/devices/")) {
+    const deviceCrumb: Crumb = { label: deviceName ?? "Device" }
+    const crumbs: Crumb[] = [{ label: "Devices", href: "/devices" }, deviceCrumb]
+    if (pathname.endsWith("/live")) {
+      deviceCrumb.href = pathname.slice(0, -"/live".length)
+      crumbs.push({ label: "Live Telemetry" })
+    } else if (pathname.endsWith("/history")) {
+      deviceCrumb.href = pathname.slice(0, -"/history".length)
+      crumbs.push({ label: "Historical Telemetry" })
+    }
+    return crumbs
+  }
+  return [{ label: "xorgate" }]
 }
 
 function LoadingScreen() {
@@ -41,6 +57,7 @@ function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const initialize = useAuthStore((s) => s.initialize)
+  const deviceName = useBreadcrumbStore((s) => s.deviceName)
   const location = useLocation()
 
   useEffect(() => {
@@ -57,7 +74,7 @@ function RootLayout() {
     return <Outlet />
   }
 
-  const pageTitle = resolvePageTitle(location.pathname)
+  const crumbs = resolveCrumbs(location.pathname, deviceName)
 
   return (
     <SidebarProvider>
@@ -75,10 +92,25 @@ function RootLayout() {
                 <BreadcrumbItem className="hidden md:block">
                   <BreadcrumbLink href="/devices">Home</BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block" />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{pageTitle}</BreadcrumbPage>
-                </BreadcrumbItem>
+                {crumbs.map((crumb, index) => {
+                  const isLast = index === crumbs.length - 1
+                  return (
+                    <Fragment key={`${crumb.label}-${index}`}>
+                      <BreadcrumbSeparator className="hidden md:block" />
+                      {isLast ? (
+                        <BreadcrumbItem>
+                          <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                      ) : (
+                        <BreadcrumbItem className="hidden md:block">
+                          <BreadcrumbLink href={crumb.href}>
+                            {crumb.label}
+                          </BreadcrumbLink>
+                        </BreadcrumbItem>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </BreadcrumbList>
             </Breadcrumb>
           </div>

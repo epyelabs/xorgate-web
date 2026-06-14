@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import {
   ApiError,
   getDevice,
   getDeviceModel,
-  type Device,
   type IoCapabilities,
 } from "@/lib/api"
 import {
@@ -38,7 +37,10 @@ export const Route = createFileRoute("/devices/$id/live")({
 
 const STATUS_META: Record<
   ConnStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  {
+    label: string
+    variant: "default" | "secondary" | "destructive" | "outline"
+  }
 > = {
   connecting: { label: "Connecting", variant: "secondary" },
   connected: { label: "Live", variant: "default" },
@@ -48,7 +50,6 @@ const STATUS_META: Record<
 
 function DeviceLivePage() {
   const { id } = Route.useParams()
-  const [device, setDevice] = useState<Device | null>(null)
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { latest, history, status, error: connError } = useIotTelemetry(id)
@@ -63,7 +64,6 @@ function DeviceLivePage() {
           throw new Error("Unexpected /devices/:id response shape")
         }
         if (cancelled) return
-        setDevice(parsedDevice.data.device)
         useBreadcrumbStore
           .getState()
           .setDeviceName(
@@ -102,29 +102,13 @@ function DeviceLivePage() {
   const statusMeta = STATUS_META[status]
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-      <div className="flex items-center justify-between">
-        <Link
-          to="/devices/$id"
-          params={{ id }}
-          className="text-muted-foreground hover:text-foreground text-xs"
-        >
-          ← Back to device
-        </Link>
-        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
-      </div>
-
-      <div>
-        <h1 className="text-lg font-semibold">
-          {device?.name ?? device?.serial ?? "Device"} — Live
-        </h1>
-        <p className="text-muted-foreground text-xs">{id}</p>
-      </div>
-
+    <div className="flex flex-col gap-4">
       {status === "error" && connError ? (
-        <p className="text-destructive text-sm">{connError}</p>
+        <p className="text-sm text-destructive">{connError}</p>
       ) : null}
-      {loadError ? <p className="text-destructive text-sm">{loadError}</p> : null}
+      {loadError ? (
+        <p className="text-sm text-destructive">{loadError}</p>
+      ) : null}
 
       {videoCaps.length > 0 ? (
         <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
@@ -134,7 +118,11 @@ function DeviceLivePage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {imu.length > 0 ? (
-          <TelemetryChart title="IMU acceleration" history={history} metrics={imu} />
+          <TelemetryChart
+            title="IMU acceleration"
+            history={history}
+            metrics={imu}
+          />
         ) : null}
         {sysChart.length > 0 ? (
           <TelemetryChart title="System" history={history} metrics={sysChart} />
@@ -145,7 +133,7 @@ function DeviceLivePage() {
         gpsLat !== undefined && gpsLon !== undefined ? (
           <GpsMap lat={gpsLat} lon={gpsLon} />
         ) : (
-          <p className="text-muted-foreground text-sm">Waiting for GPS fix…</p>
+          <p className="text-sm text-muted-foreground">Waiting for GPS fix…</p>
         )
       ) : null}
     </div>

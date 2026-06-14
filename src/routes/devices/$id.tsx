@@ -1,11 +1,25 @@
-import { useEffect } from "react"
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { useEffect, useState } from "react"
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useLocation,
+} from "@tanstack/react-router"
+import { toast } from "sonner"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ApiError, getDevice, type Device, type DeviceStatus } from "@/lib/api"
+import { getDeviceResponseSchema } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
-// Layout route for /devices/$id. Renders its children (index = detail card,
-// `live` = live telemetry) through the Outlet. The auth guard here protects all
-// nested routes.
+// Layout route for /devices/$id. Owns the device fetch and renders the shared
+// page header + tab bar; the active tab's content (live / history) renders
+// through the Outlet below. Because this layout stays mounted while only the
+// leaf swaps, the header persists across tab switches without refetching.
 export const Route = createFileRoute("/devices/$id")({
   beforeLoad: () => {
     const { isAuthenticated, isLoading } = useAuthStore.getState()
@@ -16,17 +30,148 @@ export const Route = createFileRoute("/devices/$id")({
   component: DeviceLayout,
 })
 
+const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+})
+
+function formatTimestamp(iso: string | null): string {
+  if (!iso) return "Never"
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return dateTimeFormat.format(parsed)
+}
+
+function statusVariant(
+  status: DeviceStatus
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "online":
+      return "default"
+    case "offline":
+      return "destructive"
+    case "provisioned":
+      return "secondary"
+    case "decommissioned":
+      return "outline"
+  }
+}
+
+function deviceInitials(device: Device): string {
+  const source = device.name ?? device.serial
+  return source.slice(0, 2).toUpperCase()
+}
+
 function DeviceLayout() {
   const { id } = Route.useParams()
+  const { pathname } = useLocation()
+  const activeTab = pathname.endsWith("/history") ? "history" : "live"
+  const [device, setDevice] = useState<Device | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
 
-  // The child pages publish the device name once it loads; clear it when
-  // leaving the device (or switching to a different one) so the breadcrumb
-  // never shows a stale name.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const raw = await getDevice(id)
+        const parsed = getDeviceResponseSchema.safeParse(raw)
+        if (!parsed.success) {
+          throw new Error("Unexpected /devices/:id response shape")
+        }
+        if (!cancelled) {
+          const fetched = parsed.data.device
+          setDevice(fetched)
+          useBreadcrumbStore
+            .getState()
+            .setDeviceName(fetched.name ?? fetched.serial)
+        }
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          if (!cancelled) setNotFound(true)
+          return
+        }
+        const message = (err as Error).message
+        if (!cancelled) setError(message)
+        toast.error(message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  // Clear the published name when leaving the device (or switching to a
+  // different one) so the breadcrumb never shows a stale name.
   useEffect(() => {
     return () => {
       useBreadcrumbStore.getState().setDeviceName(null)
     }
   }, [id])
 
-  return <Outlet />
+  if (notFound) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        <p className="text-muted-foreground text-sm">Device not found.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <Avatar size="lg">
+            <AvatarFallback>
+              {device ? deviceInitials(device) : "—"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-semibold tracking-tight">
+                {device?.name ?? device?.serial ?? "Device"}
+              </h1>
+              {device ? (
+                <Badge variant={statusVariant(device.status)}>
+                  {device.status}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-muted-foreground text-xs">{id}</p>
+          </div>
+        </div>
+
+        {error ? (
+          <p className="text-destructive text-sm">{error}</p>
+        ) : device === null ? (
+          <Skeleton className="h-4 w-96 max-w-full" />
+        ) : (
+          <p className="text-muted-foreground text-xs">
+            Serial {device.serial} · Model {device.deviceModelId} · fw{" "}
+            {device.firmwareVersion ?? "-"} · Last seen{" "}
+            {formatTimestamp(device.lastSeenAt)}
+          </p>
+        )}
+      </header>
+
+      <div className="border-b border-border">
+        <Tabs value={activeTab}>
+          <TabsList variant="line">
+            <TabsTrigger value="live" asChild>
+              <Link to="/devices/$id/live" params={{ id }}>
+                Live Telemetry
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="history" asChild>
+              <Link to="/devices/$id/history" params={{ id }}>
+                Historical Telemetry
+              </Link>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <Outlet />
+    </div>
+  )
 }

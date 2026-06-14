@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,6 @@ import {
   ApiError,
   getDevice,
   getDeviceModel,
-  type Device,
   type IoCapabilities,
 } from "@/lib/api"
 import {
@@ -76,7 +75,6 @@ function DeviceHistoryPage() {
   const fromIso = search.from ?? defaults.from
   const toIso = search.to ?? defaults.to
 
-  const [device, setDevice] = useState<Device | null>(null)
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -98,7 +96,6 @@ function DeviceHistoryPage() {
           throw new Error("Unexpected /devices/:id response shape")
         }
         if (cancelled) return
-        setDevice(parsedDevice.data.device)
         useBreadcrumbStore
           .getState()
           .setDeviceName(
@@ -164,24 +161,7 @@ function DeviceHistoryPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-      <div className="flex items-center justify-between">
-        <Link
-          to="/devices/$id"
-          params={{ id }}
-          className="text-muted-foreground hover:text-foreground text-xs"
-        >
-          ← Back to device
-        </Link>
-      </div>
-
-      <div>
-        <h1 className="text-lg font-semibold">
-          {device?.name ?? device?.serial ?? "Device"} — History
-        </h1>
-        <p className="text-muted-foreground text-xs">{id}</p>
-      </div>
-
+    <div className="flex flex-col gap-4">
       {loadError ? <p className="text-destructive text-sm">{loadError}</p> : null}
 
       <Card>

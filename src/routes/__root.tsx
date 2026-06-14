@@ -23,18 +23,28 @@ interface Crumb {
   href?: string
 }
 
+// Maps a device detail tab's path segment to its breadcrumb label. The leaf
+// crumb is derived from the URL segment, so adding a tab route means adding it
+// here too.
+const DEVICE_TAB_LABELS: Record<string, string> = {
+  streams: "Streams",
+  telemetry: "Telemetry",
+  media: "Media",
+  workflows: "Workflows",
+  settings: "Settings",
+}
+
 function resolveCrumbs(pathname: string, deviceName: string | null): Crumb[] {
   if (pathname === "/dashboard") return [{ label: "Dashboard" }]
   if (pathname === "/devices") return [{ label: "Devices" }]
   if (pathname.startsWith("/devices/")) {
     const deviceCrumb: Crumb = { label: deviceName ?? "Device" }
     const crumbs: Crumb[] = [{ label: "Devices", href: "/devices" }, deviceCrumb]
-    if (pathname.endsWith("/live")) {
-      deviceCrumb.href = pathname.slice(0, -"/live".length)
-      crumbs.push({ label: "Live Telemetry" })
-    } else if (pathname.endsWith("/history")) {
-      deviceCrumb.href = pathname.slice(0, -"/history".length)
-      crumbs.push({ label: "Historical Telemetry" })
+    const lastSegment = pathname.slice(pathname.lastIndexOf("/") + 1)
+    const tabLabel = DEVICE_TAB_LABELS[lastSegment]
+    if (tabLabel) {
+      deviceCrumb.href = pathname.slice(0, -(lastSegment.length + 1))
+      crumbs.push({ label: tabLabel })
     }
     return crumbs
   }

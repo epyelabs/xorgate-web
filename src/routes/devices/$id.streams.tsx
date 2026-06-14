@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
 import {
   ApiError,
   getDevice,
@@ -19,36 +18,23 @@ import {
   imuMetrics,
   systemChartMetrics,
 } from "@/lib/capability-metrics"
-import { useIotTelemetry, type ConnStatus } from "@/hooks/use-iot-telemetry"
+import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import { TelemetryGauges } from "@/components/telemetry-gauges"
 import { TelemetryChart } from "@/components/telemetry-chart"
 import { GpsMap } from "@/components/gps-map"
 import { LiveVideoGrid } from "@/components/live-video-grid"
 
-export const Route = createFileRoute("/devices/$id/live")({
+export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: () => {
     const { isAuthenticated, isLoading } = useAuthStore.getState()
     if (!isLoading && !isAuthenticated) {
       throw redirect({ to: "/login" })
     }
   },
-  component: DeviceLivePage,
+  component: DeviceStreamsPage,
 })
 
-const STATUS_META: Record<
-  ConnStatus,
-  {
-    label: string
-    variant: "default" | "secondary" | "destructive" | "outline"
-  }
-> = {
-  connecting: { label: "Connecting", variant: "secondary" },
-  connected: { label: "Live", variant: "default" },
-  closed: { label: "Reconnecting", variant: "outline" },
-  error: { label: "Error", variant: "destructive" },
-}
-
-function DeviceLivePage() {
+function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -98,8 +84,6 @@ function DeviceLivePage() {
   const videoCaps = caps?.media?.video ?? []
   const gpsLat = latest["gps.lat"]?.value
   const gpsLon = latest["gps.lon"]?.value
-
-  const statusMeta = STATUS_META[status]
 
   return (
     <div className="flex flex-col gap-4">

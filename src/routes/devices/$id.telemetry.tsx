@@ -26,7 +26,7 @@ interface HistorySearch {
   to?: string
 }
 
-export const Route = createFileRoute("/devices/$id/history")({
+export const Route = createFileRoute("/devices/$id/telemetry")({
   validateSearch: (search: Record<string, unknown>): HistorySearch => ({
     from: typeof search.from === "string" ? search.from : undefined,
     to: typeof search.to === "string" ? search.to : undefined,
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/devices/$id/history")({
       throw redirect({ to: "/login" })
     }
   },
-  component: DeviceHistoryPage,
+  component: DeviceTelemetryPage,
 })
 
 const PRESETS: { label: string; ms: number }[] = [
@@ -59,7 +59,7 @@ function fromLocalInput(value: string): string | null {
   return Number.isNaN(ms) ? null : new Date(ms).toISOString()
 }
 
-function DeviceHistoryPage() {
+function DeviceTelemetryPage() {
   const { id } = Route.useParams()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()

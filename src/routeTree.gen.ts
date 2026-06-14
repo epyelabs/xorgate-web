@@ -16,8 +16,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
 import { Route as DevicesIdIndexRouteImport } from './routes/devices/$id.index'
-import { Route as DevicesIdLiveRouteImport } from './routes/devices/$id.live'
-import { Route as DevicesIdHistoryRouteImport } from './routes/devices/$id.history'
+import { Route as DevicesIdWorkflowsRouteImport } from './routes/devices/$id.workflows'
+import { Route as DevicesIdTelemetryRouteImport } from './routes/devices/$id.telemetry'
+import { Route as DevicesIdStreamsRouteImport } from './routes/devices/$id.streams'
+import { Route as DevicesIdSettingsRouteImport } from './routes/devices/$id.settings'
+import { Route as DevicesIdMediaRouteImport } from './routes/devices/$id.media'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -54,14 +57,29 @@ const DevicesIdIndexRoute = DevicesIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DevicesIdRoute,
 } as any)
-const DevicesIdLiveRoute = DevicesIdLiveRouteImport.update({
-  id: '/live',
-  path: '/live',
+const DevicesIdWorkflowsRoute = DevicesIdWorkflowsRouteImport.update({
+  id: '/workflows',
+  path: '/workflows',
   getParentRoute: () => DevicesIdRoute,
 } as any)
-const DevicesIdHistoryRoute = DevicesIdHistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
+const DevicesIdTelemetryRoute = DevicesIdTelemetryRouteImport.update({
+  id: '/telemetry',
+  path: '/telemetry',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
+const DevicesIdStreamsRoute = DevicesIdStreamsRouteImport.update({
+  id: '/streams',
+  path: '/streams',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
+const DevicesIdSettingsRoute = DevicesIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
+const DevicesIdMediaRoute = DevicesIdMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
   getParentRoute: () => DevicesIdRoute,
 } as any)
 
@@ -72,8 +90,11 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/devices/': typeof DevicesIndexRoute
-  '/devices/$id/history': typeof DevicesIdHistoryRoute
-  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id/media': typeof DevicesIdMediaRoute
+  '/devices/$id/settings': typeof DevicesIdSettingsRoute
+  '/devices/$id/streams': typeof DevicesIdStreamsRoute
+  '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
+  '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id/': typeof DevicesIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -82,8 +103,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/devices': typeof DevicesIndexRoute
-  '/devices/$id/history': typeof DevicesIdHistoryRoute
-  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id/media': typeof DevicesIdMediaRoute
+  '/devices/$id/settings': typeof DevicesIdSettingsRoute
+  '/devices/$id/streams': typeof DevicesIdStreamsRoute
+  '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
+  '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id': typeof DevicesIdIndexRoute
 }
 export interface FileRoutesById {
@@ -94,8 +118,11 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/devices/': typeof DevicesIndexRoute
-  '/devices/$id/history': typeof DevicesIdHistoryRoute
-  '/devices/$id/live': typeof DevicesIdLiveRoute
+  '/devices/$id/media': typeof DevicesIdMediaRoute
+  '/devices/$id/settings': typeof DevicesIdSettingsRoute
+  '/devices/$id/streams': typeof DevicesIdStreamsRoute
+  '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
+  '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id/': typeof DevicesIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -107,8 +134,11 @@ export interface FileRouteTypes {
     | '/signup'
     | '/devices/$id'
     | '/devices/'
-    | '/devices/$id/history'
-    | '/devices/$id/live'
+    | '/devices/$id/media'
+    | '/devices/$id/settings'
+    | '/devices/$id/streams'
+    | '/devices/$id/telemetry'
+    | '/devices/$id/workflows'
     | '/devices/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -117,8 +147,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/devices'
-    | '/devices/$id/history'
-    | '/devices/$id/live'
+    | '/devices/$id/media'
+    | '/devices/$id/settings'
+    | '/devices/$id/streams'
+    | '/devices/$id/telemetry'
+    | '/devices/$id/workflows'
     | '/devices/$id'
   id:
     | '__root__'
@@ -128,8 +161,11 @@ export interface FileRouteTypes {
     | '/signup'
     | '/devices/$id'
     | '/devices/'
-    | '/devices/$id/history'
-    | '/devices/$id/live'
+    | '/devices/$id/media'
+    | '/devices/$id/settings'
+    | '/devices/$id/streams'
+    | '/devices/$id/telemetry'
+    | '/devices/$id/workflows'
     | '/devices/$id/'
   fileRoutesById: FileRoutesById
 }
@@ -193,32 +229,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdIndexRouteImport
       parentRoute: typeof DevicesIdRoute
     }
-    '/devices/$id/live': {
-      id: '/devices/$id/live'
-      path: '/live'
-      fullPath: '/devices/$id/live'
-      preLoaderRoute: typeof DevicesIdLiveRouteImport
+    '/devices/$id/workflows': {
+      id: '/devices/$id/workflows'
+      path: '/workflows'
+      fullPath: '/devices/$id/workflows'
+      preLoaderRoute: typeof DevicesIdWorkflowsRouteImport
       parentRoute: typeof DevicesIdRoute
     }
-    '/devices/$id/history': {
-      id: '/devices/$id/history'
-      path: '/history'
-      fullPath: '/devices/$id/history'
-      preLoaderRoute: typeof DevicesIdHistoryRouteImport
+    '/devices/$id/telemetry': {
+      id: '/devices/$id/telemetry'
+      path: '/telemetry'
+      fullPath: '/devices/$id/telemetry'
+      preLoaderRoute: typeof DevicesIdTelemetryRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
+    '/devices/$id/streams': {
+      id: '/devices/$id/streams'
+      path: '/streams'
+      fullPath: '/devices/$id/streams'
+      preLoaderRoute: typeof DevicesIdStreamsRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
+    '/devices/$id/settings': {
+      id: '/devices/$id/settings'
+      path: '/settings'
+      fullPath: '/devices/$id/settings'
+      preLoaderRoute: typeof DevicesIdSettingsRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
+    '/devices/$id/media': {
+      id: '/devices/$id/media'
+      path: '/media'
+      fullPath: '/devices/$id/media'
+      preLoaderRoute: typeof DevicesIdMediaRouteImport
       parentRoute: typeof DevicesIdRoute
     }
   }
 }
 
 interface DevicesIdRouteChildren {
-  DevicesIdHistoryRoute: typeof DevicesIdHistoryRoute
-  DevicesIdLiveRoute: typeof DevicesIdLiveRoute
+  DevicesIdMediaRoute: typeof DevicesIdMediaRoute
+  DevicesIdSettingsRoute: typeof DevicesIdSettingsRoute
+  DevicesIdStreamsRoute: typeof DevicesIdStreamsRoute
+  DevicesIdTelemetryRoute: typeof DevicesIdTelemetryRoute
+  DevicesIdWorkflowsRoute: typeof DevicesIdWorkflowsRoute
   DevicesIdIndexRoute: typeof DevicesIdIndexRoute
 }
 
 const DevicesIdRouteChildren: DevicesIdRouteChildren = {
-  DevicesIdHistoryRoute: DevicesIdHistoryRoute,
-  DevicesIdLiveRoute: DevicesIdLiveRoute,
+  DevicesIdMediaRoute: DevicesIdMediaRoute,
+  DevicesIdSettingsRoute: DevicesIdSettingsRoute,
+  DevicesIdStreamsRoute: DevicesIdStreamsRoute,
+  DevicesIdTelemetryRoute: DevicesIdTelemetryRoute,
+  DevicesIdWorkflowsRoute: DevicesIdWorkflowsRoute,
   DevicesIdIndexRoute: DevicesIdIndexRoute,
 }
 

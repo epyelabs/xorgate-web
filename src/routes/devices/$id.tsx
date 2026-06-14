@@ -62,10 +62,21 @@ function deviceInitials(device: Device): string {
   return source.slice(0, 2).toUpperCase()
 }
 
+const TAB_VALUES = [
+  "streams",
+  "telemetry",
+  "media",
+  "workflows",
+  "settings",
+] as const
+
 function DeviceLayout() {
   const { id } = Route.useParams()
   const { pathname } = useLocation()
-  const activeTab = pathname.endsWith("/history") ? "history" : "live"
+  const segment = pathname.split("/").pop() ?? ""
+  const activeTab = (TAB_VALUES as readonly string[]).includes(segment)
+    ? segment
+    : "streams"
   const [device, setDevice] = useState<Device | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -157,14 +168,29 @@ function DeviceLayout() {
       <div className="border-b border-border">
         <Tabs value={activeTab}>
           <TabsList variant="line">
-            <TabsTrigger value="live" asChild>
-              <Link to="/devices/$id/live" params={{ id }}>
-                Live Telemetry
+            <TabsTrigger value="streams" asChild>
+              <Link to="/devices/$id/streams" params={{ id }}>
+                Streams
               </Link>
             </TabsTrigger>
-            <TabsTrigger value="history" asChild>
-              <Link to="/devices/$id/history" params={{ id }}>
-                Historical Telemetry
+            <TabsTrigger value="telemetry" asChild>
+              <Link to="/devices/$id/telemetry" params={{ id }}>
+                Telemetry
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="media" asChild>
+              <Link to="/devices/$id/media" params={{ id }}>
+                Media
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="workflows" asChild>
+              <Link to="/devices/$id/workflows" params={{ id }}>
+                Workflows
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="settings" asChild>
+              <Link to="/devices/$id/settings" params={{ id }}>
+                Settings
               </Link>
             </TabsTrigger>
           </TabsList>

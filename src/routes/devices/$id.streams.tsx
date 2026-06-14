@@ -14,14 +14,14 @@ import {
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
-  gaugeMetrics,
+  gpsMetrics,
   imuMetrics,
-  systemChartMetrics,
+  signalMetrics,
+  systemMetrics,
 } from "@/lib/capability-metrics"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
-import { TelemetryGauges } from "@/components/telemetry-gauges"
-import { TelemetryChart } from "@/components/telemetry-chart"
-import { GpsMap } from "@/components/gps-map"
+import { Separator } from "@/components/ui/separator"
+import { TelemetryReadout } from "@/components/telemetry-readout"
 import { LiveVideoGrid } from "@/components/live-video-grid"
 
 export const Route = createFileRoute("/devices/$id/streams")({
@@ -38,7 +38,7 @@ function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const { latest, history, status, error: connError } = useIotTelemetry(id)
+  const { latest, status, error: connError } = useIotTelemetry(id)
 
   useEffect(() => {
     let cancelled = false
@@ -77,16 +77,16 @@ function DeviceStreamsPage() {
     }
   }, [id])
 
-  const gauges = gaugeMetrics(caps)
-  const imu = imuMetrics(caps)
-  const sysChart = systemChartMetrics(caps)
-  const hasGps = Boolean(caps?.comm?.gps)
   const videoCaps = caps?.media?.video ?? []
-  const gpsLat = latest["gps.lat"]?.value
-  const gpsLon = latest["gps.lon"]?.value
+  const telemetryGroups = [
+    { title: "IMU", metrics: imuMetrics(caps) },
+    { title: "System", metrics: systemMetrics(caps) },
+    { title: "Signal", metrics: signalMetrics(caps) },
+  ].filter((g) => g.metrics.length > 0)
+  const gps = gpsMetrics(caps)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {status === "error" && connError ? (
         <p className="text-sm text-destructive">{connError}</p>
       ) : null}
@@ -95,30 +95,41 @@ function DeviceStreamsPage() {
       ) : null}
 
       {videoCaps.length > 0 ? (
-        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
+        <section className="flex flex-col gap-3">
+          <h2 className="text-base font-semibold tracking-tight">Media</h2>
+          <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
+        </section>
       ) : null}
 
-      <TelemetryGauges latest={latest} metrics={gauges} />
+      {telemetryGroups.length > 0 ? (
+        <>
+          <Separator />
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold tracking-tight">Telemetry</h2>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {telemetryGroups.map((g) => (
+                <TelemetryReadout
+                  key={g.title}
+                  title={g.title}
+                  latest={latest}
+                  metrics={g.metrics}
+                />
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {imu.length > 0 ? (
-          <TelemetryChart
-            title="IMU acceleration"
-            history={history}
-            metrics={imu}
-          />
-        ) : null}
-        {sysChart.length > 0 ? (
-          <TelemetryChart title="System" history={history} metrics={sysChart} />
-        ) : null}
-      </div>
-
-      {hasGps ? (
-        gpsLat !== undefined && gpsLon !== undefined ? (
-          <GpsMap lat={gpsLat} lon={gpsLon} />
-        ) : (
-          <p className="text-sm text-muted-foreground">Waiting for GPS fix…</p>
-        )
+      {gps.length > 0 ? (
+        <>
+          <Separator />
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold tracking-tight">GPS / Location</h2>
+            <div className="grid grid-cols-1 gap-4 md:max-w-md">
+              <TelemetryReadout title="Position" latest={latest} metrics={gps} />
+            </div>
+          </section>
+        </>
       ) : null}
     </div>
   )

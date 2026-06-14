@@ -3,15 +3,19 @@ import type { IoCapabilities } from "@/lib/api"
 // Capability → metric-key helpers shared by the live and history screens
 // (drives which widgets render). Extracted from $id.live.tsx in P4.
 
-export function gaugeMetrics(caps: IoCapabilities | null): string[] {
-  if (!caps) return []
-  const m: string[] = []
-  for (const f of caps.system?.fields ?? []) m.push(`system.${f}`)
-  for (const f of caps.comm?.signal?.fields ?? []) m.push(`lte.${f}`)
-  const gps = caps.comm?.gps?.fields ?? []
-  if (gps.includes("speed")) m.push("gps.speed")
-  if (gps.includes("alt")) m.push("gps.alt")
-  return m
+export function systemMetrics(caps: IoCapabilities | null): string[] {
+  return (caps?.system?.fields ?? []).map((f) => `system.${f}`)
+}
+
+export function signalMetrics(caps: IoCapabilities | null): string[] {
+  return (caps?.comm?.signal?.fields ?? []).map((f) => `lte.${f}`)
+}
+
+const GPS_ORDER = ["lat", "lon", "alt", "speed"]
+
+export function gpsMetrics(caps: IoCapabilities | null): string[] {
+  const fields = caps?.comm?.gps?.fields ?? []
+  return GPS_ORDER.filter((f) => fields.includes(f)).map((f) => `gps.${f}`)
 }
 
 export function imuMetrics(caps: IoCapabilities | null): string[] {

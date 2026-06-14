@@ -18,7 +18,9 @@ export function metricLabel(metric: string): string {
   return METRIC_LABELS[metric] ?? metric
 }
 
-export function formatMetricValue(value: number): string {
+export function formatMetricValue(value: number, metric?: string): string {
+  // Coordinates need full precision — the default rounding mangles lat/lon.
+  if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)
   if (Number.isInteger(value)) return String(value)
   return value.toFixed(Math.abs(value) < 10 ? 2 : 1)
 }

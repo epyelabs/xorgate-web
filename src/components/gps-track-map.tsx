@@ -3,8 +3,8 @@ import Map, { Layer, Marker, Source, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-// Same dev-only demo tiles as gps-map.tsx — swap for a styled basemap (via an
-// env-configured style URL) before production.
+// Dev-only demo tiles — swap for a styled basemap (via an env-configured style
+// URL) before production.
 const MAP_STYLE = "https://demotiles.maplibre.org/style.json"
 
 function boundsOf(track: [number, number][]): [[number, number], [number, number]] {
@@ -26,7 +26,7 @@ function boundsOf(track: [number, number][]): [[number, number], [number, number
 
 // Historical GPS path: polyline + start (green) / end (red) markers, auto-fit
 // to the track. `track` is [lon, lat] pairs in chronological order (MapLibre
-// coordinate order). The live screen's single-marker GpsMap is untouched.
+// coordinate order).
 export function GpsTrackMap({ track }: { track: [number, number][] }) {
   const mapRef = useRef<MapRef>(null)
 

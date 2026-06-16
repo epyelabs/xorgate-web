@@ -129,7 +129,7 @@ function DeviceLayout() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+    <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <Avatar size="lg">

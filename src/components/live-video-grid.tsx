@@ -30,7 +30,7 @@ function LiveVideoTile({
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        <div className="relative aspect-video w-full bg-black">
+        <div className="relative aspect-video max-h-[40vh] w-full bg-black">
           <video
             ref={videoRef}
             autoPlay
@@ -96,9 +96,9 @@ export function LiveVideoGrid({
 
   if (channels === null) {
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Skeleton className="aspect-video w-full" />
-        <Skeleton className="aspect-video w-full" />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Skeleton className="aspect-video max-h-[40vh] w-full" />
+        <Skeleton className="aspect-video max-h-[40vh] w-full" />
       </div>
     )
   }
@@ -112,7 +112,7 @@ export function LiveVideoGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       {channels.map((ch) => (
         <LiveVideoTile
           key={ch.channelArn}

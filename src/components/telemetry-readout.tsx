@@ -17,7 +17,7 @@ export function TelemetryReadout({
   metrics: string[]
 }) {
   return (
-    <Card>
+    <Card size="sm">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
@@ -27,7 +27,7 @@ export function TelemetryReadout({
           return (
             <Fragment key={m}>
               {i > 0 ? <Separator /> : null}
-              <div className="flex items-center justify-between py-2 text-sm">
+              <div className="flex items-center justify-between py-1.5 text-sm">
                 <span className="text-muted-foreground">{metricLabel(m)}</span>
                 <span className="tabular-nums font-medium">
                   {r ? formatMetricValue(r.value, m) : "—"}

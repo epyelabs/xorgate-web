@@ -86,7 +86,7 @@ function DeviceStreamsPage() {
   const gps = gpsMetrics(caps)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {status === "error" && connError ? (
         <p className="text-sm text-destructive">{connError}</p>
       ) : null}
@@ -95,7 +95,7 @@ function DeviceStreamsPage() {
       ) : null}
 
       {videoCaps.length > 0 ? (
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-2">
           <h2 className="text-base font-semibold tracking-tight">Media</h2>
           <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
         </section>
@@ -104,9 +104,9 @@ function DeviceStreamsPage() {
       {telemetryGroups.length > 0 ? (
         <>
           <Separator />
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-2">
             <h2 className="text-base font-semibold tracking-tight">Telemetry</h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {telemetryGroups.map((g) => (
                 <TelemetryReadout
                   key={g.title}
@@ -123,9 +123,9 @@ function DeviceStreamsPage() {
       {gps.length > 0 ? (
         <>
           <Separator />
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-2">
             <h2 className="text-base font-semibold tracking-tight">GPS / Location</h2>
-            <div className="grid grid-cols-1 gap-4 md:max-w-md">
+            <div className="grid grid-cols-1 gap-3 md:max-w-md">
               <TelemetryReadout title="Position" latest={latest} metrics={gps} />
             </div>
           </section>

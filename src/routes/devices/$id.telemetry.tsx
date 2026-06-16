@@ -18,8 +18,7 @@ import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryHistory } from "@/hooks/use-telemetry-history"
-import { TelemetryChart } from "@/components/telemetry-chart"
-import { GpsTrackMap } from "@/components/gps-track-map"
+import { TelemetryTable } from "@/components/telemetry-table"
 
 interface HistorySearch {
   from?: string
@@ -131,7 +130,7 @@ function DeviceTelemetryPage() {
     [imu, sysChart, hasGps]
   )
 
-  const { history, gpsTrack, loading, error, truncated } = useTelemetryHistory(
+  const { history, units, loading, error, truncated } = useTelemetryHistory(
     id,
     fromIso,
     toIso,
@@ -223,21 +222,8 @@ function DeviceTelemetryPage() {
       ) : null}
 
       {history.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {imu.length > 0 ? (
-            <TelemetryChart
-              title="IMU acceleration"
-              history={history}
-              metrics={imu}
-            />
-          ) : null}
-          {sysChart.length > 0 ? (
-            <TelemetryChart title="System" history={history} metrics={sysChart} />
-          ) : null}
-        </div>
+        <TelemetryTable history={history} metrics={metrics} units={units} />
       ) : null}
-
-      {hasGps && gpsTrack.length >= 2 ? <GpsTrackMap track={gpsTrack} /> : null}
     </div>
   )
 }

@@ -82,8 +82,8 @@ function DeviceStreamsPage() {
     { title: "IMU", metrics: imuMetrics(caps) },
     { title: "System", metrics: systemMetrics(caps) },
     { title: "Signal", metrics: signalMetrics(caps) },
+    { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
-  const gps = gpsMetrics(caps)
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,7 +106,7 @@ function DeviceStreamsPage() {
           <Separator />
           <section className="flex flex-col gap-2">
             <h2 className="text-base font-semibold tracking-tight">Telemetry</h2>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               {telemetryGroups.map((g) => (
                 <TelemetryReadout
                   key={g.title}
@@ -115,18 +115,6 @@ function DeviceStreamsPage() {
                   metrics={g.metrics}
                 />
               ))}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {gps.length > 0 ? (
-        <>
-          <Separator />
-          <section className="flex flex-col gap-2">
-            <h2 className="text-base font-semibold tracking-tight">GPS / Location</h2>
-            <div className="grid grid-cols-1 gap-3 md:max-w-md">
-              <TelemetryReadout title="Position" latest={latest} metrics={gps} />
             </div>
           </section>
         </>

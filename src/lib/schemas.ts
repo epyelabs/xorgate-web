@@ -90,6 +90,26 @@ export const getDeviceResponseSchema = z.object({
   device: deviceSchema,
 })
 
+// Settings form: editable device fields. Empty name is allowed and sent as null.
+export const updateDeviceSchema = z.object({
+  name: z.string().max(80, "Name is too long"),
+  status: deviceStatusSchema,
+})
+
+// --- IoT identity (settings): GET /devices/{id}/identity, non-secret metadata ---
+export const deviceIdentitySchema = z.object({
+  iotThingName: z.string(),
+  certificateId: z.string(),
+  policyName: z.string(),
+  roleAlias: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+})
+
+export const getDeviceIdentityResponseSchema = z.object({
+  identity: deviceIdentitySchema.nullable(),
+})
+
 // --- Device model capabilities (P2): drives which live widgets render ---
 // Unknown nested fields (codec, maxWidth, …) are stripped — we only read what
 // gates a widget. Note zod v4 `z.record` takes (keySchema, valueSchema).
@@ -191,6 +211,9 @@ export type DeviceModel = z.infer<typeof deviceModelSchema>
 export type TelemetryPayload = z.infer<typeof telemetryPayloadSchema>
 export type KvsChannelData = z.infer<typeof kvsChannelSchema>
 export type TelemetryReading = z.infer<typeof telemetryReadingSchema>
+
+export type UpdateDeviceInput = z.infer<typeof updateDeviceSchema>
+export type DeviceIdentityData = z.infer<typeof deviceIdentitySchema>
 
 export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>

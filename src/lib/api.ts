@@ -159,6 +159,23 @@ export async function getDevice(id: string): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`)
 }
 
+// Update editable device fields (name / status / firmwareVersion). Maps to the
+// backend PUT /devices/{id}; only provided keys are changed. `name: null` clears it.
+export async function updateDevice(
+  id: string,
+  updates: { name?: string | null; status?: DeviceStatus; firmwareVersion?: string | null }
+): Promise<{ device: Device }> {
+  return apiRequest(`/devices/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  })
+}
+
+// Permanently delete a device. Backend returns 204 (no content).
+export async function deleteDevice(id: string): Promise<void> {
+  await apiRequest(`/devices/${id}`, { method: "DELETE" })
+}
+
 export interface IoCapabilities {
   schemaVersion?: number
   media?: {
@@ -199,6 +216,24 @@ export async function attachIotPolicy(): Promise<{
   policyName: string
 }> {
   return apiRequest("/iot/attach-policy", { method: "POST" })
+}
+
+// --- IoT identity (settings): non-secret X.509 identity metadata for a device ---
+// The cert private key is never stored; certificateArn/credentialEndpoint are omitted
+// server-side. `identity` is null when the device exists but isn't provisioned yet.
+export interface DeviceIdentity {
+  iotThingName: string
+  certificateId: string
+  policyName: string
+  roleAlias: string
+  status: string
+  createdAt: string
+}
+
+export async function getDeviceIdentity(
+  deviceId: string
+): Promise<{ identity: DeviceIdentity | null }> {
+  return apiRequest(`/devices/${deviceId}/identity`)
 }
 
 // --- Live video (P3): KVS WebRTC signaling channels for the browser viewer ---

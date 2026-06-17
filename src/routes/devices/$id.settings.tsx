@@ -235,29 +235,29 @@ function DeviceSettingsPage() {
 
   return (
     <div className="flex w-full flex-col gap-4">
-      {/* Row 1: editable form (left half) + read-only details (right half) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Device settings</CardTitle>
-          <CardDescription>
-            Update how this device is identified and its lifecycle status.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {device === null ? (
-            error ? (
-              <p className="text-sm text-destructive">{error}</p>
+      {/* Row 1: device settings form (left) + read-only details (right) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuration</CardTitle>
+            <CardDescription>
+              Update how this device is identified and its lifecycle status.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {device === null ? (
+              error ? (
+                <p className="text-sm text-destructive">{error}</p>
+              ) : (
+                <Skeleton className="h-32 w-full" />
+              )
             ) : (
-              <Skeleton className="h-48 w-full" />
-            )
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                commit({ name, status })
-              }}
-            >
-              <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  commit({ name, status })
+                }}
+              >
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="device-name">Name</FieldLabel>
@@ -300,30 +300,44 @@ function DeviceSettingsPage() {
                     </Select>
                   </Field>
                 </FieldGroup>
+              </form>
+            )}
+          </CardContent>
+        </Card>
 
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 self-start border-t pt-4 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-10">
-                  <InfoRow label="Serial" value={device.serial} mono />
-                  <InfoRow label="Model" value={device.deviceModelId} mono />
-                  <InfoRow label="Device ID" value={device.id} mono />
-                  <InfoRow
-                    label="Firmware Ver"
-                    value={device.firmwareVersion ?? "—"}
-                    mono
-                  />
-                  <InfoRow
-                    label="Created"
-                    value={formatTimestamp(device.createdAt)}
-                  />
-                  <InfoRow
-                    label="Updated"
-                    value={formatTimestamp(device.updatedAt)}
-                  />
-                </dl>
-              </div>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Information</CardTitle>
+            <CardDescription>
+              Read-only device identifiers and timestamps.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {device === null ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <InfoRow label="Serial" value={device.serial} mono />
+                <InfoRow label="Model" value={device.deviceModelId} mono />
+                <InfoRow label="Device ID" value={device.id} mono />
+                <InfoRow
+                  label="Firmware Ver"
+                  value={device.firmwareVersion ?? "—"}
+                  mono
+                />
+                <InfoRow
+                  label="Created"
+                  value={formatTimestamp(device.createdAt)}
+                />
+                <InfoRow
+                  label="Updated"
+                  value={formatTimestamp(device.updatedAt)}
+                />
+              </dl>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Row 2: IoT identity (left) + Media channels (right), equal height */}
       <div className="grid gap-4 lg:grid-cols-2">

@@ -77,6 +77,7 @@ export const deviceSchema = z.object({
   name: z.string().nullable(),
   firmwareVersion: z.string().nullable(),
   status: deviceStatusSchema,
+  persistTelemetry: z.boolean(),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

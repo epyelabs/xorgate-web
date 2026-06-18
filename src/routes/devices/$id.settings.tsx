@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card"
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -96,9 +98,11 @@ function DeviceSettingsPage() {
   // Editable form state + the last-saved baseline used to detect real changes.
   const [name, setName] = useState("")
   const [status, setStatus] = useState<DeviceStatus>("provisioned")
+  const [persistTelemetry, setPersistTelemetry] = useState(false)
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
+    persistTelemetry: boolean
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -124,7 +128,12 @@ function DeviceSettingsPage() {
         const initialName = fetched.name ?? ""
         setName(initialName)
         setStatus(fetched.status)
-        setBaseline({ name: initialName, status: fetched.status })
+        setPersistTelemetry(fetched.persistTelemetry)
+        setBaseline({
+          name: initialName,
+          status: fetched.status,
+          persistTelemetry: fetched.persistTelemetry,
+        })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           if (!cancelled) setNotFound(true)
@@ -200,7 +209,11 @@ function DeviceSettingsPage() {
       const nextName = updated.name ?? ""
       setName(nextName)
       setStatus(updated.status)
-      setBaseline({ name: nextName, status: updated.status })
+      setBaseline({
+        name: nextName,
+        status: updated.status,
+        persistTelemetry: updated.persistTelemetry,
+      })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
       useBreadcrumbStore
@@ -212,6 +225,27 @@ function DeviceSettingsPage() {
       toast.error((err as Error).message)
       setName(baseline.name)
       setStatus(baseline.status)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Telemetry persistence toggle. Fires immediately on switch change (not on blur):
+  // optimistically flip the switch, persist, and roll back to the saved value on error.
+  async function commitPersist(next: boolean) {
+    if (saving || baseline === null || next === baseline.persistTelemetry) return
+    setPersistTelemetry(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { persistTelemetry: next })
+      const updated = res.device
+      setDevice(updated)
+      setPersistTelemetry(updated.persistTelemetry)
+      setBaseline({ ...baseline, persistTelemetry: updated.persistTelemetry })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setPersistTelemetry(baseline.persistTelemetry)
     } finally {
       setSaving(false)
     }
@@ -298,6 +332,24 @@ function DeviceSettingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </Field>
+
+                  <Field orientation="horizontal">
+                    <FieldContent>
+                      <FieldLabel htmlFor="device-persist-telemetry">
+                        Save telemetry to database
+                      </FieldLabel>
+                      <FieldDescription>
+                        Off by default. The device keeps streaming for live view
+                        either way; enable this to also persist telemetry history.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id="device-persist-telemetry"
+                      checked={persistTelemetry}
+                      disabled={saving}
+                      onCheckedChange={commitPersist}
+                    />
                   </Field>
                 </FieldGroup>
               </form>

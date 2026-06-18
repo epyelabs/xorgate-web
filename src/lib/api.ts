@@ -146,6 +146,7 @@ export interface Device {
   name: string | null
   firmwareVersion: string | null
   status: DeviceStatus
+  persistTelemetry: boolean
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -163,7 +164,12 @@ export async function getDevice(id: string): Promise<{ device: Device }> {
 // backend PUT /devices/{id}; only provided keys are changed. `name: null` clears it.
 export async function updateDevice(
   id: string,
-  updates: { name?: string | null; status?: DeviceStatus; firmwareVersion?: string | null }
+  updates: {
+    name?: string | null
+    status?: DeviceStatus
+    firmwareVersion?: string | null
+    persistTelemetry?: boolean
+  }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {
     method: "PUT",

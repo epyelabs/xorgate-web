@@ -298,3 +298,34 @@ export async function getTelemetryLatest(
 ): Promise<{ latest: DeviceLatestRow[] }> {
   return apiRequest(`/devices/${deviceId}/telemetry/latest`)
 }
+
+// --- Device registration (onboarding) ---
+// The web app mints a short-lived code; the device's install.sh claims it
+// (creating the device + its IoT identity) and the dialog polls until claimed.
+export type RegistrationStatus = "pending" | "claimed" | "expired"
+
+export interface DeviceRegistration {
+  code: string
+  status: RegistrationStatus
+  deviceId: string | null
+  expiresAt: string
+  // Full URL to paste into the device: `${API_BASE}/get/${code}`.
+  installUrl: string
+}
+
+// Mints (or reuses) a pending registration for the active org + project.
+// Idempotent server-side: reloading the dialog returns the same code.
+// Requires a selected project (X-Project-Id is sent automatically).
+export async function createDeviceRegistration(): Promise<DeviceRegistration> {
+  return apiRequest<DeviceRegistration>("/device-registrations", {
+    method: "POST",
+  })
+}
+
+export async function getDeviceRegistration(
+  code: string
+): Promise<DeviceRegistration> {
+  return apiRequest<DeviceRegistration>(
+    `/device-registrations/${encodeURIComponent(code)}`
+  )
+}

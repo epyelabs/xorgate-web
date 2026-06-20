@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
@@ -144,10 +144,8 @@ function DevicesListPage() {
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | "any">("any")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [provisionOpen, setProvisionOpen] = useState(false)
+  const [reloadNonce, setReloadNonce] = useState(0)
   const currentProjectId = useWorkspaceStore((s) => s.currentProjectId)
-  const currentProject = useWorkspaceStore((s) =>
-    s.projects.find((p) => p.id === s.currentProjectId)
-  )
 
   useEffect(() => {
     let cancelled = false
@@ -173,7 +171,7 @@ function DevicesListPage() {
     return () => {
       cancelled = true
     }
-  }, [currentProjectId])
+  }, [currentProjectId, reloadNonce])
 
   const isLoading = !data || data.projectId !== currentProjectId
   const devices = isLoading ? null : data.devices
@@ -223,6 +221,9 @@ function DevicesListPage() {
   }
 
   const handleProvision = () => setProvisionOpen(true)
+  // Stable so it doesn't churn the dialog's polling effect. Re-fetches the
+  // device list once a registration is claimed so the new device appears.
+  const handleClaimed = useCallback(() => setReloadNonce((n) => n + 1), [])
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -398,6 +399,7 @@ function DevicesListPage() {
       <ProvisionDeviceDialog
         open={provisionOpen}
         onOpenChange={setProvisionOpen}
+        onClaimed={handleClaimed}
       />
     </div>
   )

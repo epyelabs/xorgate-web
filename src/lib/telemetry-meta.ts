@@ -12,6 +12,7 @@ export const METRIC_LABELS: Record<string, string> = {
   "system.cpu_usage": "CPU Usage",
   "system.cpu_temp": "CPU Temp",
   "system.ram_usage": "RAM Usage",
+  "system.disk_usage": "Disk Usage",
 }
 
 export function metricLabel(metric: string): string {

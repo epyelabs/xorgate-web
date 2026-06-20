@@ -26,6 +26,6 @@ export function imuMetrics(caps: IoCapabilities | null): string[] {
 
 export function systemChartMetrics(caps: IoCapabilities | null): string[] {
   return (caps?.system?.fields ?? [])
-    .filter((f) => f === "cpu_usage" || f === "ram_usage" || f === "cpu_temp")
+    .filter((f) => f === "cpu_usage" || f === "ram_usage" || f === "cpu_temp" || f === "disk_usage")
     .map((f) => `system.${f}`)
 }

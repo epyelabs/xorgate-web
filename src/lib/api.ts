@@ -188,7 +188,14 @@ export interface IoCapabilities {
     video?: { key: string; label?: string }[]
     audio?: unknown[]
   }
-  sensors?: { imu?: { axes?: string[] } }
+  sensors?: {
+    imu?: {
+      axes?: string[] // legacy alias for accel
+      accel?: string[]
+      quaternion?: string[]
+      euler?: string[]
+    }
+  }
   comm?: {
     module?: string
     gps?: { fields?: string[] }

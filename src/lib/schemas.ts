@@ -125,7 +125,16 @@ export const ioCapabilitiesSchema = z.object({
     })
     .optional(),
   sensors: z
-    .object({ imu: z.object({ axes: z.array(z.string()).optional() }).optional() })
+    .object({
+      imu: z
+        .object({
+          axes: z.array(z.string()).optional(), // legacy alias for accel
+          accel: z.array(z.string()).optional(),
+          quaternion: z.array(z.string()).optional(),
+          euler: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
     .optional(),
   comm: z
     .object({

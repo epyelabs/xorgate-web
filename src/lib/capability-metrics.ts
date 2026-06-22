@@ -18,10 +18,34 @@ export function gpsMetrics(caps: IoCapabilities | null): string[] {
   return GPS_ORDER.filter((f) => fields.includes(f)).map((f) => `gps.${f}`)
 }
 
+// IMU (BNO085) sub-groups. The agent publishes prefixed metric keys:
+// imu.accel_{x,y,z}, imu.quat_{r,i,j,k}, imu.euler_{roll,pitch,yaw}.
+export function imuAccelMetrics(caps: IoCapabilities | null): string[] {
+  // `accel` is the current field; `axes` is the legacy alias kept for old models.
+  const accel = caps?.sensors?.imu?.accel ?? caps?.sensors?.imu?.axes
+  if (!accel || accel.length === 0) return []
+  return accel.map((a) => `imu.accel_${a}`)
+}
+
+export function imuQuaternionMetrics(caps: IoCapabilities | null): string[] {
+  const quat = caps?.sensors?.imu?.quaternion
+  if (!quat || quat.length === 0) return []
+  return quat.map((q) => `imu.quat_${q}`)
+}
+
+export function imuEulerMetrics(caps: IoCapabilities | null): string[] {
+  const euler = caps?.sensors?.imu?.euler
+  if (!euler || euler.length === 0) return []
+  return euler.map((e) => `imu.euler_${e}`)
+}
+
+/** All IMU metrics in display order (accel, then orientation), for history views. */
 export function imuMetrics(caps: IoCapabilities | null): string[] {
-  const axes = caps?.sensors?.imu?.axes
-  if (!axes || axes.length === 0) return []
-  return axes.map((a) => `imu.${a}`)
+  return [
+    ...imuAccelMetrics(caps),
+    ...imuQuaternionMetrics(caps),
+    ...imuEulerMetrics(caps),
+  ]
 }
 
 export function systemChartMetrics(caps: IoCapabilities | null): string[] {

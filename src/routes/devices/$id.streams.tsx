@@ -15,7 +15,9 @@ import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
   gpsMetrics,
-  imuMetrics,
+  imuAccelMetrics,
+  imuEulerMetrics,
+  imuQuaternionMetrics,
   signalMetrics,
   systemMetrics,
 } from "@/lib/capability-metrics"
@@ -79,7 +81,9 @@ function DeviceStreamsPage() {
 
   const videoCaps = caps?.media?.video ?? []
   const telemetryGroups = [
-    { title: "IMU", metrics: imuMetrics(caps) },
+    { title: "IMU · Orientation", metrics: imuQuaternionMetrics(caps) },
+    { title: "IMU · Euler", metrics: imuEulerMetrics(caps) },
+    { title: "IMU · Acceleration", metrics: imuAccelMetrics(caps) },
     { title: "System", metrics: systemMetrics(caps) },
     { title: "Signal", metrics: signalMetrics(caps) },
     { title: "GPS / Location", metrics: gpsMetrics(caps) },

@@ -23,7 +23,10 @@ import {
 } from "@/lib/capability-metrics"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import { Separator } from "@/components/ui/separator"
-import { TelemetryReadout } from "@/components/telemetry-readout"
+import {
+  GroupedTelemetryReadout,
+  TelemetryReadout,
+} from "@/components/telemetry-readout"
 import { LiveVideoGrid } from "@/components/live-video-grid"
 
 export const Route = createFileRoute("/devices/$id/streams")({
@@ -80,14 +83,17 @@ function DeviceStreamsPage() {
   }, [id])
 
   const videoCaps = caps?.media?.video ?? []
+  const imuGroups = [
+    { label: "Orientation", metrics: imuQuaternionMetrics(caps) },
+    { label: "Euler", metrics: imuEulerMetrics(caps) },
+    { label: "Acceleration", metrics: imuAccelMetrics(caps) },
+  ].filter((g) => g.metrics.length > 0)
   const telemetryGroups = [
-    { title: "IMU · Orientation", metrics: imuQuaternionMetrics(caps) },
-    { title: "IMU · Euler", metrics: imuEulerMetrics(caps) },
-    { title: "IMU · Acceleration", metrics: imuAccelMetrics(caps) },
     { title: "System", metrics: systemMetrics(caps) },
     { title: "Signal", metrics: signalMetrics(caps) },
     { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
+  const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -105,12 +111,21 @@ function DeviceStreamsPage() {
         </section>
       ) : null}
 
-      {telemetryGroups.length > 0 ? (
+      {hasTelemetry ? (
         <>
           <Separator />
-          <section className="flex flex-col gap-2">
-            <h2 className="text-base font-semibold tracking-tight">Telemetry</h2>
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold tracking-tight">
+              Telemetry
+            </h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+              {imuGroups.length > 0 ? (
+                <GroupedTelemetryReadout
+                  title="IMU"
+                  latest={latest}
+                  groups={imuGroups}
+                />
+              ) : null}
               {telemetryGroups.map((g) => (
                 <TelemetryReadout
                   key={g.title}

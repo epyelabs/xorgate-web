@@ -174,9 +174,21 @@ export const telemetryPayloadSchema = z.object({
     .object({
       kvs: boolLeaf.optional(),
       recording: boolLeaf.optional(),
-      streams: z.array(z.string()).optional(),
+      // One entry per supervised KVS WebRTC master (per camera/channel).
+      streams: z
+        .array(
+          z.object({
+            streamKey: z.string(),
+            channelName: z.string(),
+            state: z.string(),
+          }),
+        )
+        .optional(),
     })
-    .optional(),
+    .optional()
+    // Never let a media-shape change drop the whole telemetry payload: if `media`
+    // fails to validate, treat it as absent and still surface metrics.
+    .catch(undefined),
 })
 
 // --- Live video (P3): KVS signaling channels from GET /devices/{id}/kvs-channels ---

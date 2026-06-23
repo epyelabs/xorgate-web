@@ -11,7 +11,7 @@ export function signalMetrics(caps: IoCapabilities | null): string[] {
   return (caps?.comm?.signal?.fields ?? []).map((f) => `lte.${f}`)
 }
 
-const GPS_ORDER = ["lat", "lon", "alt", "speed"]
+const GPS_ORDER = ["lat", "lon", "alt", "speed", "satellites", "fix_quality"]
 
 export function gpsMetrics(caps: IoCapabilities | null): string[] {
   const fields = caps?.comm?.gps?.fields ?? []

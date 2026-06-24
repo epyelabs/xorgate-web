@@ -40,7 +40,6 @@ function resolveCrumbs(
   templateName: string | null,
   instanceName: string | null
 ): Crumb[] {
-  if (pathname === "/dashboard") return [{ label: "Dashboard" }]
   if (pathname === "/workflow-templates")
     return [{ label: "Workflow Templates" }]
   if (pathname.startsWith("/workflow-templates/")) {

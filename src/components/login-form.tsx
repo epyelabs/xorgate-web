@@ -40,7 +40,7 @@ export function LoginForm({
     setSubmitting(true)
     try {
       await login(parsed.data.email, parsed.data.password)
-      navigate({ to: "/dashboard" })
+      navigate({ to: "/devices" })
     } catch (err) {
       toast.error((err as Error).message)
     } finally {

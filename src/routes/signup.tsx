@@ -7,7 +7,7 @@ export const Route = createFileRoute("/signup")({
   beforeLoad: () => {
     const { isAuthenticated, isLoading } = useAuthStore.getState()
     if (!isLoading && isAuthenticated) {
-      throw redirect({ to: "/dashboard" })
+      throw redirect({ to: "/devices" })
     }
   },
   component: SignupPage,

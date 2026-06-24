@@ -8,12 +8,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatRelative } from "@/lib/relative-time"
-import type { WorkflowInstance } from "@/lib/workflow-schemas"
+import type { WorkflowDeployment } from "@/lib/workflow-schemas"
 
 // "Where is this consumed?" — the instances (template deployed + tuned onto
 // devices in a project) that reference this template. This is the same data
 // that will eventually populate the device detail "Workflows" tab.
-export function UsagePanel({ instances }: { instances: WorkflowInstance[] }) {
+export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
   if (instances.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">

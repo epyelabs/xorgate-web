@@ -37,7 +37,8 @@ const DEVICE_TAB_LABELS: Record<string, string> = {
 function resolveCrumbs(
   pathname: string,
   deviceName: string | null,
-  templateName: string | null
+  templateName: string | null,
+  instanceName: string | null
 ): Crumb[] {
   if (pathname === "/dashboard") return [{ label: "Dashboard" }]
   if (pathname === "/workflow-templates")
@@ -46,6 +47,14 @@ function resolveCrumbs(
     return [
       { label: "Workflow Templates", href: "/workflow-templates" },
       { label: templateName ?? "Template" },
+    ]
+  }
+  if (pathname === "/workflow-instances")
+    return [{ label: "Workflow Instances" }]
+  if (pathname.startsWith("/workflow-instances/")) {
+    return [
+      { label: "Workflow Instances", href: "/workflow-instances" },
+      { label: instanceName ?? "Instance" },
     ]
   }
   if (pathname === "/devices") return [{ label: "Devices" }]
@@ -81,6 +90,7 @@ function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize)
   const deviceName = useBreadcrumbStore((s) => s.deviceName)
   const templateName = useBreadcrumbStore((s) => s.templateName)
+  const instanceName = useBreadcrumbStore((s) => s.instanceName)
   const location = useLocation()
 
   useEffect(() => {
@@ -97,7 +107,12 @@ function RootLayout() {
     return <Outlet />
   }
 
-  const crumbs = resolveCrumbs(location.pathname, deviceName, templateName)
+  const crumbs = resolveCrumbs(
+    location.pathname,
+    deviceName,
+    templateName,
+    instanceName
+  )
 
   return (
     <SidebarProvider>

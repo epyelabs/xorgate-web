@@ -14,8 +14,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
+import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
+import { Route as WorkflowInstancesIdRouteImport } from './routes/workflow-instances/$id'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
 import { Route as DevicesIdIndexRouteImport } from './routes/devices/$id.index'
 import { Route as DevicesIdWorkflowsRouteImport } from './routes/devices/$id.workflows'
@@ -49,6 +51,11 @@ const WorkflowTemplatesIndexRoute = WorkflowTemplatesIndexRouteImport.update({
   path: '/workflow-templates/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkflowInstancesIndexRoute = WorkflowInstancesIndexRouteImport.update({
+  id: '/workflow-instances/',
+  path: '/workflow-instances/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevicesIndexRoute = DevicesIndexRouteImport.update({
   id: '/devices/',
   path: '/devices/',
@@ -57,6 +64,11 @@ const DevicesIndexRoute = DevicesIndexRouteImport.update({
 const WorkflowTemplatesIdRoute = WorkflowTemplatesIdRouteImport.update({
   id: '/workflow-templates/$id',
   path: '/workflow-templates/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkflowInstancesIdRoute = WorkflowInstancesIdRouteImport.update({
+  id: '/workflow-instances/$id',
+  path: '/workflow-instances/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevicesIdRoute = DevicesIdRouteImport.update({
@@ -101,8 +113,10 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
+  '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices/': typeof DevicesIndexRoute
+  '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
@@ -116,8 +130,10 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices': typeof DevicesIndexRoute
+  '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
@@ -133,8 +149,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
+  '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices/': typeof DevicesIndexRoute
+  '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
@@ -151,8 +169,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/devices/$id'
+    | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices/'
+    | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/media'
     | '/devices/$id/settings'
@@ -166,8 +186,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/signup'
+    | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices'
+    | '/workflow-instances'
     | '/workflow-templates'
     | '/devices/$id/media'
     | '/devices/$id/settings'
@@ -182,8 +204,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/devices/$id'
+    | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices/'
+    | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/media'
     | '/devices/$id/settings'
@@ -199,8 +223,10 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
+  WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
   DevicesIndexRoute: typeof DevicesIndexRoute
+  WorkflowInstancesIndexRoute: typeof WorkflowInstancesIndexRoute
   WorkflowTemplatesIndexRoute: typeof WorkflowTemplatesIndexRoute
 }
 
@@ -241,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkflowTemplatesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workflow-instances/': {
+      id: '/workflow-instances/'
+      path: '/workflow-instances'
+      fullPath: '/workflow-instances/'
+      preLoaderRoute: typeof WorkflowInstancesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/devices/': {
       id: '/devices/'
       path: '/devices'
@@ -253,6 +286,13 @@ declare module '@tanstack/react-router' {
       path: '/workflow-templates/$id'
       fullPath: '/workflow-templates/$id'
       preLoaderRoute: typeof WorkflowTemplatesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workflow-instances/$id': {
+      id: '/workflow-instances/$id'
+      path: '/workflow-instances/$id'
+      fullPath: '/workflow-instances/$id'
+      preLoaderRoute: typeof WorkflowInstancesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/devices/$id': {
@@ -335,8 +375,10 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
+  WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,
   DevicesIndexRoute: DevicesIndexRoute,
+  WorkflowInstancesIndexRoute: WorkflowInstancesIndexRoute,
   WorkflowTemplatesIndexRoute: WorkflowTemplatesIndexRoute,
 }
 export const routeTree = rootRouteImport

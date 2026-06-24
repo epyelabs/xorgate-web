@@ -8,6 +8,8 @@ interface BreadcrumbState {
   setDeviceName: (deviceName: string | null) => void
   templateName: string | null
   setTemplateName: (templateName: string | null) => void
+  instanceName: string | null
+  setInstanceName: (instanceName: string | null) => void
 }
 
 export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
@@ -15,4 +17,6 @@ export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
   setDeviceName: (deviceName) => set({ deviceName }),
   templateName: null,
   setTemplateName: (templateName) => set({ templateName }),
+  instanceName: null,
+  setInstanceName: (instanceName) => set({ instanceName }),
 }))

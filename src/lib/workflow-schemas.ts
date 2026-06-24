@@ -51,7 +51,9 @@ export const workflowTemplateVersionSchema = z.object({
   createdAt: z.string(),
 })
 
-export const workflowInstanceSchema = z.object({
+// A deployment: a template attached to / tuned onto devices in a project (the
+// template "Usage" tab). Distinct from a WorkflowRun (a single execution).
+export const workflowDeploymentSchema = z.object({
   id: z.string(),
   name: z.string(),
   projectName: z.string(),
@@ -80,7 +82,7 @@ export const workflowTemplateSummarySchema = z.object({
 // Detail = summary plus the full version history and usage list.
 export const workflowTemplateDetailSchema = workflowTemplateSummarySchema.extend({
   versions: z.array(workflowTemplateVersionSchema),
-  usage: z.array(workflowInstanceSchema),
+  usage: z.array(workflowDeploymentSchema),
 })
 
 export const listWorkflowTemplatesResponseSchema = z.object({
@@ -121,7 +123,7 @@ export type TemplateStatus = z.infer<typeof templateStatusSchema>
 export type VersionStatus = z.infer<typeof versionStatusSchema>
 export type Author = z.infer<typeof authorSchema>
 export type WorkflowTemplateVersion = z.infer<typeof workflowTemplateVersionSchema>
-export type WorkflowInstance = z.infer<typeof workflowInstanceSchema>
+export type WorkflowDeployment = z.infer<typeof workflowDeploymentSchema>
 export type WorkflowTemplateSummary = z.infer<typeof workflowTemplateSummarySchema>
 export type WorkflowTemplateDetail = z.infer<typeof workflowTemplateDetailSchema>
 export type CreateWorkflowTemplateInput = z.infer<typeof createWorkflowTemplateSchema>

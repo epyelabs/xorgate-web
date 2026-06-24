@@ -1,14 +1,18 @@
 import { create } from "zustand"
 
-// Lets device pages publish the fetched device's display name so the root
-// layout breadcrumb can render "Home > Devices > DEVICE_NAME" without
-// refetching the device.
+// Lets detail pages publish the fetched entity's display name so the root
+// layout breadcrumb can render "Home > Devices > DEVICE_NAME" (or the workflow
+// template equivalent) without refetching.
 interface BreadcrumbState {
   deviceName: string | null
   setDeviceName: (deviceName: string | null) => void
+  templateName: string | null
+  setTemplateName: (templateName: string | null) => void
 }
 
 export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
   deviceName: null,
   setDeviceName: (deviceName) => set({ deviceName }),
+  templateName: null,
+  setTemplateName: (templateName) => set({ templateName }),
 }))

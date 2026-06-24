@@ -14,11 +14,14 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { Box, CpuIcon } from "lucide-react"
+import { Box, WorkflowIcon } from "lucide-react"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
-const navMain = [{ title: "Devices", url: "/devices", icon: <Box /> }]
+const navMain = [
+  { title: "Devices", url: "/devices", icon: <Box /> },
+  { title: "Workflow Templates", url: "/workflow-templates", icon: <WorkflowIcon /> },
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const authUser = useAuthStore((s) => s.user)

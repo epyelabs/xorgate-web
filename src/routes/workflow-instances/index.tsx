@@ -53,7 +53,7 @@ const STATUS_OPTIONS: readonly (RunStatus | "any")[] = [
 ]
 
 interface RunsData {
-  projectId: string | null
+  workspaceId: string | null
   runs: WorkflowRunSummary[]
 }
 
@@ -62,9 +62,9 @@ function WorkflowInstancesListPage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<RunStatus | "any">("any")
-  const currentProjectId = useWorkspaceStore((s) => s.currentProjectId)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
 
-  // Re-fetch when the active project changes (same pattern as the devices list).
+  // Re-fetch when the active workspace changes (same pattern as the devices list).
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -76,21 +76,21 @@ function WorkflowInstancesListPage() {
         }
         if (cancelled) return
         setError(null)
-        setData({ projectId: currentProjectId, runs: parsed.data.runs })
+        setData({ workspaceId: currentWorkspaceId, runs: parsed.data.runs })
       } catch (err) {
         const message = (err as Error).message
         if (cancelled) return
         setError(message)
-        setData({ projectId: currentProjectId, runs: [] })
+        setData({ workspaceId: currentWorkspaceId, runs: [] })
         toast.error(message)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [currentProjectId])
+  }, [currentWorkspaceId])
 
-  const isLoading = !data || data.projectId !== currentProjectId
+  const isLoading = !data || data.workspaceId !== currentWorkspaceId
   const runs = isLoading ? null : data.runs
 
   const filtered = useMemo(() => {
@@ -119,7 +119,7 @@ function WorkflowInstancesListPage() {
             Workflow Instances
           </h1>
           <p className="text-sm text-muted-foreground">
-            Workflow runs in this project, triggered by workflows attached to
+            Workflow runs in this workspace, triggered by workflows attached to
             devices.
           </p>
         </div>

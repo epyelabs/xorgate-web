@@ -105,8 +105,8 @@ interface RunArgs {
   templateVersion: number
   deviceId: string
   deviceName: string
-  projectId: string
-  projectName: string
+  workspaceId: string
+  workspaceName: string
   trigger: WorkflowRunDetail["trigger"]
   status: WorkflowRunDetail["status"]
   startedAt: string
@@ -126,7 +126,7 @@ function makeRun(args: RunArgs): WorkflowRunDetail {
   const events = args.events ?? []
   return {
     id: args.id,
-    projectId: args.projectId,
+    workspaceId: args.workspaceId,
     templateId: args.templateId,
     templateName: args.templateName,
     templateVersion: args.templateVersion,
@@ -138,7 +138,7 @@ function makeRun(args: RunArgs): WorkflowRunDetail {
     endedAt: args.endedAt,
     durationMs: args.durationMs,
     eventCount: events.length,
-    projectName: args.projectName,
+    workspaceName: args.workspaceName,
     triggeredBy: args.triggeredBy,
     definition,
     steps: buildSteps(definition, {
@@ -170,8 +170,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1001",
     deviceId: "dev-22198",
     deviceName: "DV-22198",
-    projectId: "proj-fleet",
-    projectName: "Fleet Safety Pilot",
+    workspaceId: "proj-fleet",
+    workspaceName: "Fleet Safety Pilot",
     trigger: "event",
     status: "succeeded",
     startedAt: "2026-06-24T05:10:00.000Z",
@@ -189,8 +189,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1002",
     deviceId: "dev-yc0007",
     deviceName: "YC-0007",
-    projectId: "proj-fleet",
-    projectName: "Site Security",
+    workspaceId: "proj-fleet",
+    workspaceName: "Site Security",
     trigger: "schedule",
     status: "running",
     startedAt: "2026-06-24T07:14:00.000Z",
@@ -205,8 +205,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1003",
     deviceId: "dev-22311",
     deviceName: "DV-22311",
-    projectId: "proj-fleet",
-    projectName: "Fleet Safety Pilot",
+    workspaceId: "proj-fleet",
+    workspaceName: "Fleet Safety Pilot",
     trigger: "manual",
     status: "failed",
     startedAt: "2026-06-24T02:00:00.000Z",
@@ -223,8 +223,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1004",
     deviceId: "dev-yc0007",
     deviceName: "YC-0007",
-    projectId: "proj-fleet",
-    projectName: "Site Security",
+    workspaceId: "proj-fleet",
+    workspaceName: "Site Security",
     trigger: "event",
     status: "succeeded",
     startedAt: "2026-06-23T09:30:00.000Z",
@@ -239,8 +239,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1005",
     deviceId: "dev-22198",
     deviceName: "DV-22198",
-    projectId: "proj-fleet",
-    projectName: "Fleet Safety Pilot",
+    workspaceId: "proj-fleet",
+    workspaceName: "Fleet Safety Pilot",
     trigger: "schedule",
     status: "succeeded",
     startedAt: "2026-06-24T04:05:00.000Z",
@@ -254,8 +254,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1006",
     deviceId: "dev-22401",
     deviceName: "DV-22401",
-    projectId: "proj-fleet",
-    projectName: "Fleet Safety Pilot",
+    workspaceId: "proj-fleet",
+    workspaceName: "Fleet Safety Pilot",
     trigger: "event",
     status: "succeeded",
     startedAt: "2026-06-24T01:20:00.000Z",
@@ -274,8 +274,8 @@ export const MOCK_RUNS: WorkflowRunDetail[] = [
     id: "wfr-1007",
     deviceId: "dev-yc0012",
     deviceName: "YC-0012",
-    projectId: "proj-fleet",
-    projectName: "Site Security",
+    workspaceId: "proj-fleet",
+    workspaceName: "Site Security",
     trigger: "manual",
     status: "failed",
     startedAt: "2026-06-22T18:00:00.000Z",

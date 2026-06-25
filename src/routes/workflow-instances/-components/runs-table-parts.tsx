@@ -81,7 +81,7 @@ export function RunsTableSkeleton() {
 export function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
-      <p className="text-sm font-medium">No runs in this project yet</p>
+      <p className="text-sm font-medium">No runs in this workspace yet</p>
       <p className="text-xs text-muted-foreground">
         Runs appear here when a workflow attached to a device executes.
       </p>

@@ -183,7 +183,7 @@ export const MOCK_TEMPLATES: WorkflowTemplateDetail[] = [
       {
         id: "wfi-1",
         name: "City fleet — safety",
-        projectName: "Fleet Safety Pilot",
+        workspaceName: "Fleet Safety Pilot",
         target: "tag: city-vans (12 devices)",
         pinnedVersion: null,
         enabled: true,
@@ -192,7 +192,7 @@ export const MOCK_TEMPLATES: WorkflowTemplateDetail[] = [
       {
         id: "wfi-2",
         name: "Long-haul trucks",
-        projectName: "Fleet Safety Pilot",
+        workspaceName: "Fleet Safety Pilot",
         target: "tag: long-haul (3 devices)",
         pinnedVersion: 3,
         enabled: true,
@@ -201,7 +201,7 @@ export const MOCK_TEMPLATES: WorkflowTemplateDetail[] = [
       {
         id: "wfi-3",
         name: "Driver coaching beta",
-        projectName: "Coaching R&D",
+        workspaceName: "Coaching R&D",
         target: "device: DV-22198",
         pinnedVersion: 3,
         enabled: false,
@@ -210,7 +210,7 @@ export const MOCK_TEMPLATES: WorkflowTemplateDetail[] = [
       {
         id: "wfi-4",
         name: "Insurance telematics",
-        projectName: "Partner — Acme Insure",
+        workspaceName: "Partner — Acme Insure",
         target: "tag: pilot (8 devices)",
         pinnedVersion: null,
         enabled: true,
@@ -255,7 +255,7 @@ export const MOCK_TEMPLATES: WorkflowTemplateDetail[] = [
       {
         id: "wfi-5",
         name: "Yard cameras",
-        projectName: "Site Security",
+        workspaceName: "Site Security",
         target: "tag: yard-cams (4 devices)",
         pinnedVersion: 2,
         enabled: true,

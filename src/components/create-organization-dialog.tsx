@@ -81,7 +81,7 @@ export function CreateOrganizationDialog({
         <DialogHeader>
           <DialogTitle>Create organization</DialogTitle>
           <DialogDescription>
-            Workspaces hold their own projects, members, and settings.
+            Organizations hold their own workspaces, members, and settings.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>

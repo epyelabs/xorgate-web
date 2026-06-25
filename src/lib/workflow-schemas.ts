@@ -51,12 +51,12 @@ export const workflowTemplateVersionSchema = z.object({
   createdAt: z.string(),
 })
 
-// A deployment: a template attached to / tuned onto devices in a project (the
+// A deployment: a template attached to / tuned onto devices in a workspace (the
 // template "Usage" tab). Distinct from a WorkflowRun (a single execution).
 export const workflowDeploymentSchema = z.object({
   id: z.string(),
   name: z.string(),
-  projectName: z.string(),
+  workspaceName: z.string(),
   target: z.string(),
   pinnedVersion: z.number().nullable(), // null => follows the published version
   enabled: z.boolean(),

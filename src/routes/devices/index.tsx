@@ -133,7 +133,7 @@ function exportCsv(rows: Device[]) {
 }
 
 interface DevicesData {
-  projectId: string | null
+  workspaceId: string | null
   devices: Device[]
 }
 
@@ -145,7 +145,7 @@ function DevicesListPage() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [provisionOpen, setProvisionOpen] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
-  const currentProjectId = useWorkspaceStore((s) => s.currentProjectId)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
 
   useEffect(() => {
     let cancelled = false
@@ -158,22 +158,22 @@ function DevicesListPage() {
         }
         if (cancelled) return
         setError(null)
-        setData({ projectId: currentProjectId, devices: parsed.data.devices })
+        setData({ workspaceId: currentWorkspaceId, devices: parsed.data.devices })
         setSelected(new Set())
       } catch (err) {
         const message = (err as Error).message
         if (cancelled) return
         setError(message)
-        setData({ projectId: currentProjectId, devices: [] })
+        setData({ workspaceId: currentWorkspaceId, devices: [] })
         toast.error(message)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [currentProjectId, reloadNonce])
+  }, [currentWorkspaceId, reloadNonce])
 
-  const isLoading = !data || data.projectId !== currentProjectId
+  const isLoading = !data || data.workspaceId !== currentWorkspaceId
   const devices = isLoading ? null : data.devices
 
   const filtered = useMemo(() => {

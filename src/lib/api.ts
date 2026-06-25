@@ -3,14 +3,14 @@ import { getIdToken } from "./cognito"
 const API_URL = import.meta.env.VITE_API_BASE_URL as string
 
 let currentOrgIdGetter: () => string | null = () => null
-let currentProjectIdGetter: () => string | null = () => null
+let currentWorkspaceIdGetter: () => string | null = () => null
 
 export function registerOrgIdGetter(fn: () => string | null) {
   currentOrgIdGetter = fn
 }
 
-export function registerProjectIdGetter(fn: () => string | null) {
-  currentProjectIdGetter = fn
+export function registerWorkspaceIdGetter(fn: () => string | null) {
+  currentWorkspaceIdGetter = fn
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -38,8 +38,8 @@ export async function apiRequest<T>(
   const headers = await authHeaders()
   const orgId = currentOrgIdGetter()
   if (orgId) headers["X-Organization-Id"] = orgId
-  const projectId = currentProjectIdGetter()
-  if (projectId) headers["X-Project-Id"] = projectId
+  const workspaceId = currentWorkspaceIdGetter()
+  if (workspaceId) headers["X-Workspace-Id"] = workspaceId
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -83,7 +83,7 @@ export interface Organization {
   updated_at: string
 }
 
-export interface Project {
+export interface Workspace {
   id: string
   organization_id: string
   name: string
@@ -117,16 +117,16 @@ export async function createOrganization(input: {
   })
 }
 
-export async function listProjects(): Promise<{ projects: Project[] }> {
-  return apiRequest("/projects")
+export async function listWorkspaces(): Promise<{ workspaces: Workspace[] }> {
+  return apiRequest("/workspaces")
 }
 
-export async function createProject(input: {
+export async function createWorkspace(input: {
   name: string
   slug: string
   description?: string
-}): Promise<{ project: Project }> {
-  return apiRequest("/projects", {
+}): Promise<{ workspace: Workspace }> {
+  return apiRequest("/workspaces", {
     method: "POST",
     body: JSON.stringify(input),
   })
@@ -140,7 +140,7 @@ export type DeviceStatus =
 
 export interface Device {
   id: string
-  projectId: string
+  workspaceId: string
   deviceModelId: string
   serial: string
   name: string | null
@@ -320,9 +320,9 @@ export interface DeviceRegistration {
   installUrl: string
 }
 
-// Mints (or reuses) a pending registration for the active org + project.
+// Mints (or reuses) a pending registration for the active org + workspace.
 // Idempotent server-side: reloading the dialog returns the same code.
-// Requires a selected project (X-Project-Id is sent automatically).
+// Requires a selected workspace (X-Workspace-Id is sent automatically).
 export async function createDeviceRegistration(): Promise<DeviceRegistration> {
   return apiRequest<DeviceRegistration>("/device-registrations", {
     method: "POST",

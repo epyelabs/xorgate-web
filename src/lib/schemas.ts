@@ -56,7 +56,7 @@ export const createOrganizationSchema = z.object({
   slug: slugField,
 })
 
-export const createProjectSchema = z.object({
+export const createWorkspaceSchema = z.object({
   name: z.string().min(1, "Name is required").max(80, "Name is too long"),
   slug: slugField,
   description: z.string().max(280, "Description is too long").optional(),
@@ -71,7 +71,7 @@ export const deviceStatusSchema = z.enum([
 
 export const deviceSchema = z.object({
   id: z.string(),
-  projectId: z.string(),
+  workspaceId: z.string(),
   deviceModelId: z.string(),
   serial: z.string(),
   name: z.string().nullable(),
@@ -241,4 +241,4 @@ export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>
 export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
-export type CreateProjectInput = z.infer<typeof createProjectSchema>
+export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>

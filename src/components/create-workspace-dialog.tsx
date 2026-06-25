@@ -15,12 +15,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { createProjectSchema } from "@/lib/schemas"
+import { createWorkspaceSchema } from "@/lib/schemas"
 import { slugify } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
 import { useWorkspaceStore } from "@/store/workspace"
 
-export function CreateProjectDialog({
+export function CreateWorkspaceDialog({
   open,
   onOpenChange,
 }: {
@@ -53,7 +53,7 @@ export function CreateProjectDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const parsed = createProjectSchema.safeParse({
+    const parsed = createWorkspaceSchema.safeParse({
       name,
       slug,
       description: description.trim() || undefined,
@@ -64,17 +64,17 @@ export function CreateProjectDialog({
     }
     setSubmitting(true)
     try {
-      const project = await useWorkspaceStore
+      const workspace = await useWorkspaceStore
         .getState()
-        .createProject(parsed.data)
-      toast.success(`Project "${project.name}" created`)
+        .createWorkspace(parsed.data)
+      toast.success(`Workspace "${workspace.name}" created`)
       reset()
       onOpenChange(false)
     } catch (err) {
       const message =
         err instanceof ApiError
           ? err.message
-          : (err as Error).message ?? "Failed to create project"
+          : (err as Error).message ?? "Failed to create workspace"
       toast.error(message)
     } finally {
       setSubmitting(false)
@@ -85,17 +85,17 @@ export function CreateProjectDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create project</DialogTitle>
+          <DialogTitle>Create workspace</DialogTitle>
           <DialogDescription>
-            Projects group related resources inside an organization.
+            Workspaces group related resources inside an organization.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="project-name">Name</FieldLabel>
+              <FieldLabel htmlFor="workspace-name">Name</FieldLabel>
               <Input
-                id="project-name"
+                id="workspace-name"
                 placeholder="Frontier"
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
@@ -104,9 +104,9 @@ export function CreateProjectDialog({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="project-slug">Slug</FieldLabel>
+              <FieldLabel htmlFor="workspace-slug">Slug</FieldLabel>
               <Input
-                id="project-slug"
+                id="workspace-slug"
                 placeholder="frontier"
                 value={slug}
                 onChange={(e) => {
@@ -117,12 +117,12 @@ export function CreateProjectDialog({
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="project-description">
+              <FieldLabel htmlFor="workspace-description">
                 Description (optional)
               </FieldLabel>
               <Input
-                id="project-description"
-                placeholder="What this project is for"
+                id="workspace-description"
+                placeholder="What this workspace is for"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />

@@ -21,27 +21,27 @@ import {
 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWorkspaceStore } from "@/store/workspace"
-import { CreateProjectDialog } from "@/components/create-project-dialog"
+import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 
-export function ProjectSwitcher() {
+export function WorkspaceSwitcher() {
   const { isMobile } = useSidebar()
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
-  const projects = useWorkspaceStore((s) => s.projects)
-  const isLoading = useWorkspaceStore((s) => s.isLoadingProjects)
-  const currentProjectId = useWorkspaceStore((s) => s.currentProjectId)
-  const setCurrentProject = useWorkspaceStore((s) => s.setCurrentProject)
+  const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const isLoading = useWorkspaceStore((s) => s.isLoadingWorkspaces)
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const activeProject =
-    projects.find((p) => p.id === currentProjectId) ?? null
+  const activeWorkspace =
+    workspaces.find((p) => p.id === currentWorkspaceId) ?? null
 
   const triggerLabel = (() => {
     if (!currentOrganizationId) return "Select an organization"
-    if (activeProject) return activeProject.name
-    if (projects.length === 0) return "No projects yet"
-    return "Select a project"
+    if (activeWorkspace) return activeWorkspace.name
+    if (workspaces.length === 0) return "No workspaces yet"
+    return "Select a workspace"
   })()
 
   return (
@@ -71,7 +71,7 @@ export function ProjectSwitcher() {
               sideOffset={4}
             >
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Projects
+                Workspaces
               </DropdownMenuLabel>
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
@@ -80,26 +80,26 @@ export function ProjectSwitcher() {
                     <Skeleton className="h-4 w-24" />
                   </div>
                 ))
-              ) : projects.length === 0 ? (
+              ) : workspaces.length === 0 ? (
                 <DropdownMenuItem
                   disabled
                   className="text-muted-foreground italic"
                 >
-                  No projects yet
+                  No workspaces yet
                 </DropdownMenuItem>
               ) : null}
-              {projects.map((project) => {
-                const isActive = project.id === currentProjectId
+              {workspaces.map((workspace) => {
+                const isActive = workspace.id === currentWorkspaceId
                 return (
                   <DropdownMenuItem
-                    key={project.id}
-                    onClick={() => setCurrentProject(project.id)}
+                    key={workspace.id}
+                    onClick={() => setCurrentWorkspace(workspace.id)}
                     className="gap-2 p-2"
                   >
                     <div className="flex size-6 items-center justify-center rounded-md border">
                       <FolderIcon className="size-3.5" />
                     </div>
-                    <span className="truncate">{project.name}</span>
+                    <span className="truncate">{workspace.name}</span>
                     {isActive && <CheckIcon className="ml-auto size-3.5" />}
                   </DropdownMenuItem>
                 )
@@ -114,14 +114,14 @@ export function ProjectSwitcher() {
                   <PlusIcon className="size-4" />
                 </div>
                 <div className="font-medium text-muted-foreground">
-                  Create project
+                  Create workspace
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
-      <CreateProjectDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <CreateWorkspaceDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </>
   )
 }

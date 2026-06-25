@@ -196,7 +196,7 @@ function WorkflowInstanceDetailPage() {
             <span className="font-medium text-foreground">{run.deviceName}</span>
           </span>
           <span>·</span>
-          <span>Project {run.projectName}</span>
+          <span>Workspace {run.workspaceName}</span>
           <span>·</span>
           <span>trigger: {run.trigger}</span>
           <span>·</span>

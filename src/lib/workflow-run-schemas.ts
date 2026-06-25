@@ -2,7 +2,7 @@ import { z } from "zod"
 import { workflowDefinitionSchema } from "./workflow-schemas"
 
 // Schemas + types for Workflow Instances (= workflow runs / executions). One row
-// per execution of a workflow attached to a device, scoped to a project. These
+// per execution of a workflow attached to a device, scoped to a workspace. These
 // mirror the shapes the real `workflow_runs` + `events` backend will return, so
 // swapping the mock client in `workflow-instances-api.ts` for `apiRequest` is a
 // drop-in change validated by the same `.safeParse()` pattern.
@@ -33,7 +33,7 @@ export const runEventSchema = z.object({
 // List-row summary: enough to render the table without the heavy trace.
 export const workflowRunSummarySchema = z.object({
   id: z.string(),
-  projectId: z.string(),
+  workspaceId: z.string(),
   templateId: z.string(),
   templateName: z.string(),
   templateVersion: z.number(),
@@ -49,7 +49,7 @@ export const workflowRunSummarySchema = z.object({
 
 // Detail = summary plus the full trace, events, metrics and (snapshot) graph.
 export const workflowRunDetailSchema = workflowRunSummarySchema.extend({
-  projectName: z.string(),
+  workspaceName: z.string(),
   triggeredBy: z.string(), // the deployment/attachment name that fired this run
   definition: workflowDefinitionSchema, // the graph that actually ran
   steps: z.array(runStepSchema),

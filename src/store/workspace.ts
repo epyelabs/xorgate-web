@@ -2,31 +2,31 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import {
   createOrganization as apiCreateOrganization,
-  createProject as apiCreateProject,
-  listProjects as apiListProjects,
+  createWorkspace as apiCreateWorkspace,
+  listWorkspaces as apiListWorkspaces,
   registerOrgIdGetter,
-  registerProjectIdGetter,
+  registerWorkspaceIdGetter,
   type Organization,
-  type Project,
+  type Workspace,
 } from "@/lib/api"
 import { useAuthStore } from "@/store/auth"
 
 interface WorkspaceState {
   currentOrganizationId: string | null
-  currentProjectId: string | null
-  projects: Project[]
-  isLoadingProjects: boolean
+  currentWorkspaceId: string | null
+  workspaces: Workspace[]
+  isLoadingWorkspaces: boolean
 
   initialize: () => Promise<void>
   setCurrentOrganization: (orgId: string) => Promise<void>
-  setCurrentProject: (projectId: string) => void
-  loadProjects: () => Promise<void>
+  setCurrentWorkspace: (workspaceId: string) => void
+  loadWorkspaces: () => Promise<void>
   createOrganization: (input: { name: string; slug: string }) => Promise<Organization>
-  createProject: (input: {
+  createWorkspace: (input: {
     name: string
     slug: string
     description?: string
-  }) => Promise<Project>
+  }) => Promise<Workspace>
   reset: () => void
 }
 
@@ -34,9 +34,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
       currentOrganizationId: null,
-      currentProjectId: null,
-      projects: [],
-      isLoadingProjects: false,
+      currentWorkspaceId: null,
+      workspaces: [],
+      isLoadingWorkspaces: false,
 
       initialize: async () => {
         const orgs = useAuthStore.getState().organizations
@@ -48,13 +48,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (nextOrgId !== get().currentOrganizationId) {
           set({
             currentOrganizationId: nextOrgId,
-            currentProjectId: null,
-            projects: [],
+            currentWorkspaceId: null,
+            workspaces: [],
           })
         }
 
         if (nextOrgId) {
-          await get().loadProjects()
+          await get().loadWorkspaces()
         }
       },
 
@@ -62,37 +62,37 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (orgId === get().currentOrganizationId) return
         set({
           currentOrganizationId: orgId,
-          currentProjectId: null,
-          projects: [],
+          currentWorkspaceId: null,
+          workspaces: [],
         })
-        await get().loadProjects()
+        await get().loadWorkspaces()
       },
 
-      setCurrentProject: (projectId) => {
-        set({ currentProjectId: projectId })
+      setCurrentWorkspace: (workspaceId) => {
+        set({ currentWorkspaceId: workspaceId })
       },
 
-      loadProjects: async () => {
+      loadWorkspaces: async () => {
         if (!get().currentOrganizationId) {
-          set({ projects: [], isLoadingProjects: false })
+          set({ workspaces: [], isLoadingWorkspaces: false })
           return
         }
-        set({ isLoadingProjects: true })
+        set({ isLoadingWorkspaces: true })
         try {
-          const { projects } = await apiListProjects()
-          const persistedProjectId = get().currentProjectId
+          const { workspaces } = await apiListWorkspaces()
+          const persistedWorkspaceId = get().currentWorkspaceId
           const stillValid =
-            persistedProjectId && projects.some((p) => p.id === persistedProjectId)
-          const nextProjectId = stillValid
-            ? persistedProjectId
-            : projects[0]?.id ?? null
+            persistedWorkspaceId && workspaces.some((p) => p.id === persistedWorkspaceId)
+          const nextWorkspaceId = stillValid
+            ? persistedWorkspaceId
+            : workspaces[0]?.id ?? null
           set({
-            projects,
-            currentProjectId: nextProjectId,
-            isLoadingProjects: false,
+            workspaces,
+            currentWorkspaceId: nextWorkspaceId,
+            isLoadingWorkspaces: false,
           })
         } catch {
-          set({ projects: [], isLoadingProjects: false })
+          set({ workspaces: [], isLoadingWorkspaces: false })
         }
       },
 
@@ -103,21 +103,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         return organization
       },
 
-      createProject: async (input) => {
-        const { project } = await apiCreateProject(input)
+      createWorkspace: async (input) => {
+        const { workspace } = await apiCreateWorkspace(input)
         set((state) => ({
-          projects: [project, ...state.projects],
-          currentProjectId: project.id,
+          workspaces: [workspace, ...state.workspaces],
+          currentWorkspaceId: workspace.id,
         }))
-        return project
+        return workspace
       },
 
       reset: () => {
         set({
           currentOrganizationId: null,
-          currentProjectId: null,
-          projects: [],
-          isLoadingProjects: false,
+          currentWorkspaceId: null,
+          workspaces: [],
+          isLoadingWorkspaces: false,
         })
       },
     }),
@@ -126,14 +126,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         currentOrganizationId: state.currentOrganizationId,
-        currentProjectId: state.currentProjectId,
+        currentWorkspaceId: state.currentWorkspaceId,
       }),
     }
   )
 )
 
 registerOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
-registerProjectIdGetter(() => useWorkspaceStore.getState().currentProjectId)
+registerWorkspaceIdGetter(() => useWorkspaceStore.getState().currentWorkspaceId)
 
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.isAuthenticated && !state.isAuthenticated) {

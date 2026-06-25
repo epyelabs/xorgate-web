@@ -11,7 +11,7 @@ import { formatRelative } from "@/lib/relative-time"
 import type { WorkflowDeployment } from "@/lib/workflow-schemas"
 
 // "Where is this consumed?" — the instances (template deployed + tuned onto
-// devices in a project) that reference this template. This is the same data
+// devices in a workspace) that reference this template. This is the same data
 // that will eventually populate the device detail "Workflows" tab.
 export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
   if (instances.length === 0) {
@@ -19,7 +19,7 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
       <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
         <p className="text-sm font-medium">Not deployed anywhere yet</p>
         <p className="text-xs text-muted-foreground">
-          When this template is enabled on devices in a project, those
+          When this template is enabled on devices in a workspace, those
           deployments show up here.
         </p>
       </div>
@@ -35,7 +35,7 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
               Deployment
             </TableHead>
             <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              Project
+              Workspace
             </TableHead>
             <TableHead className="text-[10px] tracking-[0.14em] uppercase">
               Target
@@ -58,7 +58,7 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
                 {instance.name}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                {instance.projectName}
+                {instance.workspaceName}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {instance.target}

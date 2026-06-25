@@ -7,13 +7,13 @@ import type {
 // In-memory mock backend for Workflow Instances (runs). Every exported function
 // mirrors the signature the real client in `lib/api.ts` will expose, so going
 // live means replacing these bodies with `apiRequest(...)` calls against the
-// project-scoped `/workflow-runs` endpoints. Reads return deep clones so the UI
+// workspace-scoped `/workflow-runs` endpoints. Reads return deep clones so the UI
 // can never mutate the store by reference.
 //
-// Project scoping note: runs are dummy, so the list ignores the real
-// `currentProjectId` and returns the same set; the page still re-fetches on
-// project switch (matching the devices/templates pattern) and shows project
-// context. Wire the real `X-Project-Id`-scoped endpoint to partition for real.
+// Workspace scoping note: runs are dummy, so the list ignores the real
+// `currentWorkspaceId` and returns the same set; the page still re-fetches on
+// workspace switch (matching the devices/templates pattern) and shows workspace
+// context. Wire the real `X-Workspace-Id`-scoped endpoint to partition for real.
 
 const db: WorkflowRunDetail[] = structuredClone(MOCK_RUNS)
 
@@ -27,7 +27,7 @@ function toSummary(run: WorkflowRunDetail): WorkflowRunSummary {
   const {
     // strip detail-only fields
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    projectName: _p,
+    workspaceName: _p,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     triggeredBy: _t,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

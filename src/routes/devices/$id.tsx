@@ -123,7 +123,7 @@ function DeviceLayout() {
   if (notFound) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <p className="text-muted-foreground text-sm">Device not found.</p>
+        <p className="text-sm text-muted-foreground">Device not found.</p>
       </div>
     )
   }
@@ -148,21 +148,22 @@ function DeviceLayout() {
                 </Badge>
               ) : null}
             </div>
-            <p className="text-muted-foreground text-xs">{id}</p>
+            <p className="text-xs text-muted-foreground">{id}</p>
           </div>
         </div>
 
-        {error ? (
-          <p className="text-destructive text-sm">{error}</p>
+        {/* Commenting this out for now, will need to improve later */}
+        {/* {error ? (
+          <p className="text-sm text-destructive">{error}</p>
         ) : device === null ? (
           <Skeleton className="h-4 w-96 max-w-full" />
         ) : (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Serial {device.serial} · Model {device.deviceModelId} · fw{" "}
             {device.firmwareVersion ?? "-"} · Last seen{" "}
             {formatTimestamp(device.lastSeenAt)}
           </p>
-        )}
+        )} */}
       </header>
 
       <div className="border-b border-border">
@@ -170,17 +171,17 @@ function DeviceLayout() {
           <TabsList variant="line">
             <TabsTrigger value="streams" asChild>
               <Link to="/devices/$id/streams" params={{ id }}>
-                Streams
+                Active Streams
               </Link>
             </TabsTrigger>
             <TabsTrigger value="telemetry" asChild>
               <Link to="/devices/$id/telemetry" params={{ id }}>
-                Telemetry
+                Telemetry History
               </Link>
             </TabsTrigger>
             <TabsTrigger value="media" asChild>
               <Link to="/devices/$id/media" params={{ id }}>
-                Media
+                Media Recordings
               </Link>
             </TabsTrigger>
             <TabsTrigger value="workflows" asChild>

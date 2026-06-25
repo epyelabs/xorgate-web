@@ -14,14 +14,18 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { ActivityIcon, Box, WorkflowIcon } from "lucide-react"
+import { ActivityIcon, Box, Play, WorkflowIcon } from "lucide-react"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
 const navMain = [
   { title: "Devices", url: "/devices", icon: <Box /> },
-  { title: "Workflow Templates", url: "/workflow-templates", icon: <WorkflowIcon /> },
-  { title: "Workflow Instances", url: "/workflow-instances", icon: <ActivityIcon /> },
+  {
+    title: "Workflow Templates",
+    url: "/workflow-templates",
+    icon: <WorkflowIcon />,
+  },
+  { title: "Workflow Instances", url: "/workflow-instances", icon: <Play /> },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

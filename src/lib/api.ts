@@ -147,6 +147,7 @@ export interface Device {
   firmwareVersion: string | null
   status: DeviceStatus
   persistTelemetry: boolean
+  autoRecord: boolean
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -169,6 +170,7 @@ export async function updateDevice(
     status?: DeviceStatus
     firmwareVersion?: string | null
     persistTelemetry?: boolean
+    autoRecord?: boolean
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {
@@ -335,4 +337,76 @@ export async function getDeviceRegistration(
   return apiRequest<DeviceRegistration>(
     `/device-registrations/${encodeURIComponent(code)}`
   )
+}
+
+// --- Recordings: cloud viewer-recorder start/stop/list/playback/delete ---
+export type RecordingStatus = "recording" | "completed" | "failed"
+export type RecordingTrigger = "manual" | "auto"
+
+export interface Recording {
+  id: string
+  deviceId: string
+  streamKey: string
+  status: RecordingStatus
+  trigger: RecordingTrigger
+  startedAt: string
+  endedAt: string | null
+  s3Key: string | null
+  sizeBytes: number | null
+  durationMs: number | null
+  taskArn: string | null
+  createdAt: string
+}
+
+export async function getDeviceRecordings(
+  deviceId: string
+): Promise<{ recordings: Recording[] }> {
+  return apiRequest(`/devices/${deviceId}/recordings`)
+}
+
+// Start recording one stream (cloud recorder joins the channel as a viewer).
+export async function startRecording(
+  deviceId: string,
+  streamKey: string
+): Promise<{ recording: Recording }> {
+  return apiRequest(`/devices/${deviceId}/recordings`, {
+    method: "POST",
+    body: JSON.stringify({ streamKey }),
+  })
+}
+
+// Start recording every provisioned stream on the device ("Record All").
+export async function startAllRecordings(
+  deviceId: string
+): Promise<{ recordings: Recording[] }> {
+  return apiRequest(`/devices/${deviceId}/recordings`, {
+    method: "POST",
+    body: JSON.stringify({ all: true }),
+  })
+}
+
+export async function stopRecording(
+  deviceId: string,
+  recordingId: string
+): Promise<{ recording: Recording }> {
+  return apiRequest(`/devices/${deviceId}/recordings/${recordingId}/stop`, {
+    method: "POST",
+  })
+}
+
+// Presigned GET URL for browser playback (expires; fetch fresh when opening).
+export async function getRecordingPlaybackUrl(
+  deviceId: string,
+  recordingId: string
+): Promise<{ url: string; expiresIn: number }> {
+  return apiRequest(`/devices/${deviceId}/recordings/${recordingId}/playback`)
+}
+
+export async function deleteRecording(
+  deviceId: string,
+  recordingId: string
+): Promise<void> {
+  await apiRequest(`/devices/${deviceId}/recordings/${recordingId}`, {
+    method: "DELETE",
+  })
 }

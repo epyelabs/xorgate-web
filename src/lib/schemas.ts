@@ -78,6 +78,7 @@ export const deviceSchema = z.object({
   firmwareVersion: z.string().nullable(),
   status: deviceStatusSchema,
   persistTelemetry: z.boolean(),
+  autoRecord: z.boolean(),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -201,6 +202,26 @@ export const kvsChannelSchema = z.object({
 
 export const getKvsChannelsResponseSchema = z.object({
   channels: z.array(kvsChannelSchema),
+})
+
+// --- Recordings: GET /devices/{id}/recordings ---
+export const recordingSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  streamKey: z.string(),
+  status: z.enum(["recording", "completed", "failed"]),
+  trigger: z.enum(["manual", "auto"]),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  s3Key: z.string().nullable(),
+  sizeBytes: z.number().nullable(),
+  durationMs: z.number().nullable(),
+  taskArn: z.string().nullable(),
+  createdAt: z.string(),
+})
+
+export const getDeviceRecordingsResponseSchema = z.object({
+  recordings: z.array(recordingSchema),
 })
 
 // --- Telemetry history (P4): GET /devices/{id}/telemetry(+/latest) ---

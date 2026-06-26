@@ -99,10 +99,12 @@ function DeviceSettingsPage() {
   const [name, setName] = useState("")
   const [status, setStatus] = useState<DeviceStatus>("provisioned")
   const [persistTelemetry, setPersistTelemetry] = useState(false)
+  const [autoRecord, setAutoRecord] = useState(false)
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
     persistTelemetry: boolean
+    autoRecord: boolean
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -129,10 +131,12 @@ function DeviceSettingsPage() {
         setName(initialName)
         setStatus(fetched.status)
         setPersistTelemetry(fetched.persistTelemetry)
+        setAutoRecord(fetched.autoRecord)
         setBaseline({
           name: initialName,
           status: fetched.status,
           persistTelemetry: fetched.persistTelemetry,
+          autoRecord: fetched.autoRecord,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -213,6 +217,7 @@ function DeviceSettingsPage() {
         name: nextName,
         status: updated.status,
         persistTelemetry: updated.persistTelemetry,
+        autoRecord: updated.autoRecord,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -246,6 +251,28 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setPersistTelemetry(baseline.persistTelemetry)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Auto-record toggle. Same optimistic-flip + rollback-on-error pattern as
+  // telemetry persistence. When on, the backend spawns a cloud viewer-recorder
+  // for each stream as it goes live (and stops it when the stream drops).
+  async function commitAutoRecord(next: boolean) {
+    if (saving || baseline === null || next === baseline.autoRecord) return
+    setAutoRecord(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { autoRecord: next })
+      const updated = res.device
+      setDevice(updated)
+      setAutoRecord(updated.autoRecord)
+      setBaseline({ ...baseline, autoRecord: updated.autoRecord })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setAutoRecord(baseline.autoRecord)
     } finally {
       setSaving(false)
     }
@@ -349,6 +376,25 @@ function DeviceSettingsPage() {
                       checked={persistTelemetry}
                       disabled={saving}
                       onCheckedChange={commitPersist}
+                    />
+                  </Field>
+
+                  <Field orientation="horizontal">
+                    <FieldContent>
+                      <FieldLabel htmlFor="device-auto-record">
+                        Auto-record streams
+                      </FieldLabel>
+                      <FieldDescription>
+                        Off by default. When on, a cloud recorder captures each
+                        stream to S3 while it is live. You can also start/stop
+                        recordings manually from the Active Streams tab.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id="device-auto-record"
+                      checked={autoRecord}
+                      disabled={saving}
+                      onCheckedChange={commitAutoRecord}
                     />
                   </Field>
                 </FieldGroup>

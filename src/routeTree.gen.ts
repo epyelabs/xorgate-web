@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
 import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
 import { Route as WorkflowInstancesIdRouteImport } from './routes/workflow-instances/$id'
@@ -49,6 +50,11 @@ const WorkflowTemplatesIndexRoute = WorkflowTemplatesIndexRouteImport.update({
 const WorkflowInstancesIndexRoute = WorkflowInstancesIndexRouteImport.update({
   id: '/workflow-instances/',
   path: '/workflow-instances/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevicesIndexRoute = DevicesIndexRouteImport.update({
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices/': typeof DevicesIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices': typeof DevicesIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/devices/': typeof DevicesIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices/'
+    | '/settings/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices'
+    | '/settings'
     | '/workflow-instances'
     | '/workflow-templates'
     | '/devices/$id/benchmark'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/devices/'
+    | '/settings/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
   DevicesIndexRoute: typeof DevicesIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
   WorkflowInstancesIndexRoute: typeof WorkflowInstancesIndexRoute
   WorkflowTemplatesIndexRoute: typeof WorkflowTemplatesIndexRoute
 }
@@ -264,6 +277,13 @@ declare module '@tanstack/react-router' {
       path: '/workflow-instances'
       fullPath: '/workflow-instances/'
       preLoaderRoute: typeof WorkflowInstancesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/devices/': {
@@ -378,6 +398,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,
   DevicesIndexRoute: DevicesIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
   WorkflowInstancesIndexRoute: WorkflowInstancesIndexRoute,
   WorkflowTemplatesIndexRoute: WorkflowTemplatesIndexRoute,
 }

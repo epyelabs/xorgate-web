@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router"
+import { Link, useLocation } from "@tanstack/react-router"
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,8 +17,10 @@ import {
 import { ChevronRightIcon } from "lucide-react"
 
 export function NavMain({
+  label,
   items,
 }: {
+  label: string
   items: {
     title: string
     url: string
@@ -30,15 +32,23 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const { pathname } = useLocation()
+
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
           if (!item.items?.length) {
+            const isActive =
+              pathname === item.url || pathname.startsWith(item.url + "/")
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild tooltip={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive}
+                  tooltip={item.title}
+                >
                   <Link to={item.url}>
                     {item.icon}
                     <span>{item.title}</span>

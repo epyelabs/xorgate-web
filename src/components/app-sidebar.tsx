@@ -14,18 +14,22 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { Box, Play, WorkflowIcon } from "lucide-react"
+import { Box, Play, Settings, WorkflowIcon } from "lucide-react"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
-const navMain = [
+const workspaceNav = [
   { title: "Devices", url: "/devices", icon: <Box /> },
+  { title: "Workflow Instances", url: "/workflow-instances", icon: <Play /> },
+]
+
+const organizationNav = [
   {
     title: "Workflow Templates",
     url: "/workflow-templates",
     icon: <WorkflowIcon />,
   },
-  { title: "Workflow Instances", url: "/workflow-instances", icon: <Play /> },
+  { title: "Settings", url: "/settings", icon: <Settings /> },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -62,7 +66,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain label="Workspace" items={workspaceNav} />
+        <NavMain label="Organization" items={organizationNav} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

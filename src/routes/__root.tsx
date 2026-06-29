@@ -56,6 +56,7 @@ function resolveCrumbs(
       { label: instanceName ?? "Instance" },
     ]
   }
+  if (pathname === "/settings") return [{ label: "Settings" }]
   if (pathname === "/devices") return [{ label: "Devices" }]
   if (pathname.startsWith("/devices/")) {
     const deviceCrumb: Crumb = { label: deviceName ?? "Device" }

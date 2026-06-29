@@ -1,0 +1,101 @@
+name: Web — deploy prod
+
+# Builds the released tag of xorgate-web and syncs dist/ to www.xorgate.io.
+#
+# One-time setup (shared with deploy-dev.yml):
+#   AWS — IAM machine user with an inline policy allowing, on BOTH
+#     dev.xorgate.io and www.xorgate.io:
+#       s3:PutObject, s3:DeleteObject   (resource: arn:aws:s3:::<bucket>/*)
+#       s3:ListBucket                   (resource: arn:aws:s3:::<bucket>)
+#   GitHub repo SECRETS:  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   GitHub repo VARIABLE (optional): AWS_REGION  (defaults to us-east-1)
+#   GitHub ENVIRONMENTS "development" + "production", each with Variables:
+#     VITE_COGNITO_USER_POOL_ID, VITE_COGNITO_CLIENT_ID, VITE_API_BASE_URL,
+#     VITE_COGNITO_IDENTITY_POOL_ID, VITE_AWS_REGION, VITE_IOT_ENDPOINT
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (must already exist)"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      BUCKET: www.xorgate.io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Write build env (.env)
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_COGNITO_IDENTITY_POOL_ID: ${{ vars.VITE_COGNITO_IDENTITY_POOL_ID }}
+          VITE_AWS_REGION: ${{ vars.VITE_AWS_REGION }}
+          VITE_IOT_ENDPOINT: ${{ vars.VITE_IOT_ENDPOINT }}
+        run: |
+          cat > .env <<EOF
+          VITE_COGNITO_USER_POOL_ID=${VITE_COGNITO_USER_POOL_ID}
+          VITE_COGNITO_CLIENT_ID=${VITE_COGNITO_CLIENT_ID}
+          VITE_API_BASE_URL=${VITE_API_BASE_URL}
+          VITE_COGNITO_IDENTITY_POOL_ID=${VITE_COGNITO_IDENTITY_POOL_ID}
+          VITE_AWS_REGION=${VITE_AWS_REGION}
+          VITE_IOT_ENDPOINT=${VITE_IOT_ENDPOINT}
+          EOF
+
+      - name: Build
+        run: npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Sync dist/ to S3
+        run: |
+          # Vite content-hashes assets/* → immutable, cache forever.
+          # --delete prunes files dropped since the last deploy.
+          aws s3 sync dist/ "s3://$BUCKET" \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html"
+          # index.html is the unhashed entrypoint — must always revalidate.
+          aws s3 cp dist/index.html "s3://$BUCKET/index.html" \
+            --cache-control "no-cache"
+
+      - name: Summary
+        if: always()
+        env:
+          REF: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          {
+            echo "## Web prod deploy"
+            echo ""
+            echo "- Tag: \`$REF\`"
+            echo "- Bucket: \`s3://$BUCKET\`"
+          } >> "$GITHUB_STEP_SUMMARY"

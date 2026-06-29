@@ -9,7 +9,6 @@ import {
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError, getDevice, type Device, type DeviceStatus } from "@/lib/api"
 import { getDeviceResponseSchema } from "@/lib/schemas"
@@ -29,18 +28,6 @@ export const Route = createFileRoute("/devices/$id")({
   },
   component: DeviceLayout,
 })
-
-const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-})
-
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return "Never"
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return dateTimeFormat.format(parsed)
-}
 
 function statusVariant(
   status: DeviceStatus
@@ -79,7 +66,6 @@ function DeviceLayout() {
     ? segment
     : "streams"
   const [device, setDevice] = useState<Device | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
@@ -104,7 +90,6 @@ function DeviceLayout() {
           return
         }
         const message = (err as Error).message
-        if (!cancelled) setError(message)
         toast.error(message)
       }
     })()

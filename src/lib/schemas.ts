@@ -212,6 +212,7 @@ export const recordingSchema = z.object({
   status: z.enum(["recording", "stopping", "completed", "failed"]),
   trigger: z.enum(["manual", "auto"]),
   startedAt: z.string(),
+  captureStartedAt: z.string().nullable(),
   endedAt: z.string().nullable(),
   s3Key: z.string().nullable(),
   sizeBytes: z.number().nullable(),

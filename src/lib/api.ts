@@ -350,6 +350,9 @@ export interface Recording {
   status: RecordingStatus
   trigger: RecordingTrigger
   startedAt: string
+  // Set by the recorder on its first received frame (via an IoT "capturing" signal).
+  // null while 'recording' but not yet capturing (cold start) -> UI shows "Starting…".
+  captureStartedAt: string | null
   endedAt: string | null
   s3Key: string | null
   sizeBytes: number | null

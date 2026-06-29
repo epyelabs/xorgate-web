@@ -31,13 +31,35 @@ const STATUS_META: Record<
 }
 
 const POLL_MS = 5000
+// A recording can sit in 'recording' with no frames for the recorder's ~30-60s cold
+// start. If captureStartedAt is still null past this, the task is up but no frames are
+// arriving — almost always the device master is down.
+const WAITING_FOR_DEVICE_MS = 90_000
 
-// Red "REC" overlay shown while a cloud recorder is capturing this stream.
-function RecIndicator({ trigger }: { trigger: Recording["trigger"] }) {
+// Overlay shown while a cloud recorder is attached to this stream. The recorder reports
+// a real "capturing" signal on its first received frame (captureStartedAt), so we can
+// tell apart: the row exists but the task is still cold-starting ("Starting…"), the
+// recorder has confirmed frames ("REC"), or the task is up but no frames are arriving
+// ("Waiting for device"). This is driven by the backend signal, not a timer.
+function CaptureIndicator({ recording }: { recording: Recording }) {
+  const capturing = recording.captureStartedAt !== null
+  const stalled =
+    !capturing &&
+    Date.now() - Date.parse(recording.startedAt) >= WAITING_FOR_DEVICE_MS
+
+  const { dot, label } = capturing
+    ? {
+        dot: "bg-red-500 animate-pulse",
+        label: `REC${recording.trigger === "auto" ? " · Auto" : ""}`,
+      }
+    : stalled
+      ? { dot: "bg-muted-foreground", label: "Waiting for device" }
+      : { dot: "bg-amber-400 animate-pulse", label: "Starting…" }
+
   return (
     <div className="flex items-center gap-1 rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
-      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-      REC{trigger === "auto" ? " · Auto" : ""}
+      <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
+      {label}
     </div>
   )
 }
@@ -72,7 +94,7 @@ function LiveVideoTile({
           />
           <div className="absolute left-2 top-2 flex items-center gap-2">
             <Badge variant={meta.variant}>{meta.label}</Badge>
-            {isRecording ? <RecIndicator trigger={recording.trigger} /> : null}
+            {recording ? <CaptureIndicator recording={recording} /> : null}
           </div>
           <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
             {label}

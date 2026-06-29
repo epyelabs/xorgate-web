@@ -196,7 +196,9 @@ function DeviceMediaPage() {
                         variant={STATUS_VARIANT[rec.status]}
                         className="capitalize"
                       >
-                        {rec.status}
+                        {rec.status === "recording" && rec.captureStartedAt === null
+                          ? "Starting…"
+                          : rec.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">

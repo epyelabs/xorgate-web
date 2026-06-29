@@ -29,7 +29,7 @@ export function StatusCell({ status }: { status: DeviceStatus }) {
 
 export function ColHead({ children }: { children: React.ReactNode }) {
   return (
-    <TableHead className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground">
+    <TableHead className="text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
       {children}
     </TableHead>
   )
@@ -92,7 +92,7 @@ export function EmptyState({ onProvision }: { onProvision: () => void }) {
       </div>
       <Button variant="default" size="sm" onClick={onProvision}>
         <PlusIcon />
-        Provision device
+        Register device
       </Button>
     </div>
   )

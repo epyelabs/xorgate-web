@@ -158,7 +158,10 @@ function DevicesListPage() {
         }
         if (cancelled) return
         setError(null)
-        setData({ workspaceId: currentWorkspaceId, devices: parsed.data.devices })
+        setData({
+          workspaceId: currentWorkspaceId,
+          devices: parsed.data.devices,
+        })
         setSelected(new Set())
       } catch (err) {
         const message = (err as Error).message
@@ -247,7 +250,7 @@ function DevicesListPage() {
           </Button>
           <Button variant="default" size="lg" onClick={handleProvision}>
             <PlusIcon />
-            Provision device
+            Register device
           </Button>
         </div>
       </header>

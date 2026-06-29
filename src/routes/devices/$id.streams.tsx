@@ -105,9 +105,8 @@ function DeviceStreamsPage() {
       ) : null}
 
       {videoCaps.length > 0 ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-base font-semibold tracking-tight">Media</h2>
-          <LiveVideoGrid deviceId={id} videoCaps={videoCaps} />
+        <section>
+          <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
         </section>
       ) : null}
 

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { cn } from "@/lib/utils"
 import {
   getDeviceRecordings,
   getKvsChannels,
@@ -128,9 +129,11 @@ function LiveVideoTile({
 export function LiveVideoGrid({
   deviceId,
   videoCaps,
+  title,
 }: {
   deviceId: string
   videoCaps: { key: string; label?: string }[]
+  title?: string
 }) {
   const [channels, setChannels] = useState<KvsChannel[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -247,39 +250,26 @@ export function LiveVideoGrid({
   const labelFor = (streamKey: string) =>
     videoCaps.find((c) => c.key === streamKey)?.label ?? streamKey
 
-  if (loadError) {
-    return <p className="text-destructive text-sm">{loadError}</p>
-  }
+  const canRecordAll = channels !== null && channels.length > 0
 
-  if (channels === null) {
-    return (
+  let body
+  if (loadError) {
+    body = <p className="text-destructive text-sm">{loadError}</p>
+  } else if (channels === null) {
+    body = (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Skeleton className="aspect-video max-h-[40vh] w-full" />
         <Skeleton className="aspect-video max-h-[40vh] w-full" />
       </div>
     )
-  }
-
-  if (channels.length === 0) {
-    return (
+  } else if (channels.length === 0) {
+    body = (
       <p className="text-muted-foreground text-sm">
         No live video channels. Provision the device to enable streaming.
       </p>
     )
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          variant={allRecording ? "destructive" : "default"}
-          disabled={allBusy}
-          onClick={toggleAll}
-        >
-          {allBusy ? "…" : allRecording ? "Stop all" : "Record all"}
-        </Button>
-      </div>
+  } else {
+    body = (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {channels.map((ch) => (
           <LiveVideoTile
@@ -292,6 +282,32 @@ export function LiveVideoGrid({
           />
         ))}
       </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          title ? "justify-between" : "justify-end",
+        )}
+      >
+        {title ? (
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        ) : null}
+        {canRecordAll ? (
+          <Button
+            size="sm"
+            variant={allRecording ? "destructive" : "default"}
+            disabled={allBusy}
+            onClick={toggleAll}
+          >
+            {allBusy ? "…" : allRecording ? "Stop all" : "Record all"}
+          </Button>
+        ) : null}
+      </div>
+      {body}
     </div>
   )
 }

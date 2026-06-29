@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react"
-import {
-  CheckIcon,
-  CopyIcon,
-  Loader2Icon,
-  RefreshCwIcon,
-} from "lucide-react"
+import { CheckIcon, CopyIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,7 +21,11 @@ type Phase = "creating" | "pending" | "claimed" | "expired" | "error"
 const POLL_INTERVAL_MS = 3000
 
 function phaseFromStatus(status: DeviceRegistration["status"]): Phase {
-  return status === "claimed" ? "claimed" : status === "expired" ? "expired" : "pending"
+  return status === "claimed"
+    ? "claimed"
+    : status === "expired"
+      ? "expired"
+      : "pending"
 }
 
 function formatRemaining(ms: number): string {
@@ -138,7 +137,7 @@ export function ProvisionDeviceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Provision device</DialogTitle>
+          <DialogTitle>Register device</DialogTitle>
           <DialogDescription>
             SSH into the remote device and run the commands below. The agent
             will register itself and appear in this list once it phones home.

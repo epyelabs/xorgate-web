@@ -34,8 +34,8 @@ function LandingPage() {
         <h1 className="font-heading text-4xl font-semibold tracking-tight sm:text-5xl">
           Build with xorgate
         </h1>
-        <p className="text-muted-foreground text-base sm:text-lg">
-          A scaffold ready for routing, auth, and your domain logic.
+        <p className="text-base text-muted-foreground sm:text-lg">
+          Landing page will be displayed here
         </p>
         <div className="flex gap-3">
           <Button asChild>

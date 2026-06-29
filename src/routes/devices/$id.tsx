@@ -67,6 +67,7 @@ const TAB_VALUES = [
   "telemetry",
   "media",
   "workflows",
+  "benchmark",
   "settings",
 ] as const
 
@@ -187,6 +188,11 @@ function DeviceLayout() {
             <TabsTrigger value="workflows" asChild>
               <Link to="/devices/$id/workflows" params={{ id }}>
                 Workflows
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="benchmark" asChild>
+              <Link to="/devices/$id/benchmark" params={{ id }}>
+                Hardware Benchmark
               </Link>
             </TabsTrigger>
             <TabsTrigger value="settings" asChild>

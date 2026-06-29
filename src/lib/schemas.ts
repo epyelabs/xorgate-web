@@ -209,7 +209,7 @@ export const recordingSchema = z.object({
   id: z.string(),
   deviceId: z.string(),
   streamKey: z.string(),
-  status: z.enum(["recording", "completed", "failed"]),
+  status: z.enum(["recording", "stopping", "completed", "failed"]),
   trigger: z.enum(["manual", "auto"]),
   startedAt: z.string(),
   endedAt: z.string().nullable(),

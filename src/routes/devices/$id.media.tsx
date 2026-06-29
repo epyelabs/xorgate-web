@@ -84,6 +84,7 @@ const STATUS_VARIANT: Record<
 > = {
   completed: "default",
   recording: "secondary",
+  stopping: "outline",
   failed: "destructive",
 }
 

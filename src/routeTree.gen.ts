@@ -24,6 +24,7 @@ import { Route as DevicesIdTelemetryRouteImport } from './routes/devices/$id.tel
 import { Route as DevicesIdStreamsRouteImport } from './routes/devices/$id.streams'
 import { Route as DevicesIdSettingsRouteImport } from './routes/devices/$id.settings'
 import { Route as DevicesIdMediaRouteImport } from './routes/devices/$id.media'
+import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.benchmark'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -100,6 +101,11 @@ const DevicesIdMediaRoute = DevicesIdMediaRouteImport.update({
   path: '/media',
   getParentRoute: () => DevicesIdRoute,
 } as any)
+const DevicesIdBenchmarkRoute = DevicesIdBenchmarkRouteImport.update({
+  id: '/benchmark',
+  path: '/benchmark',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/devices/': typeof DevicesIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
+  '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/devices': typeof DevicesIndexRoute
   '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
+  '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/devices/': typeof DevicesIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
+  '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
     | '/devices/'
     | '/workflow-instances/'
     | '/workflow-templates/'
+    | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/devices'
     | '/workflow-instances'
     | '/workflow-templates'
+    | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/devices/'
     | '/workflow-instances/'
     | '/workflow-templates/'
+    | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
@@ -324,10 +336,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdMediaRouteImport
       parentRoute: typeof DevicesIdRoute
     }
+    '/devices/$id/benchmark': {
+      id: '/devices/$id/benchmark'
+      path: '/benchmark'
+      fullPath: '/devices/$id/benchmark'
+      preLoaderRoute: typeof DevicesIdBenchmarkRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
   }
 }
 
 interface DevicesIdRouteChildren {
+  DevicesIdBenchmarkRoute: typeof DevicesIdBenchmarkRoute
   DevicesIdMediaRoute: typeof DevicesIdMediaRoute
   DevicesIdSettingsRoute: typeof DevicesIdSettingsRoute
   DevicesIdStreamsRoute: typeof DevicesIdStreamsRoute
@@ -337,6 +357,7 @@ interface DevicesIdRouteChildren {
 }
 
 const DevicesIdRouteChildren: DevicesIdRouteChildren = {
+  DevicesIdBenchmarkRoute: DevicesIdBenchmarkRoute,
   DevicesIdMediaRoute: DevicesIdMediaRoute,
   DevicesIdSettingsRoute: DevicesIdSettingsRoute,
   DevicesIdStreamsRoute: DevicesIdStreamsRoute,

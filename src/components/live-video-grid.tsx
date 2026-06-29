@@ -166,12 +166,21 @@ export function LiveVideoGrid({
       return next
     })
 
+  const clearActive = (streamKey: string) =>
+    setActiveByStream((prev) => {
+      if (!prev.has(streamKey)) return prev
+      const next = new Map(prev)
+      next.delete(streamKey)
+      return next
+    })
+
   async function toggleStream(streamKey: string) {
     const active = activeByStream.get(streamKey)
     setBusy(streamKey, true)
     try {
       if (active) {
         await stopRecording(deviceId, active.id)
+        clearActive(streamKey) // optimistic: backend marks it 'stopping' immediately
         toast.success("Recording stopped")
       } else {
         await startRecording(deviceId, streamKey)
@@ -199,6 +208,7 @@ export function LiveVideoGrid({
             stopRecording(deviceId, r.id)
           )
         )
+        setActiveByStream(new Map()) // optimistic clear
         toast.success("All recordings stopped")
       } else {
         await startAllRecordings(deviceId)

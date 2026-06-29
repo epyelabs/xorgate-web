@@ -340,7 +340,7 @@ export async function getDeviceRegistration(
 }
 
 // --- Recordings: cloud viewer-recorder start/stop/list/playback/delete ---
-export type RecordingStatus = "recording" | "completed" | "failed"
+export type RecordingStatus = "recording" | "stopping" | "completed" | "failed"
 export type RecordingTrigger = "manual" | "auto"
 
 export interface Recording {

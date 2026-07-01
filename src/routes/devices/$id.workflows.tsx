@@ -27,7 +27,6 @@ import {
   detachWorkflow,
   listDeviceAttachments,
   listDeviceRuns,
-  runAttachmentNow,
 } from "@/lib/device-workflows-api"
 import {
   listDeviceAttachmentsResponseSchema,
@@ -48,6 +47,7 @@ import {
   AttachmentVersionCell,
 } from "./-components/attachments-table-parts"
 import { AttachWorkflowSheet } from "./-components/attach-workflow-sheet"
+import { RunNowDialog } from "./-components/run-now-dialog"
 import {
   ColHead,
   EmptyState,
@@ -95,6 +95,9 @@ function DeviceWorkflowsPage() {
   >(null)
   const [runs, setRuns] = useState<WorkflowRunSummary[] | null>(null)
   const [attachOpen, setAttachOpen] = useState(false)
+  const [runTarget, setRunTarget] = useState<DeviceWorkflowAttachment | null>(
+    null,
+  )
   const deviceName = useBreadcrumbStore((s) => s.deviceName)
 
   useEffect(() => {
@@ -130,16 +133,6 @@ function DeviceWorkflowsPage() {
     setAttachments((prev) =>
       prev ? prev.map((a) => (a.id === next.id ? next : a)) : prev,
     )
-
-  const handleRunNow = async (attachment: DeviceWorkflowAttachment) => {
-    try {
-      const { attachment: updated } = await runAttachmentNow(id, attachment.id)
-      replaceAttachment(updated)
-      toast.success(`Run queued for "${attachment.templateName}"`)
-    } catch (err) {
-      toast.error((err as Error).message)
-    }
-  }
 
   const handleDetach = async (attachment: DeviceWorkflowAttachment) => {
     try {
@@ -243,7 +236,7 @@ function DeviceWorkflowsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => handleRunNow(a)}>
+                          <DropdownMenuItem onSelect={() => setRunTarget(a)}>
                             <PlayIcon />
                             Run now
                           </DropdownMenuItem>
@@ -331,6 +324,16 @@ function DeviceWorkflowsPage() {
         onAttached={(attachment) =>
           setAttachments((prev) => (prev ? [attachment, ...prev] : [attachment]))
         }
+      />
+
+      <RunNowDialog
+        deviceId={id}
+        attachment={runTarget}
+        open={runTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setRunTarget(null)
+        }}
+        onRan={replaceAttachment}
       />
     </div>
   )

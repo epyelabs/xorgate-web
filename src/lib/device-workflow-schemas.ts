@@ -133,6 +133,24 @@ export type DeviceWorkflowAttachment = z.infer<
 >
 export type AttachWorkflowInput = z.infer<typeof attachWorkflowInputSchema>
 
+// Context for an ad-hoc "Run now": what data the one-off run should process.
+// Chosen per trigger type in the run-now dialog; not persisted on the attachment.
+// (`sinceLastRun` is intentionally excluded — there is no cadence for a manual run.)
+export type ManualWindow =
+  | { mode: "range"; from: string; to: string }
+  | { mode: "lastN"; n: number }
+
+// A scheduled run grabs its media either as a hand-picked set of recordings or
+// as the most recent N — one or the other, not both.
+export type ScheduleRunSelection =
+  | { mode: "recordings"; recordingIds: string[] }
+  | { mode: "lastN"; n: number }
+
+export type ManualRunContext =
+  | { triggerType: "recording_saved"; recordingId: string } // fires per recording
+  | { triggerType: "schedule"; selection: ScheduleRunSelection }
+  | { triggerType: "telemetry_condition"; window: ManualWindow }
+
 // One-line, human-readable summary shown under a trigger badge in the table.
 export function triggerSummary(trigger: AttachmentTrigger): string {
   switch (trigger.type) {

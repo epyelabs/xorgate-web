@@ -4,6 +4,7 @@ import { listWorkflowTemplates } from "./workflow-templates-api"
 import type {
   AttachWorkflowInput,
   DeviceWorkflowAttachment,
+  ManualRunContext,
 } from "./device-workflow-schemas"
 import type {
   WorkflowRunDetail,
@@ -139,13 +140,13 @@ export async function detachWorkflow(
 }
 
 // Mock manual trigger: a real backend would enqueue an execution and return its
-// id. `source` carries the historical telemetry window / media recording pointer
-// for the "manual from history" path.
+// id. `context` carries the chosen run window / selected recordings (see the
+// run-now dialog) so the "manual from history" path knows what data to process.
 export async function runAttachmentNow(
   _deviceId: string,
   attachmentId: string,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _source?: { kind: "telemetry" | "recording"; ref: string },
+  _context?: ManualRunContext,
 ): Promise<{ attachment: DeviceWorkflowAttachment }> {
   await delay()
   const attachment = find(attachmentId)

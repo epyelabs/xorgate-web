@@ -10,8 +10,18 @@ import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ApiError, getDevice, type Device, type DeviceStatus } from "@/lib/api"
-import { getDeviceResponseSchema } from "@/lib/schemas"
+import {
+  ApiError,
+  getDevice,
+  getDeviceModel,
+  type Device,
+  type DeviceStatus,
+} from "@/lib/api"
+import {
+  getDeviceModelResponseSchema,
+  getDeviceResponseSchema,
+} from "@/lib/schemas"
+import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
@@ -50,6 +60,7 @@ function deviceInitials(device: Device): string {
 }
 
 const TAB_VALUES = [
+  "overview",
   "streams",
   "telemetry",
   "media",
@@ -64,8 +75,9 @@ function DeviceLayout() {
   const segment = pathname.split("/").pop() ?? ""
   const activeTab = (TAB_VALUES as readonly string[]).includes(segment)
     ? segment
-    : "streams"
+    : "overview"
   const [device, setDevice] = useState<Device | null>(null)
+  const [modelName, setModelName] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
@@ -83,6 +95,18 @@ function DeviceLayout() {
           useBreadcrumbStore
             .getState()
             .setDeviceName(fetched.name ?? fetched.serial)
+
+          // Model name feeds the header subtitle. Best-effort: a failure here
+          // must not block the header, so swallow errors.
+          try {
+            const rawModel = await getDeviceModel(fetched.deviceModelId)
+            const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
+            if (parsedModel.success && !cancelled) {
+              setModelName(parsedModel.data.device_model.name)
+            }
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -115,7 +139,7 @@ function DeviceLayout() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
+    <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 pt-0">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <Avatar size="lg">
@@ -134,7 +158,14 @@ function DeviceLayout() {
                 </Badge>
               ) : null}
             </div>
-            <p className="text-xs text-muted-foreground">{id}</p>
+            {device ? (
+              <p className="text-xs text-muted-foreground">
+                {modelName ? `${modelName} · ` : ""}Last seen{" "}
+                {formatRelative(device.lastSeenAt)}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">{id}</p>
+            )}
           </div>
         </div>
 
@@ -155,6 +186,11 @@ function DeviceLayout() {
       <div className="border-b border-border">
         <Tabs value={activeTab}>
           <TabsList variant="line">
+            <TabsTrigger value="overview" asChild>
+              <Link to="/devices/$id/overview" params={{ id }}>
+                Overview
+              </Link>
+            </TabsTrigger>
             <TabsTrigger value="streams" asChild>
               <Link to="/devices/$id/streams" params={{ id }}>
                 Active Streams

@@ -295,6 +295,21 @@ export async function getTelemetry(
   return apiRequest(`/devices/${deviceId}/telemetry?${qs.toString()}`)
 }
 
+// The most recent `limit` readings (newest by ts), optionally filtered to a set
+// of metrics. Unlike getTelemetry this takes no time window, so callers see the
+// latest samples even if the device last reported long ago. Same response shape
+// as getTelemetry (readings ascending by ts).
+export async function getTelemetryRecent(
+  deviceId: string,
+  params: { metric?: string; limit?: number } = {}
+): Promise<TelemetryHistoryResponse> {
+  const qs = new URLSearchParams()
+  if (params.metric) qs.set("metric", params.metric)
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/devices/${deviceId}/telemetry/recent${suffix}`)
+}
+
 export interface DeviceLatestRow {
   metric: string
   value: number | null

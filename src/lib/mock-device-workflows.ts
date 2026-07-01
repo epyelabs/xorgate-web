@@ -1,4 +1,5 @@
 import type { DeviceWorkflowAttachment } from "./device-workflow-schemas"
+import { METRIC_LABELS } from "./telemetry-meta"
 
 // Dummy attachments for the device "Workflows" tab mockup. This is the single
 // source of truth the in-memory API shim (`device-workflows-api.ts`) reads and
@@ -21,8 +22,16 @@ export const MOCK_DEVICE_ATTACHMENTS: DeviceWorkflowAttachment[] = [
     pinnedVersion: null, // follows published (v3)
     runningVersion: 3,
     enabled: true,
-    trigger: "telemetry_saved",
-    triggerDetail: "on telemetry save",
+    triggers: [
+      {
+        type: "telemetry_condition",
+        combinator: "and",
+        conditions: [
+          { metric: "gps.speed", operator: "gt", value: 80 },
+          { metric: "imu.accel_z", operator: "lt", value: -3 },
+        ],
+      },
+    ],
     lastRunAt: "2026-06-24T05:10:00.000Z",
     lastRunStatus: "succeeded",
     runCount: 5,
@@ -37,8 +46,9 @@ export const MOCK_DEVICE_ATTACHMENTS: DeviceWorkflowAttachment[] = [
     pinnedVersion: 2,
     runningVersion: 2,
     enabled: true,
-    trigger: "recording_saved",
-    triggerDetail: "stream: cam0-main",
+    triggers: [
+      { type: "recording_saved", streamKeys: ["cam0-main", "cam1-main"] },
+    ],
     lastRunAt: "2026-06-24T07:14:00.000Z",
     lastRunStatus: "running",
     runCount: 2,
@@ -53,8 +63,14 @@ export const MOCK_DEVICE_ATTACHMENTS: DeviceWorkflowAttachment[] = [
     pinnedVersion: null,
     runningVersion: 3,
     enabled: false,
-    trigger: "schedule",
-    triggerDetail: "0 * * * * (hourly)",
+    triggers: [
+      {
+        type: "schedule",
+        cron: "0 * * * *",
+        telemetryContext: { mode: "lastN", n: 500 },
+        mediaContext: { mode: "lastN", n: 3 },
+      },
+    ],
     lastRunAt: null,
     lastRunStatus: null,
     runCount: 0,
@@ -65,3 +81,8 @@ export const MOCK_DEVICE_ATTACHMENTS: DeviceWorkflowAttachment[] = [
 // Static stream keys offered by the "after recording saved" trigger. A real
 // build would derive these from the device model's media capabilities.
 export const MOCK_STREAM_KEYS = ["cam0-main", "cam0-sub", "cam1-main"] as const
+
+// Telemetry metric keys offered by the "on telemetry condition" trigger. A real
+// build would derive these from the device model's IoCapabilities via
+// `capability-metrics.ts`; here we expose the full known set.
+export const MOCK_TELEMETRY_METRICS = Object.keys(METRIC_LABELS)

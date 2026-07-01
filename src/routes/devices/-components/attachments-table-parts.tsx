@@ -1,7 +1,6 @@
 import {
-  ActivityIcon,
   ClockIcon,
-  HandIcon,
+  GaugeIcon,
   VideoIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -15,24 +14,23 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ColHead } from "@/routes/workflow-instances/-components/runs-table-parts"
-import type { AttachmentTrigger } from "@/lib/device-workflow-schemas"
+import type { AttachmentTriggerType } from "@/lib/device-workflow-schemas"
 
 const TRIGGER_META: Record<
-  AttachmentTrigger,
+  AttachmentTriggerType,
   { label: string; icon: LucideIcon }
 > = {
-  manual: { label: "Manual", icon: HandIcon },
   recording_saved: { label: "On recording", icon: VideoIcon },
-  telemetry_saved: { label: "On telemetry", icon: ActivityIcon },
   schedule: { label: "Scheduled", icon: ClockIcon },
+  telemetry_condition: { label: "On condition", icon: GaugeIcon },
 }
 
 export function AttachmentTriggerBadge({
-  trigger,
+  type,
 }: {
-  trigger: AttachmentTrigger
+  type: AttachmentTriggerType
 }) {
-  const { label, icon: Icon } = TRIGGER_META[trigger]
+  const { label, icon: Icon } = TRIGGER_META[type]
   return (
     <Badge variant="secondary">
       <Icon />

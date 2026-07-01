@@ -3,7 +3,6 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
   MoreHorizontalIcon,
-  PauseIcon,
   PlayIcon,
   PlusIcon,
   Trash2Icon,
@@ -29,10 +28,10 @@ import {
   listDeviceAttachments,
   listDeviceRuns,
   runAttachmentNow,
-  setAttachmentEnabled,
 } from "@/lib/device-workflows-api"
 import {
   listDeviceAttachmentsResponseSchema,
+  triggerSummary,
   type DeviceWorkflowAttachment,
 } from "@/lib/device-workflow-schemas"
 import {
@@ -40,6 +39,7 @@ import {
   type WorkflowRunSummary,
 } from "@/lib/workflow-run-schemas"
 import { useAuthStore } from "@/store/auth"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
   AttachmentsEmptyState,
   AttachmentsSkeleton,
@@ -47,7 +47,7 @@ import {
   AttachmentTriggerBadge,
   AttachmentVersionCell,
 } from "./-components/attachments-table-parts"
-import { AttachWorkflowDialog } from "./-components/attach-workflow-dialog"
+import { AttachWorkflowSheet } from "./-components/attach-workflow-sheet"
 import {
   ColHead,
   EmptyState,
@@ -95,6 +95,7 @@ function DeviceWorkflowsPage() {
   >(null)
   const [runs, setRuns] = useState<WorkflowRunSummary[] | null>(null)
   const [attachOpen, setAttachOpen] = useState(false)
+  const deviceName = useBreadcrumbStore((s) => s.deviceName)
 
   useEffect(() => {
     let cancelled = false
@@ -135,20 +136,6 @@ function DeviceWorkflowsPage() {
       const { attachment: updated } = await runAttachmentNow(id, attachment.id)
       replaceAttachment(updated)
       toast.success(`Run queued for "${attachment.templateName}"`)
-    } catch (err) {
-      toast.error((err as Error).message)
-    }
-  }
-
-  const handleToggle = async (attachment: DeviceWorkflowAttachment) => {
-    try {
-      const { attachment: updated } = await setAttachmentEnabled(
-        id,
-        attachment.id,
-        !attachment.enabled,
-      )
-      replaceAttachment(updated)
-      toast.success(updated.enabled ? "Workflow resumed" : "Workflow paused")
     } catch (err) {
       toast.error((err as Error).message)
     }
@@ -219,10 +206,16 @@ function DeviceWorkflowsPage() {
                       />
                     </TableCell>
                     <TableCell className="leading-tight">
-                      <AttachmentTriggerBadge trigger={a.trigger} />
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {a.triggerDetail}
-                      </span>
+                      <div className="flex flex-col gap-1.5">
+                        {a.triggers.map((t, i) => (
+                          <div key={i}>
+                            <AttachmentTriggerBadge type={t.type} />
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {triggerSummary(t)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <AttachmentStatusCell enabled={a.enabled} />
@@ -253,19 +246,6 @@ function DeviceWorkflowsPage() {
                           <DropdownMenuItem onSelect={() => handleRunNow(a)}>
                             <PlayIcon />
                             Run now
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => handleToggle(a)}>
-                            {a.enabled ? (
-                              <>
-                                <PauseIcon />
-                                Pause
-                              </>
-                            ) : (
-                              <>
-                                <PlayIcon />
-                                Resume
-                              </>
-                            )}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -342,8 +322,10 @@ function DeviceWorkflowsPage() {
         )}
       </Section>
 
-      <AttachWorkflowDialog
+      <AttachWorkflowSheet
         deviceId={id}
+        deviceName={deviceName}
+        attachedTemplateIds={attachments?.map((a) => a.templateId) ?? []}
         open={attachOpen}
         onOpenChange={setAttachOpen}
         onAttached={(attachment) =>

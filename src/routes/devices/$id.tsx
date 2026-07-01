@@ -9,14 +9,18 @@ import {
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ApiError,
   getDevice,
   getDeviceModel,
   type Device,
+  type DeviceModel,
   type DeviceStatus,
 } from "@/lib/api"
+import { DeviceModelDialog } from "./-components/device-model-dialog"
+import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
 import {
   getDeviceModelResponseSchema,
   getDeviceResponseSchema,
@@ -77,8 +81,10 @@ function DeviceLayout() {
     ? segment
     : "overview"
   const [device, setDevice] = useState<Device | null>(null)
-  const [modelName, setModelName] = useState<string | null>(null)
+  const [deviceModel, setDeviceModel] = useState<DeviceModel | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [modelDialogOpen, setModelDialogOpen] = useState(false)
+  const [rebootDialogOpen, setRebootDialogOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -96,13 +102,21 @@ function DeviceLayout() {
             .getState()
             .setDeviceName(fetched.name ?? fetched.serial)
 
-          // Model name feeds the header subtitle. Best-effort: a failure here
-          // must not block the header, so swallow errors.
+          // The model feeds the header subtitle and the model dialog.
+          // Best-effort: a failure here must not block the header, so swallow
+          // errors.
           try {
             const rawModel = await getDeviceModel(fetched.deviceModelId)
             const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
             if (parsedModel.success && !cancelled) {
-              setModelName(parsedModel.data.device_model.name)
+              const m = parsedModel.data.device_model
+              // The schema leaves these optional; the DeviceModel type wants
+              // them present, so normalize undefined -> null.
+              setDeviceModel({
+                ...m,
+                ioCapabilities: m.ioCapabilities ?? null,
+                firmwareChannel: m.firmwareChannel ?? null,
+              })
             }
           } catch {
             // ignore
@@ -141,32 +155,55 @@ function DeviceLayout() {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 pt-0">
       <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <Avatar size="lg">
-            <AvatarFallback>
-              {device ? deviceInitials(device) : "—"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold tracking-tight">
-                {device?.name ?? device?.serial ?? "Device"}
-              </h1>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar size="lg">
+              <AvatarFallback>
+                {device ? deviceInitials(device) : "—"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold tracking-tight">
+                  {device?.name ?? device?.serial ?? "Device"}
+                </h1>
+                {device ? (
+                  <Badge variant={statusVariant(device.status)}>
+                    {device.status}
+                  </Badge>
+                ) : null}
+              </div>
               {device ? (
-                <Badge variant={statusVariant(device.status)}>
-                  {device.status}
-                </Badge>
-              ) : null}
+                <p className="text-xs text-muted-foreground">
+                  {deviceModel ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setModelDialogOpen(true)}
+                        className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+                      >
+                        {deviceModel.name}
+                      </button>
+                      {" · "}
+                    </>
+                  ) : null}
+                  Last seen {formatRelative(device.lastSeenAt)}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{id}</p>
+              )}
             </div>
-            {device ? (
-              <p className="text-xs text-muted-foreground">
-                {modelName ? `${modelName} · ` : ""}Last seen{" "}
-                {formatRelative(device.lastSeenAt)}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">{id}</p>
-            )}
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!device}
+            onClick={() => setRebootDialogOpen(true)}
+            className="self-start"
+          >
+            Reboot Device
+          </Button>
         </div>
 
         {/* Commenting this out for now, will need to improve later */}
@@ -226,6 +263,31 @@ function DeviceLayout() {
       </div>
 
       <Outlet />
+
+      {deviceModel ? (
+        <DeviceModelDialog
+          open={modelDialogOpen}
+          onOpenChange={setModelDialogOpen}
+          model={deviceModel}
+        />
+      ) : null}
+
+      {device ? (
+        <RebootDeviceDialog
+          open={rebootDialogOpen}
+          onOpenChange={setRebootDialogOpen}
+          deviceName={device.name ?? device.serial}
+          onConfirm={async () => {
+            // Dummy reboot: no device command is issued yet. Simulate the
+            // round-trip so the button shows its pending state, then confirm.
+            await new Promise((resolve) => setTimeout(resolve, 600))
+            toast.success(
+              `Reboot command sent to ${device.name ?? device.serial}`
+            )
+            setRebootDialogOpen(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

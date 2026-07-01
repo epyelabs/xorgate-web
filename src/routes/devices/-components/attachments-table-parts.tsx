@@ -69,49 +69,47 @@ export function AttachmentVersionCell({
 
 export function AttachmentsSkeleton() {
   return (
-    <div className="rounded-lg border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <ColHead>Workflow</ColHead>
-            <ColHead>Version</ColHead>
-            <ColHead>Trigger</ColHead>
-            <ColHead>State</ColHead>
-            <ColHead>Last run</ColHead>
-            <ColHead>Runs</ColHead>
-            <ColHead> </ColHead>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <ColHead>Workflow</ColHead>
+          <ColHead>Version</ColHead>
+          <ColHead>Trigger</ColHead>
+          <ColHead>State</ColHead>
+          <ColHead>Last run</ColHead>
+          <ColHead>Runs</ColHead>
+          <ColHead> </ColHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <TableRow key={i}>
+            <TableCell>
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="mt-1 h-3 w-28" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-28" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-24" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-6" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-4 w-6" />
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <TableRow key={i}>
-              <TableCell>
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="mt-1 h-3 w-28" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-28" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-24" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-16" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-16" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-6" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-6" />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 

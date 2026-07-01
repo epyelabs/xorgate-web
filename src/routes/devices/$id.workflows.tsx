@@ -9,6 +9,14 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -65,28 +73,6 @@ export const Route = createFileRoute("/devices/$id/workflows")({
   },
   component: DeviceWorkflowsPage,
 })
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string
-  action?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-          {title}
-        </h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  )
-}
 
 function DeviceWorkflowsPage() {
   const { id } = Route.useParams()
@@ -147,22 +133,27 @@ function DeviceWorkflowsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-      <Section
-        title="Attached workflows"
-        action={
-          <Button size="sm" onClick={() => setAttachOpen(true)}>
-            <PlusIcon />
-            Attach workflow
-          </Button>
-        }
-      >
-        {attachments === null ? (
-          <AttachmentsSkeleton />
-        ) : attachments.length === 0 ? (
-          <AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />
-        ) : (
-          <div className="rounded-lg border border-border">
+    <div className="flex min-w-0 flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Attached workflows</CardTitle>
+          <CardDescription>
+            Workflow templates that run on this device from its telemetry and
+            recordings.
+          </CardDescription>
+          <CardAction>
+            <Button size="sm" onClick={() => setAttachOpen(true)}>
+              <PlusIcon />
+              Attach workflow
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          {attachments === null ? (
+            <AttachmentsSkeleton />
+          ) : attachments.length === 0 ? (
+            <AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -255,17 +246,23 @@ function DeviceWorkflowsPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
-        )}
-      </Section>
+          )}
+        </CardContent>
+      </Card>
 
-      <Section title="Recent runs">
-        {runs === null ? (
-          <RunsTableSkeleton />
-        ) : runs.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="rounded-lg border border-border">
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent runs</CardTitle>
+          <CardDescription>
+            The latest workflow executions triggered on this device.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {runs === null ? (
+            <RunsTableSkeleton />
+          ) : runs.length === 0 ? (
+            <EmptyState />
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -311,9 +308,9 @@ function DeviceWorkflowsPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
-        )}
-      </Section>
+          )}
+        </CardContent>
+      </Card>
 
       <AttachWorkflowSheet
         deviceId={id}

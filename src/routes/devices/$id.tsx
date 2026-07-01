@@ -248,11 +248,12 @@ function DeviceLayout() {
                 Workflows
               </Link>
             </TabsTrigger>
-            <TabsTrigger value="benchmark" asChild>
+            {/* Temporarily hide this tab */}
+            {/* <TabsTrigger value="benchmark" asChild>
               <Link to="/devices/$id/benchmark" params={{ id }}>
                 Hardware Benchmark
               </Link>
-            </TabsTrigger>
+            </TabsTrigger> */}
             <TabsTrigger value="settings" asChild>
               <Link to="/devices/$id/settings" params={{ id }}>
                 Settings

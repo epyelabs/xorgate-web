@@ -1,206 +1,91 @@
-import { MOCK_CURRENT_USER, MOCK_TEMPLATES } from "./mock-workflows"
+import { apiRequest } from "./api"
 import { NODE_CATALOG_BY_TYPE } from "./workflow-nodes"
 import type {
   SimulationResult,
   WorkflowDefinition,
+  WorkflowDeployment,
   WorkflowTemplateDetail,
   WorkflowTemplateSummary,
   WorkflowTemplateVersion,
 } from "./workflow-schemas"
 
-// In-memory mock backend for Workflow Templates. Every exported function mirrors
-// the signature the real client in `lib/api.ts` will expose, so going live means
-// replacing these bodies with `apiRequest(...)` calls — nothing else changes.
-//
-// State is a mutable clone of the fixtures so edits (save / publish / restore)
-// persist across navigation within a session. Reads return deep clones so the UI
-// can never mutate the store by reference.
-
-const db: WorkflowTemplateDetail[] = structuredClone(MOCK_TEMPLATES)
-
-const delay = (ms = 220) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-
-function clone<T>(value: T): T {
-  return structuredClone(value)
-}
-
-function nowIso(): string {
-  return new Date().toISOString()
-}
-
-function uid(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`
-}
-
-function find(id: string): WorkflowTemplateDetail {
-  const template = db.find((t) => t.id === id)
-  if (!template) throw new Error(`Workflow template not found: ${id}`)
-  return template
-}
-
-function toSummary(t: WorkflowTemplateDetail): WorkflowTemplateSummary {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { versions: _versions, usage: _usage, ...summary } = t
-  return clone(summary)
-}
+// Real client for Workflow Templates (backend: workflow-templates.ts). Every
+// function's signature is unchanged from the former in-memory mock, so the pages
+// that consume it needed no edits; list/detail responses are still validated by
+// the same `.safeParse()` pattern in the routes.
 
 export async function listWorkflowTemplates(): Promise<{
   templates: WorkflowTemplateSummary[]
 }> {
-  await delay()
-  return { templates: db.map(toSummary) }
+  return apiRequest("/workflow-templates")
 }
 
 export async function getWorkflowTemplate(
   id: string,
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  await delay()
-  return { template: clone(find(id)) }
+  return apiRequest(`/workflow-templates/${id}`)
 }
 
 export async function createWorkflowTemplate(input: {
   name: string
   description?: string
 }): Promise<{ template: WorkflowTemplateDetail }> {
-  await delay()
-  const ts = nowIso()
-  const template: WorkflowTemplateDetail = {
-    id: uid("wft"),
-    name: input.name,
-    slug: input.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, ""),
-    description: input.description?.trim() ? input.description.trim() : null,
-    status: "draft",
-    currentVersion: 1,
-    publishedVersion: null,
-    usedBy: 0,
-    createdBy: MOCK_CURRENT_USER,
-    updatedBy: MOCK_CURRENT_USER,
-    createdAt: ts,
-    updatedAt: ts,
-    versions: [
-      {
-        id: uid("wftv"),
-        version: 1,
-        status: "draft",
-        message: "Initial draft.",
-        definition: { nodes: [], edges: [] },
-        createdBy: MOCK_CURRENT_USER,
-        createdAt: ts,
-      },
-    ],
-    usage: [],
-  }
-  db.unshift(template)
-  return { template: clone(template) }
+  return apiRequest("/workflow-templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
 }
 
 export async function updateWorkflowTemplate(
   id: string,
   updates: { name?: string; description?: string | null },
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  await delay()
-  const template = find(id)
-  if (updates.name !== undefined) template.name = updates.name
-  if (updates.description !== undefined) template.description = updates.description
-  template.updatedBy = MOCK_CURRENT_USER
-  template.updatedAt = nowIso()
-  return { template: clone(template) }
+  return apiRequest(`/workflow-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  })
 }
 
-// Saves the editor's working copy. Updates the existing open draft if there is
-// one, otherwise opens a fresh draft version above the published one.
+// Saves the editor's working copy. The server updates the open draft in place, or
+// opens a fresh draft above the published one (see workflow-templates.ts).
 export async function saveDraftVersion(
   id: string,
   definition: WorkflowDefinition,
   message?: string,
 ): Promise<{ template: WorkflowTemplateDetail; version: WorkflowTemplateVersion }> {
-  await delay()
-  const template = find(id)
-  const ts = nowIso()
-  let draft = template.versions.find((v) => v.status === "draft")
-  if (draft) {
-    draft.definition = clone(definition)
-    if (message !== undefined) draft.message = message
-    draft.createdAt = ts
-    draft.createdBy = MOCK_CURRENT_USER
-  } else {
-    const nextVersion = Math.max(...template.versions.map((v) => v.version), 0) + 1
-    draft = {
-      id: uid("wftv"),
-      version: nextVersion,
-      status: "draft",
-      message: message ?? `Draft v${nextVersion}`,
-      definition: clone(definition),
-      createdBy: MOCK_CURRENT_USER,
-      createdAt: ts,
-    }
-    template.versions.push(draft)
-    template.currentVersion = nextVersion
-  }
-  template.updatedBy = MOCK_CURRENT_USER
-  template.updatedAt = ts
-  return { template: clone(template), version: clone(draft) }
+  return apiRequest(`/workflow-templates/${id}/draft`, {
+    method: "PUT",
+    body: JSON.stringify(message !== undefined ? { definition, message } : { definition }),
+  })
 }
 
-// Promotes a version to "published": it becomes the live version, the previous
-// published one is archived, and the template flips to published status.
 export async function publishVersion(
   id: string,
   versionId: string,
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  await delay()
-  const template = find(id)
-  const target = template.versions.find((v) => v.id === versionId)
-  if (!target) throw new Error(`Version not found: ${versionId}`)
-  for (const v of template.versions) {
-    if (v.status === "published") v.status = "archived"
-  }
-  target.status = "published"
-  template.publishedVersion = target.version
-  template.currentVersion = target.version
-  template.status = "published"
-  template.updatedBy = MOCK_CURRENT_USER
-  template.updatedAt = nowIso()
-  return { template: clone(template) }
+  return apiRequest(`/workflow-templates/${id}/versions/${versionId}/publish`, {
+    method: "POST",
+  })
 }
 
-// Opens a new draft seeded from an older version's definition.
 export async function restoreVersion(
   id: string,
   versionId: string,
 ): Promise<{ template: WorkflowTemplateDetail; version: WorkflowTemplateVersion }> {
-  await delay()
-  const template = find(id)
-  const source = template.versions.find((v) => v.id === versionId)
-  if (!source) throw new Error(`Version not found: ${versionId}`)
-  // An existing open draft is replaced by the restored content.
-  template.versions = template.versions.filter((v) => v.status !== "draft")
-  const nextVersion = Math.max(...template.versions.map((v) => v.version), 0) + 1
-  const draft: WorkflowTemplateVersion = {
-    id: uid("wftv"),
-    version: nextVersion,
-    status: "draft",
-    message: `Restored from v${source.version}`,
-    definition: clone(source.definition),
-    createdBy: MOCK_CURRENT_USER,
-    createdAt: nowIso(),
-  }
-  template.versions.push(draft)
-  template.currentVersion = nextVersion
-  template.updatedBy = MOCK_CURRENT_USER
-  template.updatedAt = nowIso()
-  return { template: clone(template), version: clone(draft) }
+  return apiRequest(`/workflow-templates/${id}/versions/${versionId}/restore`, {
+    method: "POST",
+  })
 }
 
-export async function listUsage(id: string) {
-  await delay()
-  return { instances: clone(find(id).usage) }
+export async function listUsage(
+  id: string,
+): Promise<{ instances: WorkflowDeployment[] }> {
+  return apiRequest(`/workflow-templates/${id}/usage`)
 }
 
-// Canned sample inputs the simulator can run against.
+// --- Simulation (client-side mock, v1) ---------------------------------------
+// The simulator stays a local mock in v1 (no server route — see plan §6.1). Its
+// output is clearly labelled "simulated" in the panel UI.
 export const SIMULATION_FIXTURES = [
   { id: "urban-hard-stops", label: "Urban drive — 3 hard stops" },
   { id: "highway-clear", label: "Highway cruise — no events" },
@@ -225,6 +110,8 @@ function sampleOutput(catalogType: string): string {
       return "peak decel -0.52 g"
     case "processor.imu_decel":
       return "spike -0.61 g @ 02:13"
+    case "processor.speed_limit_check":
+      return "over limit 2× (peak +14 kph)"
     case "processor.sensor_fusion":
       return "aligned 3 streams"
     case "logic.threshold":
@@ -268,7 +155,7 @@ export async function simulate(
   definition: WorkflowDefinition,
   fixtureId: string,
 ): Promise<SimulationResult> {
-  await delay(120)
+  await new Promise<void>((resolve) => setTimeout(resolve, 120))
   const steps = orderNodes(definition).map((n) => ({
     nodeId: n.id,
     label: NODE_CATALOG_BY_TYPE[n.type]?.label ?? n.data.label,

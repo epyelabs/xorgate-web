@@ -22,6 +22,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
+import { TriangleAlertIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   attachWorkflowInputSchema,
@@ -30,6 +31,13 @@ import {
 } from "@/lib/device-workflow-schemas"
 import { attachWorkflow } from "@/lib/device-workflows-api"
 import { listWorkflowTemplates } from "@/lib/workflow-templates-api"
+import {
+  getDevice,
+  getDeviceModel,
+  getKvsChannels,
+  type IoCapabilities,
+} from "@/lib/api"
+import { telemetryMetricOptions } from "@/lib/capability-metrics"
 import {
   listWorkflowTemplatesResponseSchema,
   type WorkflowTemplateSummary,
@@ -66,6 +74,11 @@ export function AttachWorkflowSheet({
   const [templates, setTemplates] = useState<WorkflowTemplateSummary[] | null>(
     null,
   )
+  // Real device capabilities: model io_capabilities + provisioned KVS channels,
+  // used to populate the trigger editors and flag incompatible templates.
+  const [deviceCaps, setDeviceCaps] = useState<IoCapabilities | null>(null)
+  const [streamKeys, setStreamKeys] = useState<string[]>([])
+  const [persistTelemetry, setPersistTelemetry] = useState(true)
   const [draft, setDraft] = useState<AttachWorkflowInput>(() => ({
     ...EMPTY_DRAFT,
   }))
@@ -95,6 +108,38 @@ export function AttachWorkflowSheet({
       cancelled = true
     }
   }, [open])
+
+  // Load this device's real capabilities (model + provisioned video channels).
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { device } = await getDevice(deviceId)
+        if (cancelled) return
+        setPersistTelemetry(device.persistTelemetry)
+        const [{ device_model }, { channels }] = await Promise.all([
+          getDeviceModel(device.deviceModelId),
+          getKvsChannels(deviceId),
+        ])
+        if (cancelled) return
+        setDeviceCaps(device_model.ioCapabilities)
+        // recording_saved runs against recorded video streams (exclude audio).
+        setStreamKeys(
+          channels
+            .map((c) => c.streamKey)
+            .filter((k) => !k.startsWith("audio")),
+        )
+      } catch (err) {
+        if (!cancelled) toast.error((err as Error).message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, deviceId])
+
+  const metricOptions = telemetryMetricOptions(deviceCaps)
 
   const reset = () => {
     setDraft({ ...EMPTY_DRAFT })
@@ -204,6 +249,7 @@ export function AttachWorkflowSheet({
                   value={draft.templateId}
                   onSelect={handleSelectTemplate}
                   attachedTemplateIds={attachedTemplateIds}
+                  deviceCapabilities={deviceCaps}
                 />
               </Field>
 
@@ -237,9 +283,23 @@ export function AttachWorkflowSheet({
                 <FieldDescription>
                   The workflow runs when any of these fire.
                 </FieldDescription>
+                {!persistTelemetry &&
+                draft.triggers.some((t) => t.type === "telemetry_condition") ? (
+                  <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-500">
+                    <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                      Telemetry persistence is off for this device. The condition
+                      is still evaluated live, but source nodes will read empty
+                      history windows. Enable “Persist telemetry” in device
+                      settings for full runs.
+                    </span>
+                  </div>
+                ) : null}
                 <TriggersEditor
                   triggers={draft.triggers}
                   onChange={(triggers) => setDraft((d) => ({ ...d, triggers }))}
+                  streamKeys={streamKeys}
+                  metricOptions={metricOptions}
                 />
               </Field>
             </div>

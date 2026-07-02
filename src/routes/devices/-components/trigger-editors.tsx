@@ -26,10 +26,6 @@ import {
 import { cn } from "@/lib/utils"
 import { metricLabel } from "@/lib/telemetry-meta"
 import {
-  MOCK_STREAM_KEYS,
-  MOCK_TELEMETRY_METRICS,
-} from "@/lib/mock-device-workflows"
-import {
   TRIGGER_TYPE_LABELS,
   type AttachmentTrigger,
   type AttachmentTriggerType,
@@ -66,8 +62,12 @@ const TRIGGER_ORDER: AttachmentTriggerType[] = [
   "telemetry_condition",
 ]
 
-// A fresh trigger of the chosen type, with sensible defaults.
-function makeDefaultTrigger(type: AttachmentTriggerType): AttachmentTrigger {
+// A fresh trigger of the chosen type, with sensible defaults. `metricOptions`
+// seeds the first telemetry condition's metric from the device's real catalog.
+function makeDefaultTrigger(
+  type: AttachmentTriggerType,
+  metricOptions: string[],
+): AttachmentTrigger {
   switch (type) {
     case "recording_saved":
       return { type, streamKeys: [] }
@@ -82,9 +82,7 @@ function makeDefaultTrigger(type: AttachmentTriggerType): AttachmentTrigger {
       return {
         type,
         combinator: "and",
-        conditions: [
-          { metric: MOCK_TELEMETRY_METRICS[0] ?? "", operator: "gt", value: 0 },
-        ],
+        conditions: [{ metric: metricOptions[0] ?? "", operator: "gt", value: 0 }],
       }
   }
 }
@@ -134,9 +132,11 @@ export function Segmented<T extends string>({
 function RecordingFields({
   value,
   onChange,
+  streamKeys,
 }: {
   value: RecordingTrigger
   onChange: (value: RecordingTrigger) => void
+  streamKeys: string[]
 }) {
   const toggle = (key: string) => {
     const on = value.streamKeys.includes(key)
@@ -147,14 +147,22 @@ function RecordingFields({
         : [...value.streamKeys, key],
     })
   }
-  const allSelected = MOCK_STREAM_KEYS.every((k) =>
-    value.streamKeys.includes(k),
-  )
+  const allSelected =
+    streamKeys.length > 0 && streamKeys.every((k) => value.streamKeys.includes(k))
   const toggleAll = () =>
     onChange({
       ...value,
-      streamKeys: allSelected ? [] : [...MOCK_STREAM_KEYS],
+      streamKeys: allSelected ? [] : [...streamKeys],
     })
+
+  if (streamKeys.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
+        This device has no provisioned video streams. Provision the device to
+        record and run video workflows.
+      </p>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -174,7 +182,7 @@ function RecordingFields({
         </button>
       </div>
       <div className="flex flex-col gap-0.5 rounded-md border border-border p-1">
-        {MOCK_STREAM_KEYS.map((key) => {
+        {streamKeys.map((key) => {
           const on = value.streamKeys.includes(key)
           return (
             <button
@@ -327,9 +335,11 @@ function ScheduleFields({
 function ConditionFields({
   value,
   onChange,
+  metricOptions,
 }: {
   value: ConditionTrigger
   onChange: (value: ConditionTrigger) => void
+  metricOptions: string[]
 }) {
   const setCond = (i: number, next: ConditionTrigger["conditions"][number]) =>
     onChange({
@@ -341,7 +351,7 @@ function ConditionFields({
       ...value,
       conditions: [
         ...value.conditions,
-        { metric: MOCK_TELEMETRY_METRICS[0] ?? "", operator: "gt", value: 0 },
+        { metric: metricOptions[0] ?? "", operator: "gt", value: 0 },
       ],
     })
   const removeCond = (i: number) =>
@@ -349,6 +359,15 @@ function ConditionFields({
       ...value,
       conditions: value.conditions.filter((_, idx) => idx !== i),
     })
+
+  if (metricOptions.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
+        This device model reports no telemetry metrics, so there is nothing to
+        condition on.
+      </p>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -375,7 +394,7 @@ function ConditionFields({
               <SelectValue placeholder="Metric" />
             </SelectTrigger>
             <SelectContent>
-              {MOCK_TELEMETRY_METRICS.map((m) => (
+              {metricOptions.map((m) => (
                 <SelectItem key={m} value={m}>
                   {metricLabel(m)}
                 </SelectItem>
@@ -433,19 +452,25 @@ function ConditionFields({
 }
 
 // The repeatable list of trigger cards plus the "Add trigger" type menu.
+// `streamKeys` / `metricOptions` come from the device's real provisioned channels
+// and model capabilities (see attach-workflow-sheet.tsx).
 export function TriggersEditor({
   triggers,
   onChange,
+  streamKeys,
+  metricOptions,
 }: {
   triggers: AttachmentTrigger[]
   onChange: (triggers: AttachmentTrigger[]) => void
+  streamKeys: string[]
+  metricOptions: string[]
 }) {
   const update = (i: number, next: AttachmentTrigger) =>
     onChange(triggers.map((t, idx) => (idx === i ? next : t)))
   const remove = (i: number) =>
     onChange(triggers.filter((_, idx) => idx !== i))
   const add = (type: AttachmentTriggerType) =>
-    onChange([...triggers, makeDefaultTrigger(type)])
+    onChange([...triggers, makeDefaultTrigger(type, metricOptions)])
 
   const addMenu = (alignClass: string) => (
     <DropdownMenu>
@@ -508,13 +533,21 @@ export function TriggersEditor({
               </Button>
             </div>
             {t.type === "recording_saved" ? (
-              <RecordingFields value={t} onChange={(n) => update(i, n)} />
+              <RecordingFields
+                value={t}
+                onChange={(n) => update(i, n)}
+                streamKeys={streamKeys}
+              />
             ) : null}
             {t.type === "schedule" ? (
               <ScheduleFields value={t} onChange={(n) => update(i, n)} />
             ) : null}
             {t.type === "telemetry_condition" ? (
-              <ConditionFields value={t} onChange={(n) => update(i, n)} />
+              <ConditionFields
+                value={t}
+                onChange={(n) => update(i, n)}
+                metricOptions={metricOptions}
+              />
             ) : null}
           </div>
         )

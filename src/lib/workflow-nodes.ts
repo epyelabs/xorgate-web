@@ -49,12 +49,16 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
   {
     type: "source.video",
     group: "source",
+    // Abstract input: the template just declares "this workflow needs video".
+    // The concrete stream is bound per device at attach time via the
+    // recording_saved trigger's streamKeys — never on the template. (Named
+    // multi-video/stereo binding is deferred; v1 feeds the triggering recording
+    // to every video node.)
     label: "Video Stream",
-    description: "H.264 camera feed from a device channel (e.g. cam0).",
+    description:
+      "H.264 camera feed. The device + channel are chosen when you attach this workflow (recording trigger), not here.",
     icon: Video,
-    fields: [
-      { key: "channel", label: "Channel", type: "select", options: ["cam0", "cam1"], default: "cam0" },
-    ],
+    fields: [],
   },
   {
     type: "source.gps",

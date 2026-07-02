@@ -55,6 +55,31 @@ for the end-to-end flow, and the
 [device agent README](../../device/xorgate-device-agent/README.md) for what runs
 on the device.
 
+## Workflows
+
+User-defined processing pipelines (CV / telemetry) that attach to devices. Three
+feature areas, each a set of file routes plus a typed API client — real backend,
+validated with the same `.safeParse()` pattern as the rest of the app:
+
+- **Workflow Templates** (`routes/workflow-templates/`) — list + graph editor
+  (react-flow + Monaco JSON), with Versions / Simulator / Usage / Settings tabs.
+  Client `lib/workflow-templates-api.ts`. The **Simulator** tab is still a
+  client-side mock (`simulate()` in that file) — there is no server route in v1.
+- **Workflow Instances** (`routes/workflow-instances/`) — run list + detail
+  (metrics, graph trace, step trace, events, raw JSON). Client
+  `lib/workflow-instances-api.ts`.
+- **Device Workflows tab** (`routes/devices/$id.workflows.tsx`) — attachments
+  table, recent runs, a **capability-aware** Attach sheet + Run-now dialog. Client
+  `lib/device-workflows-api.ts`.
+
+Contracts (the API shapes) live in `lib/workflow-schemas.ts`,
+`lib/workflow-run-schemas.ts`, `lib/device-workflow-schemas.ts`; the node catalog
+in `lib/workflow-nodes.ts`. Capability compatibility (which templates a device can
+run) is computed client-side in `lib/capability-metrics.ts` (mirrors the server)
+and enforced authoritatively by the backend on attach. See the
+[backend README](../../backend/xorgate-core-service/README.md#workflows) for the
+trigger + execution engine.
+
 ## shadcn/ui
 
 Add components:

@@ -73,6 +73,10 @@ export const workflowTemplateSummarySchema = z.object({
   currentVersion: z.number(),
   publishedVersion: z.number().nullable(),
   usedBy: z.number(),
+  // Abstract input needs derived from the running version's graph — tokens like
+  // "video", "gps", "imu", "metric:<key>". Used by the attach picker to flag
+  // device incompatibility (the server enforces it authoritatively on attach).
+  requiredCapabilities: z.array(z.string()).optional(),
   createdBy: authorSchema,
   updatedBy: authorSchema,
   createdAt: z.string(),

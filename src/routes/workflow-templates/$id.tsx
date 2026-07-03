@@ -23,7 +23,6 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
-import { NodeProperties } from "./-components/node-properties"
 import { SettingsPanel } from "./-components/settings-panel"
 import { SimulatorPanel } from "./-components/simulator-panel"
 import { TemplateHeader } from "./-components/template-header"
@@ -332,7 +331,6 @@ function WorkflowTemplateDetailPage() {
                   <div className="min-w-0 flex-1">
                     <WorkflowCanvas />
                   </div>
-                  <NodeProperties />
                 </div>
               ) : (
                 <JsonEditor revision={jsonRevision} />

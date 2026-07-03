@@ -25,6 +25,7 @@ import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
 import { SettingsSheet } from "./-components/settings-sheet"
 import { TemplateHeader } from "./-components/template-header"
+import { TemplateMeta } from "./-components/template-meta"
 import { UsageSheet } from "./-components/usage-sheet"
 import { VersionsSheet } from "./-components/versions-sheet"
 import { WorkflowCanvas } from "./-components/workflow-canvas"
@@ -263,7 +264,6 @@ function WorkflowTemplateDetailPage() {
         dirty={dirty}
         busy={busy}
         onOpenVersions={() => setVersionsOpen(true)}
-        onOpenUsage={() => setUsageOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}
@@ -273,11 +273,10 @@ function WorkflowTemplateDetailPage() {
           views of the same graph, toggled in the toolbar. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/40 px-4 py-1.5">
-          <span className="text-xs text-muted-foreground">
-            {editorMode === "gui"
-              ? "Drag nodes from the palette · click a node to edit its settings"
-              : "Edit the workflow definition as JSON — the graph stays in sync"}
-          </span>
+          <TemplateMeta
+            template={template}
+            onOpenUsage={() => setUsageOpen(true)}
+          />
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center rounded-md border border-border p-0.5">
               <Button

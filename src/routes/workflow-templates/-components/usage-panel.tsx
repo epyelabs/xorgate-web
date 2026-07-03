@@ -38,9 +38,6 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
               Workspace
             </TableHead>
             <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              Target
-            </TableHead>
-            <TableHead className="text-[10px] tracking-[0.14em] uppercase">
               Version
             </TableHead>
             <TableHead className="text-[10px] tracking-[0.14em] uppercase">
@@ -60,12 +57,11 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
               <TableCell className="text-xs text-muted-foreground">
                 {instance.workspaceName}
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {instance.target}
-              </TableCell>
               <TableCell className="text-xs tabular-nums">
                 {instance.pinnedVersion === null ? (
-                  <span className="text-muted-foreground">follows published</span>
+                  <span className="text-muted-foreground">
+                    follows published
+                  </span>
                 ) : (
                   <span>pinned v{instance.pinnedVersion}</span>
                 )}

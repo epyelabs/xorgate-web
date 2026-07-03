@@ -308,11 +308,14 @@ function WorkflowTemplateDetailPage() {
             </div>
             <div className="h-5 w-px shrink-0 bg-border" aria-hidden />
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
               onClick={() => setShowSimulator((s) => !s)}
               aria-pressed={showSimulator}
-              className={cn(showSimulator && "ring-2 ring-primary/30")}
+              className={cn(
+                "border-2 py-3",
+                showSimulator && "ring-2 ring-primary/30"
+              )}
             >
               <PlayIcon className="size-3.5" />
               Run Simulation

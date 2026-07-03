@@ -3,6 +3,7 @@ import { createRootRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { AppSidebar } from "@/components/app-sidebar"
+import { GlobalSearch } from "@/components/global-search"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -154,6 +155,9 @@ function RootLayout() {
                 })}
               </BreadcrumbList>
             </Breadcrumb>
+          </div>
+          <div className="ml-auto flex items-center gap-2 px-4">
+            <GlobalSearch />
           </div>
         </header>
         <Outlet />

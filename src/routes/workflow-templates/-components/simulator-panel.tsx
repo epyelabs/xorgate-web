@@ -124,7 +124,7 @@ export function SimulatorPanel({
   }
 
   return (
-    <aside className="flex w-[28rem] shrink-0 flex-col border-l border-border bg-card/40">
+    <aside className="flex min-h-0 w-[28rem] shrink-0 flex-col overflow-hidden border-l border-border bg-card/40">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-1.5">
         <span className="text-xs font-medium text-foreground">
           Workflow Testing
@@ -164,10 +164,12 @@ export function SimulatorPanel({
           )}
         </section>
 
-        {/* Output */}
-        <section className="flex min-h-64 flex-1 flex-col gap-2">
+        {/* Output. The box grows with its content and the whole panel body
+            scrolls (see the overflow-y-auto wrapper above), so tall tabs like
+            Frames never spill outside the border. */}
+        <section className="flex flex-col gap-2">
           <p className="text-sm font-medium text-foreground">Output</p>
-          <div className="min-h-64 flex-1 rounded-md border border-border bg-muted/30 p-3">
+          <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
             <SimulatorOutput
               definition={ranDefinition}
               bindings={bindings}

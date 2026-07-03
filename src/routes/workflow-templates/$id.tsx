@@ -256,9 +256,12 @@ function WorkflowTemplateDetailPage() {
   }
 
   return (
-    // min-h-0 lets the editor flex-fill the viewport height instead of growing
-    // the page; the editor band then stretches to the bottom.
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0">
+    // Pin the editor to the viewport (minus the app header: h-16, or h-12 when the
+    // sidebar is icon-collapsed) so it has a *definite* height. The shell wrapper is
+    // only `min-h-svh`, so a plain `flex-1` here would grow the page instead of
+    // capping it — then tall panel content (e.g. the simulator Frames tab) would
+    // scroll the whole page rather than scrolling inside the panel.
+    <div className="flex h-[calc(100svh-4rem)] min-h-0 flex-col gap-3 p-4 pt-0 group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
       <TemplateHeader
         template={template}
         loadedVersion={loadedVersion}

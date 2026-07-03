@@ -57,7 +57,7 @@ export function bindingLabel(b: SourceBinding): string {
   }
 }
 
-function formatBytes(bytes: number | null): string | null {
+export function formatBytes(bytes: number | null): string | null {
   if (bytes === null || bytes < 0) return null
   if (bytes < 1024) return `${bytes} B`
   const kb = bytes / 1024
@@ -65,6 +65,24 @@ function formatBytes(bytes: number | null): string | null {
   const mb = kb / 1024
   if (mb < 1024) return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`
   return `${(mb / 1024).toFixed(1)} GB`
+}
+
+// Short duration from seconds, e.g. "13.9s" or "1m 23s".
+export function formatSeconds(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return "0s"
+  if (sec < 60) return `${sec.toFixed(1)}s`
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return s ? `${m}m ${s}s` : `${m}m`
+}
+
+// The first bound video source (a vision graph may declare several), used to back
+// the Video / Frames output tabs.
+export function firstVideoBinding(
+  bindings: Record<string, SourceBinding>,
+): Extract<SourceBinding, { kind: "video-file" | "video-recording" }> | null {
+  for (const b of Object.values(bindings)) if (isVideoBinding(b)) return b
+  return null
 }
 
 function formatDurationMs(ms: number | null): string | null {
@@ -120,25 +138,10 @@ export function isVisionGraph(def: WorkflowDefinition): boolean {
   return def.nodes.some((n) => VISION_NODE_TYPES.has(n.type))
 }
 
-export interface MockDetection {
-  // Relative to the frame (0..1), so the overlay scales with the video element.
-  x: number
-  y: number
-  w: number
-  h: number
-  label: string
-  confidence: number
-}
-
-// Deterministic mock bounding boxes for the Frames view. Kept stable (no RNG) so
-// the overlay doesn't jitter between renders; gated by the detector node's
-// minConfidence so tweaking the graph visibly changes the output.
-export function mockDetections(minConfidence: number): MockDetection[] {
-  const all: MockDetection[] = [
-    { x: 0.08, y: 0.42, w: 0.22, h: 0.34, label: "vehicle", confidence: 0.91 },
-    { x: 0.44, y: 0.5, w: 0.16, h: 0.3, label: "vehicle", confidence: 0.83 },
-    { x: 0.7, y: 0.38, w: 0.12, h: 0.4, label: "person", confidence: 0.62 },
-    { x: 0.34, y: 0.66, w: 0.09, h: 0.16, label: "person", confidence: 0.47 },
-  ]
-  return all.filter((d) => d.confidence >= minConfidence)
+// The detector node's min-confidence gates which mock boxes are drawn, so tweaking
+// the Object Detection node visibly changes the output. Defaults to 0.4.
+export function detectorMinConfidence(def: WorkflowDefinition): number {
+  const det = def.nodes.find((n) => n.type === "processor.object_detection")
+  const v = Number(det?.data.config?.minConfidence)
+  return Number.isFinite(v) ? v : 0.4
 }

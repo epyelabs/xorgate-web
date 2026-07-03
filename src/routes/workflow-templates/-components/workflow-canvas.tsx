@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
 import {
   Background,
   Controls,
@@ -25,6 +25,10 @@ function CanvasInner() {
   const addNode = useWorkflowEditor((s) => s.addNode)
   const selectNode = useWorkflowEditor((s) => s.selectNode)
   const { screenToFlowPosition } = useReactFlow()
+  // Set while a node drag is in flight so the click react-flow synthesizes at
+  // drag-end doesn't re-open the settings popover. Cleared a tick after the
+  // drag stops, once that trailing click has already fired.
+  const draggingRef = useRef(false)
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -51,7 +55,24 @@ function CanvasInner() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        // Select (and open the settings popover) on a genuine click only.
+        // Dragging must not select: selectNodesOnDrag stops react-flow selecting
+        // the node when a drag begins, and the draggingRef guard drops the click
+        // react-flow synthesizes when the drag ends.
+        selectNodesOnDrag={false}
+        onNodeDragStart={() => {
+          draggingRef.current = true
+        }}
+        onNodeDragStop={() => {
+          // Clear on the next frame so the trailing drag-end click still sees it.
+          requestAnimationFrame(() => {
+            draggingRef.current = false
+          })
+        }}
+        onNodeClick={(_, node) => {
+          if (draggingRef.current) return
+          selectNode(node.id)
+        }}
         onPaneClick={() => selectNode(null)}
         fitView
         fitViewOptions={{ padding: 0.2 }}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { BracesIcon, PlayIcon, WorkflowIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api"
@@ -300,48 +301,44 @@ function WorkflowTemplateDetailPage() {
               </span>
               <div className="flex items-center gap-2">
                 <div className="inline-flex items-center rounded-md border border-border p-0.5">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setEditorMode("gui")}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
                       editorMode === "gui"
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground"
                     )}
                   >
                     <WorkflowIcon className="size-3.5" />
                     Graph
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setEditorMode("json")}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
                       editorMode === "json"
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground"
                     )}
                   >
                     <BracesIcon className="size-3.5" />
                     JSON
-                  </button>
+                  </Button>
                 </div>
                 <div className="h-5 w-px shrink-0 bg-border" aria-hidden />
-                <button
-                  type="button"
+                <Button
+                  variant="default"
+                  size="sm"
                   onClick={() => setShowSimulator((s) => !s)}
                   aria-pressed={showSimulator}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
-                    showSimulator
-                      ? "border-border bg-muted font-medium text-foreground"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  )}
+                  className={cn(showSimulator && "ring-2 ring-primary/30")}
                 >
                   <PlayIcon className="size-3.5" />
                   Run Simulation
-                </button>
+                </Button>
               </div>
             </div>
             <div className="flex min-h-0 flex-1">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { BracesIcon, WorkflowIcon } from "lucide-react"
+import { BracesIcon, PlayIcon, WorkflowIcon } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api"
@@ -24,7 +24,6 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
 import { SettingsPanel } from "./-components/settings-panel"
-import { SimulatorPanel } from "./-components/simulator-panel"
 import { TemplateHeader } from "./-components/template-header"
 import { UsagePanel } from "./-components/usage-panel"
 import { VersionsPanel } from "./-components/versions-panel"
@@ -40,7 +39,7 @@ export const Route = createFileRoute("/workflow-templates/$id")({
   component: WorkflowTemplateDetailPage,
 })
 
-type TabValue = "editor" | "versions" | "simulator" | "usage" | "settings"
+type TabValue = "editor" | "versions" | "usage" | "settings"
 type EditorMode = "gui" | "json"
 
 // Prefer the open working draft, else the published version, else the newest.
@@ -62,6 +61,8 @@ function WorkflowTemplateDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [activeTab, setActiveTab] = useState<TabValue>("editor")
   const [editorMode, setEditorMode] = useState<EditorMode>("gui")
+  // The simulator lives in a right-side panel on the Template tab, closed by default.
+  const [showSimulator, setShowSimulator] = useState(false)
   const [loadedVersionId, setLoadedVersionId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Bumped whenever a different version is loaded so the JSON buffer re-seeds.
@@ -266,7 +267,10 @@ function WorkflowTemplateDetailPage() {
         onSelectVersion={handleSelectVersion}
         onSaveDraft={handleSaveDraft}
         onPublish={handlePublish}
-        onSimulate={() => setActiveTab("simulator")}
+        onSimulate={() => {
+          setActiveTab("editor")
+          setShowSimulator(true)
+        }}
         onGoUsage={() => setActiveTab("usage")}
       />
 
@@ -279,7 +283,6 @@ function WorkflowTemplateDetailPage() {
           <TabsList variant="line">
             <TabsTrigger value="editor">Template</TabsTrigger>
             <TabsTrigger value="versions">Versions</TabsTrigger>
-            <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="usage">Usage</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -295,46 +298,74 @@ function WorkflowTemplateDetailPage() {
                   ? "Drag nodes from the palette · click a node to edit its settings"
                   : "Edit the workflow definition as JSON — the graph stays in sync"}
               </span>
-              <div className="inline-flex items-center rounded-md border border-border p-0.5">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center rounded-md border border-border p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode("gui")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
+                      editorMode === "gui"
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <WorkflowIcon className="size-3.5" />
+                    Graph
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode("json")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
+                      editorMode === "json"
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <BracesIcon className="size-3.5" />
+                    JSON
+                  </button>
+                </div>
+                <div className="h-5 w-px shrink-0 bg-border" aria-hidden />
                 <button
                   type="button"
-                  onClick={() => setEditorMode("gui")}
+                  onClick={() => setShowSimulator((s) => !s)}
+                  aria-pressed={showSimulator}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
-                    editorMode === "gui"
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
+                    showSimulator
+                      ? "border-border bg-muted font-medium text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <WorkflowIcon className="size-3.5" />
-                  Graph
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditorMode("json")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
-                    editorMode === "json"
-                      ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <BracesIcon className="size-3.5" />
-                  JSON
+                  <PlayIcon className="size-3.5" />
+                  Run Simulation
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1">
-              {editorMode === "gui" ? (
-                <div className="flex h-full">
-                  <NodePalette />
-                  <div className="min-w-0 flex-1">
-                    <WorkflowCanvas />
+            <div className="flex min-h-0 flex-1">
+              <div className="min-w-0 flex-1">
+                {editorMode === "gui" ? (
+                  <div className="flex h-full">
+                    <NodePalette />
+                    <div className="min-w-0 flex-1">
+                      <WorkflowCanvas />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <JsonEditor revision={jsonRevision} />
-              )}
+                ) : (
+                  <JsonEditor revision={jsonRevision} />
+                )}
+              </div>
+              {showSimulator ? (
+                <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-card/40">
+                  <div className="shrink-0 border-b border-border px-4 py-2 text-xs font-medium text-foreground">
+                    Simulator
+                  </div>
+                  {/* Empty simulator container. Content lands here later. */}
+                  <div className="min-h-0 flex-1" />
+                </aside>
+              ) : null}
             </div>
           </div>
         </TabsContent>
@@ -348,10 +379,6 @@ function WorkflowTemplateDetailPage() {
             onRestore={handleRestore}
             onPublish={handlePublishVersion}
           />
-        </TabsContent>
-
-        <TabsContent value="simulator" className="min-h-0 overflow-auto">
-          <SimulatorPanel templateId={id} />
         </TabsContent>
 
         <TabsContent value="usage" className="min-h-0 overflow-auto">

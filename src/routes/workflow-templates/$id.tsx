@@ -338,7 +338,7 @@ function WorkflowTemplateDetailPage() {
           {showSimulator ? (
             <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-card/40">
               <div className="shrink-0 border-b border-border px-4 py-2 text-xs font-medium text-foreground">
-                Simulator
+                Workflow Testing
               </div>
               {/* Empty simulator container. Content lands here later. */}
               <div className="min-h-0 flex-1" />

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useRef, useState } from "react"
 import {
   Background,
   ControlButton,
@@ -11,12 +11,20 @@ import {
   useReactFlow,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Network } from "lucide-react"
+import { Map as MapIcon, Maximize, Minus, Network, Plus } from "lucide-react"
 import { type WfNode } from "@/lib/workflow-nodes"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { WorkflowNodeCard } from "./nodes/workflow-node-card"
 
 const nodeTypes: NodeTypes = { wfNode: WorkflowNodeCard }
+
+// Shared style for every control-bar icon. `fill: none` beats react-flow's
+// controls CSS (which forces `fill: currentColor` and would fill lucide's
+// outline icons solid); the heavier `strokeWidth` (lucide defaults to 2) gives
+// them more presence at the small size the controls render them. We also
+// replace the built-in zoom/fit buttons with lucide icons so the whole bar
+// shares one icon family, weight, and size.
+const CONTROL_ICON = { fill: "none", strokeWidth: 2.5 } as const
 
 function CanvasInner() {
   const nodes = useWorkflowEditor((s) => s.nodes)
@@ -27,7 +35,10 @@ function CanvasInner() {
   const addNode = useWorkflowEditor((s) => s.addNode)
   const autoLayout = useWorkflowEditor((s) => s.autoLayout)
   const selectNode = useWorkflowEditor((s) => s.selectNode)
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow()
+  // Minimap is opt-in — hidden by default to keep the canvas clean; toggled from
+  // the controls bar.
+  const [showMinimap, setShowMinimap] = useState(false)
   // Set while a node drag is in flight so the click react-flow synthesizes at
   // drag-end doesn't re-open the settings popover. Cleared a tick after the
   // drag stops, once that trailing click has already fired.
@@ -93,15 +104,39 @@ function CanvasInner() {
         className="bg-muted/20"
       >
         <Background gap={16} className="!bg-muted/20" />
-        <Controls showInteractive={false} className="!shadow-sm">
+        <Controls
+          showZoom={false}
+          showFitView={false}
+          showInteractive={false}
+          className="!shadow-sm"
+        >
+          <ControlButton onClick={() => zoomIn()} title="Zoom in" aria-label="Zoom in">
+            <Plus style={CONTROL_ICON} />
+          </ControlButton>
+          <ControlButton onClick={() => zoomOut()} title="Zoom out" aria-label="Zoom out">
+            <Minus style={CONTROL_ICON} />
+          </ControlButton>
+          <ControlButton
+            onClick={() => fitView({ padding: 0.2, duration: 300 })}
+            title="Fit view"
+            aria-label="Fit view"
+          >
+            <Maximize style={CONTROL_ICON} />
+          </ControlButton>
           <ControlButton onClick={onAutoLayout} title="Auto layout" aria-label="Auto layout">
-            {/* react-flow's controls CSS forces `fill: currentColor` on button
-                svgs, which fills lucide's outline paths solid. Override inline
-                (beats the stylesheet rule) to keep the icon a clean outline. */}
-            <Network style={{ fill: "none" }} />
+            <Network style={CONTROL_ICON} />
+          </ControlButton>
+          <ControlButton
+            onClick={() => setShowMinimap((v) => !v)}
+            title={showMinimap ? "Hide minimap" : "Show minimap"}
+            aria-label={showMinimap ? "Hide minimap" : "Show minimap"}
+          >
+            <MapIcon style={CONTROL_ICON} />
           </ControlButton>
         </Controls>
-        <MiniMap pannable zoomable className="!bg-card !ring-1 !ring-border" />
+        {showMinimap && (
+          <MiniMap pannable zoomable className="!bg-card !ring-1 !ring-border" />
+        )}
       </ReactFlow>
     </div>
   )

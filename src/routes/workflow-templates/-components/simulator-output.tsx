@@ -364,7 +364,7 @@ export function SimulatorOutput({
               <CopyIcon className="size-3.5" />
             </Button>
           </div>
-          <pre className="max-h-56 overflow-auto px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+          <pre className="overflow-x-auto px-2.5 py-2 font-mono text-[11px] leading-relaxed text-foreground">
             {frameJson}
           </pre>
         </div>

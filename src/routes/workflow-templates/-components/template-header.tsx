@@ -47,7 +47,9 @@ export function TemplateHeader({
   onSimulate,
   onGoUsage,
 }: TemplateHeaderProps) {
-  const orderedVersions = [...template.versions].sort((a, b) => b.version - a.version)
+  const orderedVersions = [...template.versions].sort(
+    (a, b) => b.version - a.version
+  )
 
   return (
     <header className="flex flex-col gap-2">
@@ -63,7 +65,11 @@ export function TemplateHeader({
             <h1 className="min-w-0 text-xl font-semibold tracking-tight">
               {template.name}
             </h1>
-            <Badge variant={template.status === "published" ? "default" : "secondary"}>
+            <Badge
+              variant={
+                template.status === "published" ? "default" : "secondary"
+              }
+            >
               {template.status}
             </Badge>
             {dirty ? (
@@ -89,7 +95,12 @@ export function TemplateHeader({
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={onSimulate} disabled={busy}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSimulate}
+                disabled={busy}
+              >
                 <PlayIcon />
                 Simulate
               </Button>
@@ -108,10 +119,6 @@ export function TemplateHeader({
               </Button>
             </div>
           </div>
-
-          {template.description ? (
-            <p className="text-sm text-muted-foreground">{template.description}</p>
-          ) : null}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">

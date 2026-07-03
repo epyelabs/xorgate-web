@@ -46,7 +46,7 @@ type EditorMode = "gui" | "json"
 
 // Prefer the open working draft, else the published version, else the newest.
 function pickInitialVersion(
-  t: WorkflowTemplateDetail,
+  t: WorkflowTemplateDetail
 ): WorkflowTemplateVersion | null {
   return (
     t.versions.find((v) => v.status === "draft") ??
@@ -125,7 +125,10 @@ function WorkflowTemplateDetailPage() {
     if (version) loadVersionIntoEditor(version)
   }
 
-  const persistMeta = async (updates: { name?: string; description?: string | null }) => {
+  const persistMeta = async (updates: {
+    name?: string
+    description?: string | null
+  }) => {
     try {
       const { template: updated } = await updateWorkflowTemplate(id, updates)
       setTemplate(updated)
@@ -139,7 +142,10 @@ function WorkflowTemplateDetailPage() {
   // Saves the working graph as a draft and returns the resulting draft version.
   const saveDraft = async (): Promise<WorkflowTemplateVersion | null> => {
     const definition = useWorkflowEditor.getState().toDefinition()
-    const { template: updated, version } = await saveDraftVersion(id, definition)
+    const { template: updated, version } = await saveDraftVersion(
+      id,
+      definition
+    )
     setTemplate(updated)
     setLoadedVersionId(version.id)
     useWorkflowEditor.getState().markSaved()
@@ -198,7 +204,10 @@ function WorkflowTemplateDetailPage() {
   const handleRestore = async (version: WorkflowTemplateVersion) => {
     setBusy(true)
     try {
-      const { template: updated, version: draft } = await restoreVersion(id, version.id)
+      const { template: updated, version: draft } = await restoreVersion(
+        id,
+        version.id
+      )
       setTemplate(updated)
       const fresh = updated.versions.find((v) => v.id === draft.id)
       if (fresh) loadVersionIntoEditor(fresh)
@@ -221,7 +230,9 @@ function WorkflowTemplateDetailPage() {
   if (notFound) {
     return (
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <p className="text-sm text-muted-foreground">Workflow template not found.</p>
+        <p className="text-sm text-muted-foreground">
+          Workflow template not found.
+        </p>
       </div>
     )
   }
@@ -267,7 +278,7 @@ function WorkflowTemplateDetailPage() {
       >
         <div className="shrink-0 border-b border-border">
           <TabsList variant="line">
-            <TabsTrigger value="editor">Editor</TabsTrigger>
+            <TabsTrigger value="editor">Template</TabsTrigger>
             <TabsTrigger value="versions">Versions</TabsTrigger>
             <TabsTrigger value="simulator">Simulator</TabsTrigger>
             <TabsTrigger value="usage">Usage</TabsTrigger>
@@ -293,7 +304,7 @@ function WorkflowTemplateDetailPage() {
                     "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
                     editorMode === "gui"
                       ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <WorkflowIcon className="size-3.5" />
@@ -306,7 +317,7 @@ function WorkflowTemplateDetailPage() {
                     "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
                     editorMode === "json"
                       ? "bg-muted font-medium text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                      : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <BracesIcon className="size-3.5" />

@@ -24,6 +24,7 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
 import { SettingsSheet } from "./-components/settings-sheet"
+import { SimulatorPanel } from "./-components/simulator-panel"
 import { TemplateHeader } from "./-components/template-header"
 import { TemplateMeta } from "./-components/template-meta"
 import { UsageSheet } from "./-components/usage-sheet"
@@ -336,13 +337,10 @@ function WorkflowTemplateDetailPage() {
             )}
           </div>
           {showSimulator ? (
-            <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-card/40">
-              <div className="shrink-0 border-b border-border px-4 py-2 text-xs font-medium text-foreground">
-                Workflow Testing
-              </div>
-              {/* Empty simulator container. Content lands here later. */}
-              <div className="min-h-0 flex-1" />
-            </aside>
+            <SimulatorPanel
+              templateId={id}
+              onClose={() => setShowSimulator(false)}
+            />
           ) : null}
         </div>
       </div>

@@ -120,6 +120,16 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     ],
   },
   {
+    type: "processor.speed_limit_check",
+    group: "processor",
+    label: "Speed Limit Check",
+    description: "Flag GPS speed over a limit (static limit in v1; external traffic API deferred).",
+    icon: Gauge,
+    fields: [
+      { key: "limitKph", label: "Speed limit", type: "number", unit: "km/h", default: 80 },
+    ],
+  },
+  {
     type: "processor.imu_decel",
     group: "processor",
     label: "IMU Deceleration",

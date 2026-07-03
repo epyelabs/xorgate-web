@@ -142,7 +142,7 @@ export function NodePalette() {
                       type="button"
                       draggable
                       onDragStart={(e) => onDragStart(e, entry)}
-                      onClick={() => addNode(entry.type, { x: 60, y: 60 })}
+                      onClick={() => addNode(entry.type)}
                       title={entry.description}
                       className="flex cursor-grab items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-xs transition-colors hover:border-border hover:bg-accent active:cursor-grabbing"
                     >

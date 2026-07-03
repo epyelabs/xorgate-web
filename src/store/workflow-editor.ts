@@ -15,6 +15,7 @@ import {
   NODE_CATALOG_BY_TYPE,
   type WfNode,
 } from "@/lib/workflow-nodes"
+import { layoutVertical } from "@/lib/workflow-layout"
 import {
   workflowDefinitionSchema,
   type WorkflowDefinition,
@@ -42,7 +43,10 @@ interface WorkflowEditorState {
   onEdgesChange: (changes: EdgeChange[]) => void
   onConnect: (connection: Connection) => void
 
-  addNode: (catalogType: string, position: { x: number; y: number }) => void
+  // `position` is where the node lands on the canvas (drop coordinates). Omit it
+  // for click-to-add: the node is then stacked just below the bottom-most node.
+  addNode: (catalogType: string, position?: { x: number; y: number }) => void
+  autoLayout: () => void
   selectNode: (id: string | null) => void
   updateNodeLabel: (id: string, label: string) => void
   updateNodeConfig: (id: string, key: string, value: unknown) => void
@@ -54,6 +58,29 @@ interface WorkflowEditorState {
 }
 
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}`
+
+// Vertical gap left below the bottom-most node when click-adding, and the height
+// assumed for a node react-flow hasn't measured yet.
+const STACK_GAP = 60
+const FALLBACK_NODE_HEIGHT = 64
+
+// Placement for a click-added node: directly below whichever node currently sits
+// lowest on the canvas (same column), so it reads as the next step. Falls back
+// to the origin on an empty canvas.
+function stackedBelow(nodes: WfNode[]): { x: number; y: number } {
+  if (nodes.length === 0) return { x: 0, y: 0 }
+  let x = nodes[0].position.x
+  let maxBottom = -Infinity
+  for (const n of nodes) {
+    const bottom =
+      n.position.y + (n.measured?.height ?? n.height ?? FALLBACK_NODE_HEIGHT)
+    if (bottom > maxBottom) {
+      maxBottom = bottom
+      x = n.position.x
+    }
+  }
+  return { x, y: maxBottom + STACK_GAP }
+}
 
 // Changes that represent a real edit (vs. selection / measurement noise).
 function isMutating(changes: NodeChange<WfNode>[]): boolean {
@@ -106,15 +133,21 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
     const node: WfNode = {
       id,
       type: "wfNode",
-      position,
+      position: position ?? stackedBelow(get().nodes),
       data: { label: entry.label, catalogType, config: defaultConfig(catalogType) },
     }
+    // Drop the node in unselected so it doesn't auto-open the settings popover;
+    // the user clicks it when they actually want to edit. Any prior selection is
+    // cleared so a stray popover doesn't linger over the new node.
     set((s) => ({
-      nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), { ...node, selected: true }],
-      selectedNodeId: id,
+      nodes: [...s.nodes.map((n) => ({ ...n, selected: false })), { ...node, selected: false }],
+      selectedNodeId: null,
       dirty: true,
     }))
   },
+
+  autoLayout: () =>
+    set((s) => ({ nodes: layoutVertical(s.nodes, s.edges), dirty: true })),
 
   selectNode: (id) =>
     set((s) => ({

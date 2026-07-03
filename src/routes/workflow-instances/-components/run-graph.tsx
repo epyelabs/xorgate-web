@@ -38,6 +38,8 @@ export function RunGraph({
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      // Match the editor's top-to-bottom smoothstep edges.
+      defaultEdgeOptions={{ type: "smoothstep" }}
       zoomOnScroll={false}
       panOnScroll
       fitView

@@ -45,17 +45,18 @@ function edge(source: string, target: string): WorkflowEdgeDef {
 // --- Definitions --------------------------------------------------------------
 
 // Harsh Driving — full fusion graph (video + GPS + IMU -> composite rule -> event)
+// Vertical flow: three source lanes (x) feed down (y) into a merged rule + event.
 const harshDrivingV3: WorkflowDefinition = {
   nodes: [
     node("n-video", "source.video", 0, 0),
-    node("n-decode", "processor.decode_sample", 230, 0),
-    node("n-detect", "processor.object_detection", 470, 0),
-    node("n-gps", "source.gps", 0, 170),
-    node("n-speed", "processor.speed_from_gps", 230, 170),
-    node("n-imu", "source.imu", 0, 320),
-    node("n-decel", "processor.imu_decel", 230, 320),
-    node("n-rule", "logic.composite_rule", 510, 230, { minSpeed: 15 }, "Harsh Event Rule"),
-    node("n-event", "output.event", 760, 230, { kind: "harsh_brake" }),
+    node("n-decode", "processor.decode_sample", 0, 130),
+    node("n-detect", "processor.object_detection", 0, 260),
+    node("n-gps", "source.gps", 240, 0),
+    node("n-speed", "processor.speed_from_gps", 240, 130),
+    node("n-imu", "source.imu", 480, 0),
+    node("n-decel", "processor.imu_decel", 480, 130),
+    node("n-rule", "logic.composite_rule", 240, 390, { minSpeed: 15 }, "Harsh Event Rule"),
+    node("n-event", "output.event", 240, 520, { kind: "harsh_brake" }),
   ],
   edges: [
     edge("n-video", "n-decode"),
@@ -73,7 +74,7 @@ const harshDrivingV3: WorkflowDefinition = {
 const harshDrivingV4Draft: WorkflowDefinition = {
   nodes: [
     ...harshDrivingV3.nodes,
-    node("n-alert", "output.alert", 760, 380, { severity: "high" }),
+    node("n-alert", "output.alert", 480, 520, { severity: "high" }),
   ],
   edges: [...harshDrivingV3.edges, edge("n-rule", "n-alert")],
 }
@@ -81,10 +82,10 @@ const harshDrivingV4Draft: WorkflowDefinition = {
 // Earlier history: GPS-only deceleration rule, no vision branch.
 const harshDrivingV2: WorkflowDefinition = {
   nodes: [
-    node("n-gps", "source.gps", 0, 80),
-    node("n-speed", "processor.speed_from_gps", 230, 80),
-    node("n-thresh", "logic.threshold", 470, 80, { operator: "<=", value: -0.4, unit: "g" }),
-    node("n-event", "output.event", 710, 80, { kind: "harsh_brake" }),
+    node("n-gps", "source.gps", 0, 0),
+    node("n-speed", "processor.speed_from_gps", 0, 130),
+    node("n-thresh", "logic.threshold", 0, 260, { operator: "<=", value: -0.4, unit: "g" }),
+    node("n-event", "output.event", 0, 390, { kind: "harsh_brake" }),
   ],
   edges: [
     edge("n-gps", "n-speed"),
@@ -95,11 +96,11 @@ const harshDrivingV2: WorkflowDefinition = {
 
 const perimeterV2: WorkflowDefinition = {
   nodes: [
-    node("n-video", "source.video", 0, 40),
-    node("n-decode", "processor.decode_sample", 220, 40),
-    node("n-detect", "processor.object_detection", 440, 40, { model: "rtdetr", minConfidence: 0.55 }),
-    node("n-thresh", "logic.threshold", 670, 40, { operator: ">=", value: 0.55, unit: "conf" }, "Person Present"),
-    node("n-event", "output.event", 900, 40, { kind: "person_at_perimeter" }),
+    node("n-video", "source.video", 0, 0),
+    node("n-decode", "processor.decode_sample", 0, 130),
+    node("n-detect", "processor.object_detection", 0, 260, { model: "rtdetr", minConfidence: 0.55 }),
+    node("n-thresh", "logic.threshold", 0, 390, { operator: ">=", value: 0.55, unit: "conf" }, "Person Present"),
+    node("n-event", "output.event", 0, 520, { kind: "person_at_perimeter" }),
   ],
   edges: [
     edge("n-video", "n-decode"),
@@ -111,11 +112,11 @@ const perimeterV2: WorkflowDefinition = {
 
 const idleEngineV1Draft: WorkflowDefinition = {
   nodes: [
-    node("n-imu", "source.imu", 0, 40),
-    node("n-gps", "source.gps", 0, 190),
-    node("n-fuse", "processor.sensor_fusion", 230, 115),
-    node("n-rule", "logic.composite_rule", 460, 115, { combine: "all", minSpeed: 0 }, "Idle Rule"),
-    node("n-alert", "output.alert", 690, 115, { severity: "low" }),
+    node("n-imu", "source.imu", 0, 0),
+    node("n-gps", "source.gps", 240, 0),
+    node("n-fuse", "processor.sensor_fusion", 120, 130),
+    node("n-rule", "logic.composite_rule", 120, 260, { combine: "all", minSpeed: 0 }, "Idle Rule"),
+    node("n-alert", "output.alert", 120, 390, { severity: "low" }),
   ],
   edges: [
     edge("n-imu", "n-fuse"),

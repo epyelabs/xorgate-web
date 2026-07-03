@@ -17,9 +17,13 @@ import { NodeEditForm } from "../node-edit-form"
 // thus colour + fallback icon) is resolved from the catalog type carried in
 // `data.catalogType`. Sources have no input handle; outputs have no output.
 //
-// Selecting the node (click, or dropping a fresh one in) opens a Popover
-// anchored to the card that holds the node editor — a lightweight, non-modal
-// way to tweak settings and click away. Only the selected card renders it.
+// Clicking the node selects it and opens a Popover anchored to the card that
+// holds the node editor — a lightweight, non-modal way to tweak settings and
+// click away. Only the selected card renders it. Freshly dropped nodes start
+// unselected, so adding one doesn't pop the editor open.
+//
+// Handles sit on the top (target) / bottom (source) edges: the graph flows
+// vertically, top-to-bottom, so seed layouts advance along y with x as the lane.
 export function WorkflowNodeCard({ id, data, selected }: NodeProps<WfNode>) {
   const selectNode = useWorkflowEditor((s) => s.selectNode)
   const entry = NODE_CATALOG_BY_TYPE[data.catalogType]
@@ -46,7 +50,7 @@ export function WorkflowNodeCard({ id, data, selected }: NodeProps<WfNode>) {
           {!isSource && (
             <Handle
               type="target"
-              position={Position.Left}
+              position={Position.Top}
               className="!size-2 !border-2 !border-background !bg-muted-foreground"
             />
           )}
@@ -63,7 +67,7 @@ export function WorkflowNodeCard({ id, data, selected }: NodeProps<WfNode>) {
           {!isOutput && (
             <Handle
               type="source"
-              position={Position.Right}
+              position={Position.Bottom}
               className="!size-2 !border-2 !border-background !bg-muted-foreground"
             />
           )}

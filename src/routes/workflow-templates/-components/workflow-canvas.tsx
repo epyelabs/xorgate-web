@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react"
 import {
   Background,
+  ControlButton,
   Controls,
   type Edge,
   MiniMap,
@@ -10,6 +11,7 @@ import {
   useReactFlow,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
+import { Network } from "lucide-react"
 import { type WfNode } from "@/lib/workflow-nodes"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { WorkflowNodeCard } from "./nodes/workflow-node-card"
@@ -23,8 +25,9 @@ function CanvasInner() {
   const onEdgesChange = useWorkflowEditor((s) => s.onEdgesChange)
   const onConnect = useWorkflowEditor((s) => s.onConnect)
   const addNode = useWorkflowEditor((s) => s.addNode)
+  const autoLayout = useWorkflowEditor((s) => s.autoLayout)
   const selectNode = useWorkflowEditor((s) => s.selectNode)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
   // Set while a node drag is in flight so the click react-flow synthesizes at
   // drag-end doesn't re-open the settings popover. Cleared a tick after the
   // drag stops, once that trailing click has already fired.
@@ -45,6 +48,13 @@ function CanvasInner() {
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
   }, [])
+
+  // Re-flow the graph top-to-bottom, then re-frame it once react-flow has
+  // painted the new positions.
+  const onAutoLayout = useCallback(() => {
+    autoLayout()
+    requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }))
+  }, [autoLayout, fitView])
 
   return (
     <div className="h-full w-full" onDrop={onDrop} onDragOver={onDragOver}>
@@ -76,12 +86,21 @@ function CanvasInner() {
         onPaneClick={() => selectNode(null)}
         fitView
         fitViewOptions={{ padding: 0.2 }}
-        defaultEdgeOptions={{ animated: true }}
+        // smoothstep gives clean orthogonal elbows for the top-to-bottom flow.
+        // Merged into every edge at render, so loaded + freshly drawn edges match.
+        defaultEdgeOptions={{ animated: true, type: "smoothstep" }}
         proOptions={{ hideAttribution: true }}
         className="bg-muted/20"
       >
         <Background gap={16} className="!bg-muted/20" />
-        <Controls showInteractive={false} className="!shadow-sm" />
+        <Controls showInteractive={false} className="!shadow-sm">
+          <ControlButton onClick={onAutoLayout} title="Auto layout" aria-label="Auto layout">
+            {/* react-flow's controls CSS forces `fill: currentColor` on button
+                svgs, which fills lucide's outline paths solid. Override inline
+                (beats the stylesheet rule) to keep the icon a clean outline. */}
+            <Network style={{ fill: "none" }} />
+          </ControlButton>
+        </Controls>
         <MiniMap pannable zoomable className="!bg-card !ring-1 !ring-border" />
       </ReactFlow>
     </div>

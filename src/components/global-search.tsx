@@ -162,7 +162,7 @@ export function GlobalSearch() {
         className="h-8 justify-start gap-2 px-2.5 font-normal text-muted-foreground md:w-64"
       >
         <SearchIcon />
-        <span className="hidden md:inline">Search…</span>
+        <span className="hidden md:inline">Search</span>
         <kbd className="ml-auto hidden items-center rounded border bg-muted px-1.5 py-0.5 font-mono text-[0.625rem] font-medium md:inline-flex">
           {modKey}K
         </kbd>

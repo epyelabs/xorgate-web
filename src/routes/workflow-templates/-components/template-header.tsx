@@ -38,7 +38,7 @@ export function TemplateHeader({
   return (
     <header>
       <div className="flex items-center gap-3">
-        <Avatar size="lg">
+        <Avatar size="sm">
           <AvatarFallback>
             <WorkflowIcon className="size-4" />
           </AvatarFallback>

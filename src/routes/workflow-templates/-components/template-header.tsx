@@ -1,14 +1,19 @@
-import { PlayIcon, SaveIcon, UploadIcon, WorkflowIcon } from "lucide-react"
+import {
+  ChevronDownIcon,
+  EllipsisVerticalIcon,
+  SettingsIcon,
+  UploadIcon,
+  WorkflowIcon,
+} from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { formatRelative } from "@/lib/relative-time"
 import type {
   WorkflowTemplateDetail,
@@ -27,30 +32,27 @@ interface TemplateHeaderProps {
   loadedVersion: WorkflowTemplateVersion | null
   dirty: boolean
   busy: boolean
-  onSelectVersion: (versionId: string) => void
+  onOpenVersions: () => void
+  onOpenUsage: () => void
+  onOpenSettings: () => void
   onSaveDraft: () => void
   onPublish: () => void
-  onSimulate: () => void
-  onGoUsage: () => void
 }
 
-// Read-only summary header. Name/description editing lives on the Settings tab;
-// here they are display-only so the bar stays focused on version + actions.
+// Read-only summary header. Name/description editing lives in the settings sheet
+// (opened from the overflow menu); here they are display-only so the bar stays
+// focused on version + actions. Versions and usage each open a side sheet.
 export function TemplateHeader({
   template,
   loadedVersion,
   dirty,
   busy,
-  onSelectVersion,
+  onOpenVersions,
+  onOpenUsage,
+  onOpenSettings,
   onSaveDraft,
   onPublish,
-  onSimulate,
-  onGoUsage,
 }: TemplateHeaderProps) {
-  const orderedVersions = [...template.versions].sort(
-    (a, b) => b.version - a.version
-  )
-
   return (
     <header className="flex flex-col gap-2">
       <div className="flex items-start gap-3">
@@ -72,37 +74,23 @@ export function TemplateHeader({
             >
               {template.status}
             </Badge>
-            {dirty ? (
-              <Badge variant="outline" className="text-amber-600">
-                unsaved changes
-              </Badge>
-            ) : null}
 
             <div className="ml-auto flex items-center gap-2">
-              <Select
-                value={loadedVersion?.id ?? ""}
-                onValueChange={onSelectVersion}
-                disabled={busy}
-              >
-                <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Select version" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orderedVersions.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      v{v.version} ({v.status})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* The version selector now opens the versions side sheet, where
+                  the user navigates, restores, and publishes versions. */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onSimulate}
+                onClick={onOpenVersions}
                 disabled={busy}
+                className="w-44 justify-between font-normal"
               >
-                <PlayIcon />
-                Simulate
+                <span className="truncate">
+                  {loadedVersion
+                    ? `v${loadedVersion.version} (${loadedVersion.status})`
+                    : "Versions"}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
               </Button>
               <Button
                 variant="outline"
@@ -110,13 +98,30 @@ export function TemplateHeader({
                 onClick={onSaveDraft}
                 disabled={busy || !dirty}
               >
-                <SaveIcon />
                 Save draft
               </Button>
               <Button size="sm" onClick={onPublish} disabled={busy}>
                 <UploadIcon />
                 Publish
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={busy}
+                    aria-label="More options"
+                  >
+                    <EllipsisVerticalIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={onOpenSettings}>
+                    <SettingsIcon />
+                    Settings
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -136,7 +141,7 @@ export function TemplateHeader({
             <span>·</span>
             <button
               type="button"
-              onClick={onGoUsage}
+              onClick={onOpenUsage}
               className="underline-offset-2 hover:text-foreground hover:underline"
             >
               Used by {template.usedBy}

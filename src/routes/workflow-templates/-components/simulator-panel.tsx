@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { PlayIcon, XIcon } from "lucide-react"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { NODE_CATALOG_BY_TYPE } from "@/lib/workflow-nodes"
 import { simulate } from "@/lib/workflow-templates-api"
@@ -64,6 +70,12 @@ export function SimulatorPanel({
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [ranDefinition, setRanDefinition] =
     useState<WorkflowDefinition>(EMPTY_DEFINITION)
+  // Both sections open initially; running the workflow collapses Sources so the
+  // Output takes over (the user can re-open Sources anytime).
+  const [openSections, setOpenSections] = useState<string[]>([
+    "sources",
+    "output",
+  ])
 
   // Keep a live ref so the unmount cleanup revokes whatever is bound at the time.
   const bindingsRef = useRef(bindings)
@@ -116,6 +128,7 @@ export function SimulatorPanel({
       const res = await simulate(templateId, definition, "urban-hard-stops")
       setRanDefinition(definition)
       setResult(res)
+      setOpenSections(["output"])
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -129,64 +142,75 @@ export function SimulatorPanel({
         <span className="text-xs font-medium text-foreground">
           Workflow Testing
         </span>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onClose}
-          title="Close"
-          aria-label="Close workflow testing"
-        >
-          <XIcon className="size-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {sources.length > 0 ? (
+            <span className="text-[11px] text-muted-foreground">
+              {boundCount} of {sources.length} bound
+            </span>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close workflow testing"
+          >
+            <XIcon className="size-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {/* Sources (Inputs) */}
-        <section className="flex flex-col gap-2.5">
-          <p className="text-sm font-medium text-foreground">Sources (Inputs)</p>
-          {sources.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-              Add a source node (Video Stream, GPS, IMU, Telemetry) to the graph
-              to test this workflow.
-            </p>
-          ) : (
-            sources.map((s) => (
-              <SourceInputRow
-                key={s.id}
-                label={s.label}
-                catalogType={s.catalogType}
-                binding={bindings[s.id]}
-                onBind={(b) => bind(s.id, b)}
-                onUnbind={() => unbind(s.id)}
-                onPreview={setPreview}
+      {/* Sources + Output as an accordion so a finished run can hand the space
+          over to the Output. The whole body scrolls (overflow-y-auto), so tall
+          tabs like Frames never spill outside their border. */}
+      <Accordion
+        type="multiple"
+        value={openSections}
+        onValueChange={setOpenSections}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4"
+      >
+        <AccordionItem value="sources">
+          <AccordionTrigger className="py-3">Sources (Inputs)</AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <div className="flex flex-col gap-2.5">
+              {sources.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                  Add a source node (Video Stream, GPS, IMU, Telemetry) to the
+                  graph to test this workflow.
+                </p>
+              ) : (
+                sources.map((s) => (
+                  <SourceInputRow
+                    key={s.id}
+                    label={s.label}
+                    catalogType={s.catalogType}
+                    binding={bindings[s.id]}
+                    onBind={(b) => bind(s.id, b)}
+                    onUnbind={() => unbind(s.id)}
+                    onPreview={setPreview}
+                  />
+                ))
+              )}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="output">
+          <AccordionTrigger className="py-3">Output</AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
+              <SimulatorOutput
+                definition={ranDefinition}
+                bindings={bindings}
+                result={result}
+                running={running}
               />
-            ))
-          )}
-        </section>
-
-        {/* Output. The box grows with its content and the whole panel body
-            scrolls (see the overflow-y-auto wrapper above), so tall tabs like
-            Frames never spill outside the border. */}
-        <section className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-foreground">Output</p>
-          <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
-            <SimulatorOutput
-              definition={ranDefinition}
-              bindings={bindings}
-              result={result}
-              running={running}
-            />
-          </div>
-        </section>
-      </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <div className="shrink-0 border-t border-border p-3">
-        {sources.length > 0 ? (
-          <p className="mb-2 text-center text-[11px] text-muted-foreground">
-            {boundCount} of {sources.length} source
-            {sources.length === 1 ? "" : "s"} bound
-          </p>
-        ) : null}
         <Button
           type="button"
           className="w-full gap-1.5"

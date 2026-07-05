@@ -16,6 +16,11 @@ const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string
 const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID as string
 
 const REFRESH_MS = 50 * 60 * 1000 // re-open with fresh creds before the ~1 h expiry
+// A peer connection can dip to "disconnected" on a brief ICE blip and recover on
+// its own. But the KVS master frees its side of the session the instant ICE drops,
+// so a "disconnected" here won't self-heal — give it a short grace for a genuine
+// micro-blip, then force a fresh session rather than sit frozen on the last frame.
+const DISCONNECT_GRACE_MS = 2500
 
 export type KvsStatus =
   | "connecting"
@@ -55,6 +60,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     let signaling: SignalingClient | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null
     let backoff = 1000
 
     if (!channel) return
@@ -84,6 +90,10 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     // Close the peer connection + signaling client without touching the <video>
     // element, so a transient reconnect keeps the last frame on screen.
     function teardown() {
+      if (disconnectTimer) {
+        clearTimeout(disconnectTimer)
+        disconnectTimer = null
+      }
       if (signaling) {
         try {
           signaling.close()
@@ -234,7 +244,11 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         pc.addEventListener("track", (event) => {
           if (cancelled) return
           backoff = 1000
-          if (videoRef.current && !videoRef.current.srcObject) {
+          // Always (re)attach the incoming stream. On a reconnect the old
+          // srcObject still points at the previous (now-dead) stream, so only
+          // attaching when empty would leave the <video> frozen on the last
+          // frame. Assigning the same stream object twice is a harmless no-op.
+          if (videoRef.current && videoRef.current.srcObject !== event.streams[0]) {
             videoRef.current.srcObject = event.streams[0]
           }
           setStatus("connected")
@@ -243,10 +257,31 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
 
         pc.addEventListener("connectionstatechange", () => {
           if (cancelled || !pc) return
-          if (pc.connectionState === "failed") {
+          const state = pc.connectionState
+          if (state === "connected") {
+            // (Re)connected — cancel any pending disconnect-grace reconnect.
+            if (disconnectTimer) {
+              clearTimeout(disconnectTimer)
+              disconnectTimer = null
+            }
+          } else if (state === "failed") {
+            // Hard failure — reconnect immediately.
             setStatus("closed")
             teardown()
             scheduleReconnect()
+          } else if (state === "disconnected") {
+            // Most common drop path (NAT/TURN/LTE blip). The master already tore
+            // down its session, so the browser won't recover on its own; wait a
+            // short grace for a real micro-blip, then force a fresh session.
+            if (!disconnectTimer) {
+              disconnectTimer = setTimeout(() => {
+                disconnectTimer = null
+                if (cancelled || !pc || pc.connectionState === "connected") return
+                setStatus("closed")
+                teardown()
+                scheduleReconnect()
+              }, DISCONNECT_GRACE_MS)
+            }
           }
         })
 

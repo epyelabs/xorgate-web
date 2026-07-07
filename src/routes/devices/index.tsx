@@ -34,6 +34,7 @@ import { listDevicesResponseSchema } from "@/lib/schemas"
 import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
+import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 import {
@@ -230,30 +231,32 @@ function DevicesListPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-      <header className="flex flex-wrap items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
-          <p className="text-sm text-muted-foreground">
-            Physical units in the field. Status reflects the last heartbeat from
-            the edge SDK.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => exportCsv(filtered)}
-            disabled={!devices || filtered.length === 0}
-          >
-            <FileDownIcon />
-            Export CSV
-          </Button>
-          <Button variant="default" size="lg" onClick={handleProvision}>
-            <PlusIcon />
-            Register device
-          </Button>
-        </div>
-      </header>
+      <StickyHeader className="border-b border-border pb-4">
+        <header className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
+            <p className="text-sm text-muted-foreground">
+              Physical units in the field. Status reflects the last heartbeat
+              from the edge SDK.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => exportCsv(filtered)}
+              disabled={!devices || filtered.length === 0}
+            >
+              <FileDownIcon />
+              Export CSV
+            </Button>
+            <Button variant="default" size="lg" onClick={handleProvision}>
+              <PlusIcon />
+              Register device
+            </Button>
+          </div>
+        </header>
+      </StickyHeader>
 
       {isLoading && !error ? (
         <DevicesKpiSkeleton />

@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { StickyHeader } from "@/components/sticky-header"
 import {
   ApiError,
   getDevice,
@@ -154,114 +155,116 @@ function DeviceLayout() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 pt-0">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Avatar size="lg">
-              <AvatarFallback>
-                {device ? deviceInitials(device) : "—"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold tracking-tight">
-                  {device?.name ?? device?.serial ?? "Device"}
-                </h1>
-                {device ? (
-                  <Badge variant={statusVariant(device.status)}>
-                    {device.status}
-                  </Badge>
-                ) : null}
-              </div>
-              {device ? (
-                <p className="text-xs text-muted-foreground">
-                  {deviceModel ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setModelDialogOpen(true)}
-                        className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
-                      >
-                        {deviceModel.name}
-                      </button>
-                      {" · "}
-                    </>
+      <StickyHeader className="flex flex-col gap-3">
+        <header className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar size="lg">
+                <AvatarFallback>
+                  {device ? deviceInitials(device) : "—"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-semibold tracking-tight">
+                    {device?.name ?? device?.serial ?? "Device"}
+                  </h1>
+                  {device ? (
+                    <Badge variant={statusVariant(device.status)}>
+                      {device.status}
+                    </Badge>
                   ) : null}
-                  Last seen {formatRelative(device.lastSeenAt)}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{id}</p>
-              )}
+                </div>
+                {device ? (
+                  <p className="text-xs text-muted-foreground">
+                    {deviceModel ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setModelDialogOpen(true)}
+                          className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+                        >
+                          {deviceModel.name}
+                        </button>
+                        {" · "}
+                      </>
+                    ) : null}
+                    Last seen {formatRelative(device.lastSeenAt)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{id}</p>
+                )}
+              </div>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!device}
+              onClick={() => setRebootDialogOpen(true)}
+              className="self-start"
+            >
+              Reboot Device
+            </Button>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!device}
-            onClick={() => setRebootDialogOpen(true)}
-            className="self-start"
-          >
-            Reboot Device
-          </Button>
+          {/* Commenting this out for now, will need to improve later */}
+          {/* {error ? (
+            <p className="text-sm text-destructive">{error}</p>
+          ) : device === null ? (
+            <Skeleton className="h-4 w-96 max-w-full" />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Serial {device.serial} · Model {device.deviceModelId} · fw{" "}
+              {device.firmwareVersion ?? "-"} · Last seen{" "}
+              {formatTimestamp(device.lastSeenAt)}
+            </p>
+          )} */}
+        </header>
+
+        <div className="border-b border-border">
+          <Tabs value={activeTab}>
+            <TabsList variant="line">
+              <TabsTrigger value="overview" asChild>
+                <Link to="/devices/$id/overview" params={{ id }}>
+                  Overview
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="streams" asChild>
+                <Link to="/devices/$id/streams" params={{ id }}>
+                  Active Streams
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="telemetry" asChild>
+                <Link to="/devices/$id/telemetry" params={{ id }}>
+                  Telemetry History
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="media" asChild>
+                <Link to="/devices/$id/media" params={{ id }}>
+                  Media Recordings
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger value="workflows" asChild>
+                <Link to="/devices/$id/workflows" params={{ id }}>
+                  Workflows
+                </Link>
+              </TabsTrigger>
+              {/* Temporarily hide this tab */}
+              {/* <TabsTrigger value="benchmark" asChild>
+                <Link to="/devices/$id/benchmark" params={{ id }}>
+                  Hardware Benchmark
+                </Link>
+              </TabsTrigger> */}
+              <TabsTrigger value="settings" asChild>
+                <Link to="/devices/$id/settings" params={{ id }}>
+                  Settings
+                </Link>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-
-        {/* Commenting this out for now, will need to improve later */}
-        {/* {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : device === null ? (
-          <Skeleton className="h-4 w-96 max-w-full" />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Serial {device.serial} · Model {device.deviceModelId} · fw{" "}
-            {device.firmwareVersion ?? "-"} · Last seen{" "}
-            {formatTimestamp(device.lastSeenAt)}
-          </p>
-        )} */}
-      </header>
-
-      <div className="border-b border-border">
-        <Tabs value={activeTab}>
-          <TabsList variant="line">
-            <TabsTrigger value="overview" asChild>
-              <Link to="/devices/$id/overview" params={{ id }}>
-                Overview
-              </Link>
-            </TabsTrigger>
-            <TabsTrigger value="streams" asChild>
-              <Link to="/devices/$id/streams" params={{ id }}>
-                Active Streams
-              </Link>
-            </TabsTrigger>
-            <TabsTrigger value="telemetry" asChild>
-              <Link to="/devices/$id/telemetry" params={{ id }}>
-                Telemetry History
-              </Link>
-            </TabsTrigger>
-            <TabsTrigger value="media" asChild>
-              <Link to="/devices/$id/media" params={{ id }}>
-                Media Recordings
-              </Link>
-            </TabsTrigger>
-            <TabsTrigger value="workflows" asChild>
-              <Link to="/devices/$id/workflows" params={{ id }}>
-                Workflows
-              </Link>
-            </TabsTrigger>
-            {/* Temporarily hide this tab */}
-            {/* <TabsTrigger value="benchmark" asChild>
-              <Link to="/devices/$id/benchmark" params={{ id }}>
-                Hardware Benchmark
-              </Link>
-            </TabsTrigger> */}
-            <TabsTrigger value="settings" asChild>
-              <Link to="/devices/$id/settings" params={{ id }}>
-                Settings
-              </Link>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      </StickyHeader>
 
       <Outlet />
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/workflow-run-schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { StickyHeader } from "@/components/sticky-header"
 import { RunEvents } from "./-components/run-events"
 import { RunGraph } from "./-components/run-graph"
 import { RunMetrics } from "./-components/run-metrics"
@@ -160,58 +161,62 @@ function WorkflowInstanceDetailPage() {
   return (
     <div className="flex flex-1 flex-col gap-5 p-4 pt-0">
       {/* Overview & status */}
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant={statusVariant(run.status)}
-            className={cn(statusColor(run.status))}
-          >
-            {run.status}
-          </Badge>
-          <Link
-            to="/workflow-templates/$id"
-            params={{ id: run.templateId }}
-            className="text-xl font-semibold tracking-tight hover:underline"
-          >
-            {run.templateName}
-          </Link>
-          <span className="text-sm text-muted-foreground">
-            v{run.templateVersion}
-          </span>
-          <div className="ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRerun}
-              disabled={busy}
+      <StickyHeader className="border-b border-border pb-4">
+        <header className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={statusVariant(run.status)}
+              className={cn(statusColor(run.status))}
             >
-              <RotateCwIcon />
-              Re-run
-            </Button>
+              {run.status}
+            </Badge>
+            <Link
+              to="/workflow-templates/$id"
+              params={{ id: run.templateId }}
+              className="text-xl font-semibold tracking-tight hover:underline"
+            >
+              {run.templateName}
+            </Link>
+            <span className="text-sm text-muted-foreground">
+              v{run.templateVersion}
+            </span>
+            <div className="ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRerun}
+                disabled={busy}
+              >
+                <RotateCwIcon />
+                Re-run
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            Device{" "}
-            <span className="font-medium text-foreground">{run.deviceName}</span>
-          </span>
-          <span>·</span>
-          <span>Workspace {run.workspaceName}</span>
-          <span>·</span>
-          <span>trigger: {run.trigger}</span>
-          <span>·</span>
-          <span>started {formatTimestamp(run.startedAt)}</span>
-          <span>·</span>
-          <span>ended {formatTimestamp(run.endedAt)}</span>
-          <span>·</span>
-          <span>{formatDuration(run.durationMs)}</span>
-          <span>·</span>
-          <span>
-            triggered by{" "}
-            <span className="text-foreground">{run.triggeredBy}</span>
-          </span>
-        </div>
-      </header>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              Device{" "}
+              <span className="font-medium text-foreground">
+                {run.deviceName}
+              </span>
+            </span>
+            <span>·</span>
+            <span>Workspace {run.workspaceName}</span>
+            <span>·</span>
+            <span>trigger: {run.trigger}</span>
+            <span>·</span>
+            <span>started {formatTimestamp(run.startedAt)}</span>
+            <span>·</span>
+            <span>ended {formatTimestamp(run.endedAt)}</span>
+            <span>·</span>
+            <span>{formatDuration(run.durationMs)}</span>
+            <span>·</span>
+            <span>
+              triggered by{" "}
+              <span className="text-foreground">{run.triggeredBy}</span>
+            </span>
+          </div>
+        </header>
+      </StickyHeader>
 
       {/* Error band (failed runs only) */}
       {run.status === "failed" && run.error ? (

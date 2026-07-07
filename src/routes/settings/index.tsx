@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { StickyHeader } from "@/components/sticky-header"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 
@@ -52,12 +53,14 @@ function OrganizationSettingsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage settings for your organization.
-        </p>
-      </header>
+      <StickyHeader className="border-b border-border pb-4">
+        <header className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage settings for your organization.
+          </p>
+        </header>
+      </StickyHeader>
 
       <div className="flex flex-col gap-6">
         <Card>

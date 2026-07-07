@@ -31,6 +31,7 @@ import {
   type WorkflowTemplateSummary,
 } from "@/lib/workflow-schemas"
 import { useAuthStore } from "@/store/auth"
+import { StickyHeader } from "@/components/sticky-header"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
 import {
   ColHead,
@@ -116,23 +117,29 @@ function WorkflowTemplatesListPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-      <header className="flex flex-wrap items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Workflow Templates
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Reusable intelligence pipelines. Compose device data into
-            conclusions, then deploy onto fleets.
-          </p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="default" size="lg" onClick={() => setCreateOpen(true)}>
-            <PlusIcon />
-            New template
-          </Button>
-        </div>
-      </header>
+      <StickyHeader className="border-b border-border pb-4">
+        <header className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Workflow Templates
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Reusable intelligence pipelines. Compose device data into
+              conclusions, then deploy onto fleets.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="default"
+              size="lg"
+              onClick={() => setCreateOpen(true)}
+            >
+              <PlusIcon />
+              New template
+            </Button>
+          </div>
+        </header>
+      </StickyHeader>
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">

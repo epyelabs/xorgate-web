@@ -26,6 +26,7 @@ import {
 } from "@/lib/workflow-run-schemas"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
+import { StickyHeader } from "@/components/sticky-header"
 import {
   ColHead,
   EmptyState,
@@ -113,17 +114,19 @@ function WorkflowInstancesListPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
-      <header className="flex flex-wrap items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Workflow Instances
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Workflow runs in this workspace, triggered by workflows attached to
-            devices.
-          </p>
-        </div>
-      </header>
+      <StickyHeader className="border-b border-border pb-4">
+        <header className="flex flex-wrap items-start gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Workflow Instances
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Workflow runs in this workspace, triggered by workflows attached
+              to devices.
+            </p>
+          </div>
+        </header>
+      </StickyHeader>
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">

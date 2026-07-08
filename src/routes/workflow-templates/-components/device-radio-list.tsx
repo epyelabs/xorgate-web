@@ -30,7 +30,17 @@ export function DeviceRadioList({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { devices: all } = await listDevices()
+        // Page through the whole fleet so the picker isn't capped at one page.
+        const all: Device[] = []
+        let offset = 0
+        let total = Infinity
+        while (offset < total && all.length < 5000) {
+          const { devices, page } = await listDevices({ limit: 500, offset })
+          all.push(...devices)
+          total = page?.total ?? devices.length
+          if (devices.length === 0) break
+          offset += 500
+        }
         if (!cancelled) setDevices(all)
       } catch (err) {
         if (!cancelled) setError((err as Error).message)

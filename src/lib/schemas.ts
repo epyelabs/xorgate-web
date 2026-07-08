@@ -1,5 +1,14 @@
 import { z } from "zod"
 
+// Shared pagination block returned by standardized list endpoints
+// (see backend src/utils/list-params.ts).
+export const pageSchema = z.object({
+  limit: z.number(),
+  offset: z.number(),
+  order: z.enum(["asc", "desc"]),
+  total: z.number(),
+})
+
 export const loginSchema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -86,6 +95,8 @@ export const deviceSchema = z.object({
 
 export const listDevicesResponseSchema = z.object({
   devices: z.array(deviceSchema),
+  // Present on the standardized list endpoint; absent on older responses.
+  page: pageSchema.optional(),
 })
 
 export const getDeviceResponseSchema = z.object({
@@ -202,15 +213,6 @@ export const kvsChannelSchema = z.object({
 
 export const getKvsChannelsResponseSchema = z.object({
   channels: z.array(kvsChannelSchema),
-})
-
-// Shared pagination block returned by standardized list endpoints
-// (see backend src/utils/list-params.ts).
-export const pageSchema = z.object({
-  limit: z.number(),
-  offset: z.number(),
-  order: z.enum(["asc", "desc"]),
-  total: z.number(),
 })
 
 // --- Recordings: GET /devices/{id}/recordings ---

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { pageSchema } from "./schemas"
 
 // Zod schemas + inferred types for the Workflow Templates feature. These mirror
 // the shapes the real backend will return (see the API CRUD plan), so swapping
@@ -91,7 +92,18 @@ export const workflowTemplateDetailSchema = workflowTemplateSummarySchema.extend
 
 export const listWorkflowTemplatesResponseSchema = z.object({
   templates: z.array(workflowTemplateSummarySchema),
+  // Present on the standardized list endpoint; absent on older responses.
+  page: pageSchema.optional(),
 })
+
+// Query params for the standardized workflow-templates list endpoint.
+export interface WorkflowTemplatesListParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  sort?: "updatedAt" | "createdAt" | "name"
+  status?: TemplateStatus
+}
 
 export const getWorkflowTemplateResponseSchema = z.object({
   template: workflowTemplateDetailSchema,

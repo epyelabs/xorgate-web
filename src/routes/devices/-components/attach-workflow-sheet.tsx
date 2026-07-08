@@ -93,13 +93,23 @@ export function AttachWorkflowSheet({
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await listWorkflowTemplates()
-        const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /workflow-templates response shape")
+        // Page through the whole set so the picker isn't capped at one page.
+        const all: WorkflowTemplateSummary[] = []
+        let offset = 0
+        let total = Infinity
+        while (offset < total && all.length < 5000) {
+          const raw = await listWorkflowTemplates({ limit: 500, offset })
+          const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
+          if (!parsed.success) {
+            throw new Error("Unexpected /workflow-templates response shape")
+          }
+          all.push(...parsed.data.templates)
+          total = parsed.data.page?.total ?? parsed.data.templates.length
+          if (parsed.data.templates.length === 0) break
+          offset += 500
         }
         if (cancelled) return
-        setTemplates(parsed.data.templates.filter((t) => t.status === "published"))
+        setTemplates(all.filter((t) => t.status === "published"))
       } catch (err) {
         if (!cancelled) toast.error((err as Error).message)
       }

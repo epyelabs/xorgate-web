@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
@@ -48,69 +48,139 @@ const TEMPLATE_STATUS_COLOR: Record<TemplateStatus, string> = {
   draft: "bg-amber-500",
 }
 
+type SortKey = "updatedAt" | "name"
+const PAGE_SIZES = [25, 50, 100]
+const DEFAULT_SIZE = 25
+const EXPORT_CAP = 5000
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")
 }
 
+interface TemplatesData {
+  templates: WorkflowTemplateSummary[]
+  total: number
+}
+
 function WorkflowTemplatesListPage() {
-  const [templates, setTemplates] = useState<WorkflowTemplateSummary[] | null>(null)
+  const [data, setData] = useState<TemplatesData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<TemplateStatus | "any">("any")
   const [createOpen, setCreateOpen] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
+  const [page, setPage] = useState(1)
+  const [size, setSize] = useState(DEFAULT_SIZE)
+  const [sortBy, setSortBy] = useState<SortKey>("updatedAt")
+  const [order, setOrder] = useState<"asc" | "desc">("desc")
+
+  const status = statusFilter === "any" ? undefined : statusFilter
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await listWorkflowTemplates()
+        const raw = await listWorkflowTemplates({
+          limit: size,
+          offset: (page - 1) * size,
+          order,
+          sort: sortBy,
+          status,
+        })
         const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
         if (!parsed.success) {
           throw new Error("Unexpected /workflow-templates response shape")
         }
         if (cancelled) return
         setError(null)
-        setTemplates(parsed.data.templates)
+        setData({
+          templates: parsed.data.templates,
+          total: parsed.data.page?.total ?? parsed.data.templates.length,
+        })
       } catch (err) {
         const message = (err as Error).message
         if (cancelled) return
         setError(message)
-        setTemplates([])
+        setData({ templates: [], total: 0 })
         toast.error(message)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [reloadNonce])
+  }, [reloadNonce, page, size, sortBy, order, status])
 
-  const isLoading = templates === null
+  const isLoading = data === null
 
-  const filtered = useMemo(() => {
-    if (!templates) return []
-    const q = query.trim().toLowerCase()
-    return templates.filter((t) => {
-      if (statusFilter !== "any" && t.status !== statusFilter) return false
-      if (!q) return true
-      return (
-        t.name.toLowerCase().includes(q) ||
-        (t.description ?? "").toLowerCase().includes(q)
+  // Client-side name/description search over the current page.
+  const q = query.trim().toLowerCase()
+  const templates = data?.templates ?? []
+  const visible = q
+    ? templates.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.description ?? "").toLowerCase().includes(q)
       )
-    })
-  }, [templates, query, statusFilter])
+    : templates
+  const isFiltered = q !== "" || statusFilter !== "any"
 
+  const setStatus = (next: TemplateStatus | "any") => {
+    setStatusFilter(next)
+    setPage(1)
+  }
   const clearFilters = () => {
     setQuery("")
     setStatusFilter("any")
+    setPage(1)
   }
-  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+  const onToggleSort = (columnId: string) => {
+    const key = columnId as SortKey
+    if (key === sortBy) {
+      setOrder((o) => (o === "asc" ? "desc" : "asc"))
+    } else {
+      setSortBy(key)
+      setOrder("desc")
+    }
+    setPage(1)
+  }
+
+  // Fetch every template matching the current server filters (paged), then apply
+  // the client search — the table's standard Export CSV calls this.
+  const getExportRows = async (): Promise<WorkflowTemplateSummary[]> => {
+    const pageLimit = 200
+    const all: WorkflowTemplateSummary[] = []
+    let off = 0
+    let total = Infinity
+    while (off < total && all.length < EXPORT_CAP) {
+      const raw = await listWorkflowTemplates({
+        limit: pageLimit,
+        offset: off,
+        order,
+        sort: sortBy,
+        status,
+      })
+      const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
+      if (!parsed.success) break
+      all.push(...parsed.data.templates)
+      total = parsed.data.page?.total ?? parsed.data.templates.length
+      if (parsed.data.templates.length === 0) break
+      off += pageLimit
+    }
+    return q
+      ? all.filter(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            (t.description ?? "").toLowerCase().includes(q)
+        )
+      : all
+  }
 
   const columns: DataTableColumn<WorkflowTemplateSummary>[] = [
     {
       id: "name",
       header: "Name",
+      sortable: true,
       cell: (template) => (
         <Link
           to="/workflow-templates/$id"
@@ -127,6 +197,7 @@ function WorkflowTemplatesListPage() {
           ) : null}
         </Link>
       ),
+      csvValue: (template) => template.name,
     },
     {
       id: "status",
@@ -137,6 +208,7 @@ function WorkflowTemplatesListPage() {
           label={template.status}
         />
       ),
+      csvValue: (template) => template.status,
     },
     {
       id: "version",
@@ -153,6 +225,8 @@ function WorkflowTemplatesListPage() {
           ) : null}
         </>
       ),
+      csvHeader: "Version",
+      csvValue: (template) => template.publishedVersion ?? template.currentVersion,
     },
     {
       id: "usedBy",
@@ -162,6 +236,8 @@ function WorkflowTemplatesListPage() {
         template.usedBy > 0
           ? `${template.usedBy} ${template.usedBy === 1 ? "deployment" : "deployments"}`
           : "—",
+      csvHeader: "Used by",
+      csvValue: (template) => template.usedBy,
     },
     {
       id: "createdBy",
@@ -178,12 +254,17 @@ function WorkflowTemplatesListPage() {
           </span>
         </span>
       ),
+      csvHeader: "Created by",
+      csvValue: (template) => template.createdBy.name,
     },
     {
-      id: "updated",
+      id: "updatedAt",
       header: "Updated",
+      sortable: true,
       cellClassName: "text-muted-foreground tabular-nums",
       cell: (template) => `${formatRelative(template.updatedAt)} ago`,
+      csvHeader: "Updated",
+      csvValue: (template) => template.updatedAt,
     },
   ]
 
@@ -198,7 +279,7 @@ function WorkflowTemplatesListPage() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {STATUS_OPTIONS.map((opt) => (
-          <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
+          <DropdownMenuItem key={opt} onSelect={() => setStatus(opt)}>
             {opt}
           </DropdownMenuItem>
         ))}
@@ -237,10 +318,12 @@ function WorkflowTemplatesListPage() {
       ) : (
         <DataTable
           columns={columns}
-          rows={filtered}
+          rows={visible}
           getRowKey={(template) => template.id}
           loading={isLoading}
           isFiltered={isFiltered}
+          sort={{ columnId: sortBy, dir: order }}
+          onToggleSort={onToggleSort}
           toolbar={
             <DataTableToolbar
               search={{
@@ -248,12 +331,26 @@ function WorkflowTemplatesListPage() {
                 onChange: setQuery,
                 placeholder: "Filter by name or description…",
               }}
+              searchAlign="right"
               filters={statusFilterMenu}
-              right={
-                templates ? `Showing ${filtered.length} of ${templates.length}` : null
-              }
             />
           }
+          pagination={{
+            page,
+            pageSize: size,
+            total: data?.total ?? 0,
+            rowsOnPage: visible.length,
+            pageSizes: PAGE_SIZES,
+            onPageChange: setPage,
+            onPageSizeChange: (s) => {
+              setSize(s)
+              setPage(1)
+            },
+          }}
+          exportCsv={{
+            filename: "workflow-templates.csv",
+            getRows: getExportRows,
+          }}
           empty={
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
               <p className="text-sm font-medium">No workflow templates yet</p>

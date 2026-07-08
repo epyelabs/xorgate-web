@@ -1,4 +1,4 @@
-import { apiRequest } from "./api"
+import { apiRequest, type Page } from "./api"
 import { NODE_CATALOG_BY_TYPE } from "./workflow-nodes"
 import type {
   SimulationResult,
@@ -6,6 +6,7 @@ import type {
   WorkflowDeployment,
   WorkflowTemplateDetail,
   WorkflowTemplateSummary,
+  WorkflowTemplatesListParams,
   WorkflowTemplateVersion,
 } from "./workflow-schemas"
 
@@ -14,10 +15,17 @@ import type {
 // that consume it needed no edits; list/detail responses are still validated by
 // the same `.safeParse()` pattern in the routes.
 
-export async function listWorkflowTemplates(): Promise<{
-  templates: WorkflowTemplateSummary[]
-}> {
-  return apiRequest("/workflow-templates")
+export async function listWorkflowTemplates(
+  params: WorkflowTemplatesListParams = {},
+): Promise<{ templates: WorkflowTemplateSummary[]; page?: Page }> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.sort) qs.set("sort", params.sort)
+  if (params.status) qs.set("status", params.status)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/workflow-templates${suffix}`)
 }
 
 export async function getWorkflowTemplate(

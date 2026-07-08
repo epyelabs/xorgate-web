@@ -153,8 +153,25 @@ export interface Device {
   updatedAt: string
 }
 
-export async function listDevices(): Promise<{ devices: Device[] }> {
-  return apiRequest("/devices")
+export interface DevicesListParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  sort?: "updatedAt" | "createdAt" | "lastSeenAt" | "serial" | "name"
+  status?: DeviceStatus
+}
+
+export async function listDevices(
+  params: DevicesListParams = {}
+): Promise<{ devices: Device[]; page?: Page }> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.sort) qs.set("sort", params.sort)
+  if (params.status) qs.set("status", params.status)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/devices${suffix}`)
 }
 
 export async function getDevice(id: string): Promise<{ device: Device }> {

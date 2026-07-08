@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import {
-  ChevronDownIcon,
-  FileDownIcon,
-  FilterIcon,
-  PlusIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -85,49 +80,14 @@ const DEVICE_STATUS_COLOR: Record<DeviceStatus, string> = {
   decommissioned: "bg-zinc-400",
 }
 
-function csvEscape(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`
-  }
-  return value
-}
-
-function exportCsv(rows: Device[]) {
-  const header = [
-    "serial",
-    "name",
-    "status",
-    "firmware",
-    "device_model_id",
-    "last_seen_at",
-    "created_at",
-  ]
-  const lines = [header.join(",")]
-  for (const d of rows) {
-    lines.push(
-      [
-        d.serial,
-        d.name ?? "",
-        d.status,
-        d.firmwareVersion ?? "",
-        d.deviceModelId,
-        d.lastSeenAt ?? "",
-        d.createdAt,
-      ]
-        .map((v) => csvEscape(String(v)))
-        .join(",")
-    )
-  }
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = `devices-${new Date().toISOString().slice(0, 10)}.csv`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-}
+type SortKey = "lastSeenAt" | "createdAt"
+const PAGE_SIZES = [25, 50, 100]
+const DEFAULT_SIZE = 25
+// The KPI tiles aggregate the whole fleet, so the page loads every device (in
+// pages of FLEET_PAGE) and slices/filters/sorts client-side. FLEET_CAP guards
+// against an unbounded load on a very large fleet.
+const FLEET_PAGE = 500
+const FLEET_CAP = 5000
 
 interface DevicesData {
   workspaceId: string | null
@@ -142,24 +102,38 @@ function DevicesListPage() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [provisionOpen, setProvisionOpen] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
+  const [page, setPage] = useState(1)
+  const [size, setSize] = useState(DEFAULT_SIZE)
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [order, setOrder] = useState<"asc" | "desc">("desc")
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await listDevices()
-        const parsed = listDevicesResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /devices response shape")
+        // Load the whole fleet (paged) so the KPI counts are accurate; the
+        // table paginates/filters/sorts this client-side. Default server order
+        // (updatedAt desc) is the table's baseline order.
+        const all: Device[] = []
+        let offset = 0
+        let total = Infinity
+        while (offset < total && all.length < FLEET_CAP) {
+          const raw = await listDevices({ limit: FLEET_PAGE, offset })
+          const parsed = listDevicesResponseSchema.safeParse(raw)
+          if (!parsed.success) {
+            throw new Error("Unexpected /devices response shape")
+          }
+          all.push(...parsed.data.devices)
+          total = parsed.data.page?.total ?? parsed.data.devices.length
+          if (parsed.data.devices.length === 0) break
+          offset += FLEET_PAGE
         }
         if (cancelled) return
         setError(null)
-        setData({
-          workspaceId: currentWorkspaceId,
-          devices: parsed.data.devices,
-        })
+        setData({ workspaceId: currentWorkspaceId, devices: all })
         setSelected(new Set())
+        setPage(1)
       } catch (err) {
         const message = (err as Error).message
         if (cancelled) return
@@ -174,12 +148,13 @@ function DevicesListPage() {
   }, [currentWorkspaceId, reloadNonce])
 
   const isLoading = !data || data.workspaceId !== currentWorkspaceId
-  const devices = isLoading ? null : data.devices
+  const fleet = isLoading ? null : data.devices
 
+  // Status filter + name/serial search (client-side over the whole fleet).
   const filtered = useMemo(() => {
-    if (!devices) return []
+    if (!fleet) return []
     const q = query.trim().toLowerCase()
-    return devices.filter((d) => {
+    return fleet.filter((d) => {
       if (statusFilter !== "any" && d.status !== statusFilter) return false
       if (!q) return true
       return (
@@ -187,26 +162,64 @@ function DevicesListPage() {
         (d.name ?? "").toLowerCase().includes(q)
       )
     })
-  }, [devices, query, statusFilter])
+  }, [fleet, query, statusFilter])
 
+  // Optional client sort (Last seen / Created). Without an active sort the fleet
+  // keeps the server's updatedAt-desc order.
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered
+    const dir = order === "asc" ? 1 : -1
+    const value = (d: Device) =>
+      sortKey === "createdAt"
+        ? Date.parse(d.createdAt)
+        : d.lastSeenAt
+          ? Date.parse(d.lastSeenAt)
+          : -Infinity
+    return [...filtered].sort((a, b) => (value(a) - value(b)) * dir)
+  }, [filtered, sortKey, order])
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / size))
+  const safePage = Math.min(page, pageCount)
+  const pageRows = sorted.slice((safePage - 1) * size, safePage * size)
+
+  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+
+  const setSearch = (value: string) => {
+    setQuery(value)
+    setPage(1)
+  }
+  const setStatus = (next: DeviceStatus | "any") => {
+    setStatusFilter(next)
+    setPage(1)
+  }
   const clearFilters = () => {
     setQuery("")
     setStatusFilter("any")
+    setPage(1)
   }
-  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+  const onToggleSort = (columnId: string) => {
+    const key = columnId as SortKey
+    if (key === sortKey) {
+      setOrder((o) => (o === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setOrder("desc")
+    }
+    setPage(1)
+  }
 
-  const allFilteredSelected =
-    filtered.length > 0 && filtered.every((d) => selected.has(d.id))
-  const someFilteredSelected =
-    filtered.some((d) => selected.has(d.id)) && !allFilteredSelected
+  const allPageSelected =
+    pageRows.length > 0 && pageRows.every((d) => selected.has(d.id))
+  const somePageSelected =
+    pageRows.some((d) => selected.has(d.id)) && !allPageSelected
 
   const toggleAll = () => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (allFilteredSelected) {
-        for (const d of filtered) next.delete(d.id)
+      if (allPageSelected) {
+        for (const d of pageRows) next.delete(d.id)
       } else {
-        for (const d of filtered) next.add(d.id)
+        for (const d of pageRows) next.add(d.id)
       }
       return next
     })
@@ -246,6 +259,9 @@ function DevicesListPage() {
           ) : null}
         </Link>
       ),
+      csvHeader: "Device",
+      csvValue: (device) =>
+        device.name ? `${device.name} (${device.serial})` : device.serial,
     },
     {
       id: "status",
@@ -253,12 +269,14 @@ function DevicesListPage() {
       cell: (device) => (
         <StatusDot color={DEVICE_STATUS_COLOR[device.status]} label={device.status} />
       ),
+      csvValue: (device) => device.status,
     },
     {
       id: "firmware",
       header: "Firmware",
       cellClassName: "text-muted-foreground tabular-nums",
       cell: (device) => device.firmwareVersion ?? "—",
+      csvValue: (device) => device.firmwareVersion ?? "",
     },
     {
       id: "model",
@@ -274,10 +292,13 @@ function DevicesListPage() {
           <TooltipContent>{device.deviceModelId}</TooltipContent>
         </Tooltip>
       ),
+      csvHeader: "Model",
+      csvValue: (device) => device.deviceModelId,
     },
     {
-      id: "lastSeen",
+      id: "lastSeenAt",
       header: "Last seen",
+      sortable: true,
       cellClassName: "text-muted-foreground tabular-nums",
       cell: (device) => (
         <Tooltip>
@@ -289,12 +310,17 @@ function DevicesListPage() {
           <TooltipContent>{formatTimestamp(device.lastSeenAt)}</TooltipContent>
         </Tooltip>
       ),
+      csvHeader: "Last seen",
+      csvValue: (device) => device.lastSeenAt ?? "",
     },
     {
-      id: "created",
+      id: "createdAt",
       header: "Created",
+      sortable: true,
       cellClassName: "text-muted-foreground tabular-nums",
       cell: (device) => formatDate(device.createdAt),
+      csvHeader: "Created",
+      csvValue: (device) => device.createdAt,
     },
   ]
 
@@ -309,7 +335,7 @@ function DevicesListPage() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {STATUS_OPTIONS.map((opt) => (
-          <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
+          <DropdownMenuItem key={opt} onSelect={() => setStatus(opt)}>
             {opt}
           </DropdownMenuItem>
         ))}
@@ -329,15 +355,6 @@ function DevicesListPage() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => exportCsv(filtered)}
-              disabled={!devices || filtered.length === 0}
-            >
-              <FileDownIcon />
-              Export CSV
-            </Button>
             <Button variant="default" size="lg" onClick={handleProvision}>
               <PlusIcon />
               Register device
@@ -348,8 +365,8 @@ function DevicesListPage() {
 
       {isLoading && !error ? (
         <DevicesKpiSkeleton />
-      ) : devices ? (
-        <DevicesKpi devices={devices} />
+      ) : fleet ? (
+        <DevicesKpi devices={fleet} />
       ) : null}
 
       {error ? (
@@ -357,16 +374,18 @@ function DevicesListPage() {
       ) : (
         <DataTable
           columns={columns}
-          rows={filtered}
+          rows={pageRows}
           getRowKey={(device) => device.id}
           loading={isLoading}
           skeletonRows={6}
           isFiltered={isFiltered}
+          sort={sortKey ? { columnId: sortKey, dir: order } : undefined}
+          onToggleSort={onToggleSort}
           selection={{
             isSelected: (d) => selected.has(d.id),
             onToggle: (d) => toggleOne(d.id),
-            allSelected: allFilteredSelected,
-            someSelected: someFilteredSelected,
+            allSelected: allPageSelected,
+            someSelected: somePageSelected,
             onToggleAll: toggleAll,
             rowLabel: (d) => `Select ${d.serial}`,
           }}
@@ -374,15 +393,29 @@ function DevicesListPage() {
             <DataTableToolbar
               search={{
                 value: query,
-                onChange: setQuery,
+                onChange: setSearch,
                 placeholder: "Filter by name or serial…",
               }}
+              searchAlign="right"
               filters={statusFilterMenu}
-              right={
-                devices ? `Showing ${filtered.length} of ${devices.length}` : null
-              }
             />
           }
+          pagination={{
+            page: safePage,
+            pageSize: size,
+            total: sorted.length,
+            rowsOnPage: pageRows.length,
+            pageSizes: PAGE_SIZES,
+            onPageChange: setPage,
+            onPageSizeChange: (s) => {
+              setSize(s)
+              setPage(1)
+            },
+          }}
+          exportCsv={{
+            filename: `devices-${new Date().toISOString().slice(0, 10)}.csv`,
+            getRows: () => sorted,
+          }}
           empty={
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
               <div className="flex flex-col gap-1">

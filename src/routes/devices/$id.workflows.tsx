@@ -373,10 +373,6 @@ function DeviceWorkflowsPage() {
             <h2 className="font-heading text-sm font-medium">
               Attached workflows
             </h2>
-            <p className="text-xs/relaxed text-muted-foreground">
-              Workflow templates that run on this device from its telemetry and
-              recordings.
-            </p>
           </div>
           <Button size="sm" onClick={() => setAttachOpen(true)}>
             <PlusIcon />
@@ -397,9 +393,6 @@ function DeviceWorkflowsPage() {
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-0.5">
           <h2 className="font-heading text-sm font-medium">Recent runs</h2>
-          <p className="text-xs/relaxed text-muted-foreground">
-            The latest workflow executions triggered on this device.
-          </p>
         </div>
         <DataTable
           card

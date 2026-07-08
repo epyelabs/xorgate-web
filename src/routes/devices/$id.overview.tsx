@@ -3,13 +3,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { ArrowRightIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TelemetryTable } from "@/components/telemetry-table"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
@@ -219,63 +213,57 @@ function DeviceOverviewPage() {
         </Card>
       ) : null}
 
-      {/* Recent recorded telemetry — reuses the Telemetry History table */}
-      {recentTelemetry.length > 0 ? (
+      {/* Recent recorded telemetry — the title + "View all" sit in a header row
+          above a standalone table card (matching the Workflows tab), not inside
+          the card header. */}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="font-heading text-sm font-medium">
+              Recent recorded telemetry
+            </h2>
+          </div>
+          {telemetryViewAll}
+        </div>
         <TelemetryTable
-          title="Recent recorded telemetry"
           history={recentTelemetry}
           metrics={recordedMetrics}
           units={recordedUnits}
-          action={telemetryViewAll}
           footer={persistNotice}
           pinFirstColumn
+          loading={recordedLoading}
+          empty={
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No recorded telemetry yet.
+            </p>
+          }
         />
-      ) : (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Recent recorded telemetry</CardTitle>
-            <CardAction>{telemetryViewAll}</CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {recordedLoading ? (
-              <Skeleton className="h-40 w-full" />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No recorded telemetry yet.
-              </p>
-            )}
-            {persistNotice}
-          </CardContent>
-        </Card>
-      )}
+      </section>
 
-      {/* Recent media recordings — reuses the Media table (playback + delete) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent media recordings</CardTitle>
-          <CardAction>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/devices/$id/media" params={{ id }}>
-                View all
-                <ArrowRightIcon />
-              </Link>
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {recordings === null ? (
-            <Skeleton className="h-24 w-full" />
-          ) : recentRecordings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recordings yet.</p>
-          ) : (
-            <RecordingsTable
-              deviceId={id}
-              recordings={recentRecordings}
-              onChanged={loadRecordings}
-            />
-          )}
-        </CardContent>
-      </Card>
+      {/* Recent media recordings — same header-above-card layout as above. */}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="font-heading text-sm font-medium">
+              Recent media recordings
+            </h2>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/devices/$id/media" params={{ id }}>
+              View all
+              <ArrowRightIcon />
+            </Link>
+          </Button>
+        </div>
+        <RecordingsTable
+          card
+          deviceId={id}
+          recordings={recentRecordings}
+          onChanged={loadRecordings}
+          loading={recordings === null}
+          emptyMessage="No recordings yet."
+        />
+      </section>
     </div>
   )
 }

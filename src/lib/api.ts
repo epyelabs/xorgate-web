@@ -310,6 +310,42 @@ export async function getTelemetryRecent(
   return apiRequest(`/devices/${deviceId}/telemetry/recent${suffix}`)
 }
 
+// A page of raw readings for the Telemetry History table. Unlike getTelemetry
+// (which averages into buckets), these are the actual stored samples, paginated
+// over distinct timestamps and sortable by ts.
+export interface TelemetryReadingsPage {
+  readings: TelemetryReadingRow[]
+  page: {
+    limit: number
+    offset: number
+    order: "asc" | "desc"
+    // Total distinct timestamps (samples) matching the filter — drives page count.
+    total: number
+  }
+}
+
+export async function getTelemetryReadings(
+  deviceId: string,
+  params: {
+    limit?: number
+    offset?: number
+    order?: "asc" | "desc"
+    from?: string
+    to?: string
+    metric?: string
+  } = {}
+): Promise<TelemetryReadingsPage> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.from) qs.set("from", params.from)
+  if (params.to) qs.set("to", params.to)
+  if (params.metric) qs.set("metric", params.metric)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/devices/${deviceId}/telemetry/readings${suffix}`)
+}
+
 export interface DeviceLatestRow {
   metric: string
   value: number | null

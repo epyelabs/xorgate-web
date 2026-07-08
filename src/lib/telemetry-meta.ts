@@ -28,6 +28,23 @@ export function metricLabel(metric: string): string {
   return METRIC_LABELS[metric] ?? metric
 }
 
+// Canonical column order for telemetry tables: metrics known to METRIC_LABELS
+// come first (in their declared order), unknown keys fall to the end sorted
+// alphabetically. Used to give data-derived column sets a stable, readable order.
+const METRIC_ORDER = Object.keys(METRIC_LABELS)
+
+export function orderMetrics(keys: string[]): string[] {
+  const rank = (m: string) => {
+    const i = METRIC_ORDER.indexOf(m)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  return [...keys].sort((a, b) => {
+    const ra = rank(a)
+    const rb = rank(b)
+    return ra !== rb ? ra - rb : a.localeCompare(b)
+  })
+}
+
 export function formatMetricValue(value: number, metric?: string): string {
   // Coordinates need full precision — the default rounding mangles lat/lon.
   if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)

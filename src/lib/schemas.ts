@@ -243,6 +243,16 @@ export const getTelemetryResponseSchema = z.object({
   truncated: z.boolean(),
 })
 
+export const getTelemetryReadingsResponseSchema = z.object({
+  readings: z.array(telemetryReadingSchema),
+  page: z.object({
+    limit: z.number(),
+    offset: z.number(),
+    order: z.enum(["asc", "desc"]),
+    total: z.number(),
+  }),
+})
+
 export const deviceLatestRowSchema = z.object({
   metric: z.string(),
   value: z.number().nullable(),

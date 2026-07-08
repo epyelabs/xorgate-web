@@ -11,7 +11,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { StickyHeader } from "@/components/sticky-header"
 import {
   ApiError,
   getDevice,
@@ -154,8 +153,13 @@ function DeviceLayout() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 pt-0">
-      <StickyHeader className="flex flex-col gap-3">
+    // Fixed to the viewport (SidebarInset is only `min-h-svh`, so a plain
+    // `flex-1` would grow the page). The header stays put and each tab's content
+    // scrolls inside the wrapper below instead of the whole page scrolling. The
+    // page gutter lives on that scroll wrapper (not here) so card ring-outlines
+    // sit inside its clip edge and stay visible on every side.
+    <div className="flex h-[calc(100svh-4rem)] min-h-0 min-w-0 flex-col group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
+      <div className="flex flex-col gap-3 px-4">
         <header className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -264,9 +268,11 @@ function DeviceLayout() {
             </TabsList>
           </Tabs>
         </div>
-      </StickyHeader>
+      </div>
 
-      <Outlet />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        <Outlet />
+      </div>
 
       {deviceModel ? (
         <DeviceModelDialog

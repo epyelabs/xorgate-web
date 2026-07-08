@@ -211,6 +211,10 @@ export const recordingSchema = z.object({
   streamKey: z.string(),
   status: z.enum(["recording", "stopping", "completed", "failed"]),
   trigger: z.enum(["manual", "auto"]),
+  // Why the recording ended (kvs-webrtc-lts §4.1). null while still recording or for
+  // a natural EOS with no explicit reason. Nullable+optional so an older payload that
+  // predates the column still validates.
+  endReason: z.string().nullable().optional(),
   startedAt: z.string(),
   captureStartedAt: z.string().nullable(),
   endedAt: z.string().nullable(),

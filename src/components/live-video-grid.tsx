@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import {
   startAllRecordings,
   startRecording,
   stopRecording,
+  stopRecordingBeacon,
   type KvsChannel,
   type Recording,
 } from "@/lib/api"
@@ -18,6 +19,7 @@ import {
   getDeviceRecordingsResponseSchema,
   getKvsChannelsResponseSchema,
 } from "@/lib/schemas"
+import { getIdToken } from "@/lib/cognito"
 import { useKvsViewer, type KvsStatus } from "@/hooks/use-kvs-viewer"
 
 const STATUS_META: Record<
@@ -143,6 +145,47 @@ export function LiveVideoGrid({
   const [busyStreams, setBusyStreams] = useState<Set<string>>(new Set())
   const [allBusy, setAllBusy] = useState(false)
 
+  // IDs of MANUAL recordings this tab started, for the pagehide courtesy stop below.
+  // Scoped to this tab (never auto rows, never rows started elsewhere) per the locked
+  // "keep recording server-side" decision.
+  const manualStartedIdsRef = useRef<Set<string>>(new Set())
+  // A synchronously-readable id token snapshot for the pagehide beacon, which cannot
+  // await getIdToken(). Refreshed on mount + periodically; the token is valid ~1h so a
+  // slightly stale copy is fine for a best-effort courtesy stop.
+  const authTokenRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const token = await getIdToken()
+        if (!cancelled) authTokenRef.current = token
+      } catch {
+        // ignore; the beacon simply won't fire without a token
+      }
+    }
+    void refresh()
+    const t = setInterval(() => void refresh(), 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [])
+
+  // Courtesy stop on tab close (manual recordings started in THIS tab only). Best-
+  // effort: the server-side max-duration cap (backend Phase 2) is the real backstop.
+  useEffect(() => {
+    const onPagehide = () => {
+      const token = authTokenRef.current
+      if (!token) return
+      for (const id of manualStartedIdsRef.current) {
+        stopRecordingBeacon(deviceId, id, token)
+      }
+    }
+    window.addEventListener("pagehide", onPagehide)
+    return () => window.removeEventListener("pagehide", onPagehide)
+  }, [deviceId])
+
   useEffect(() => {
     let cancelled = false
     setChannels(null)
@@ -205,10 +248,12 @@ export function LiveVideoGrid({
     try {
       if (active) {
         await stopRecording(deviceId, active.id)
+        manualStartedIdsRef.current.delete(active.id)
         clearActive(streamKey) // optimistic: backend marks it 'stopping' immediately
         toast.success("Recording stopped")
       } else {
-        await startRecording(deviceId, streamKey)
+        const { recording } = await startRecording(deviceId, streamKey)
+        manualStartedIdsRef.current.add(recording.id)
         toast.success("Recording started")
       }
       await refreshRecordings()
@@ -229,14 +274,16 @@ export function LiveVideoGrid({
     try {
       if (allRecording) {
         await Promise.all(
-          [...activeByStream.values()].map((r) =>
-            stopRecording(deviceId, r.id)
-          )
+          [...activeByStream.values()].map((r) => {
+            manualStartedIdsRef.current.delete(r.id)
+            return stopRecording(deviceId, r.id)
+          })
         )
         setActiveByStream(new Map()) // optimistic clear
         toast.success("All recordings stopped")
       } else {
-        await startAllRecordings(deviceId)
+        const { recordings } = await startAllRecordings(deviceId)
+        for (const r of recordings) manualStartedIdsRef.current.add(r.id)
         toast.success("Recording all streams")
       }
       await refreshRecordings()

@@ -65,6 +65,17 @@ const STATUS_VARIANT: Record<
   failed: "destructive",
 }
 
+// Human labels for recordings.end_reason (kvs-webrtc-lts §4.1) so a truncated /
+// offline-ended recording is distinguishable from a clean stop.
+const END_REASON_LABEL: Record<string, string> = {
+  user_stop: "Stopped by user",
+  device_offline: "Device went offline",
+  stream_ended: "Stream ended",
+  max_duration: "Max duration reached",
+  task_lost: "Recorder task lost",
+  error: "Error",
+}
+
 // Shared recordings table with inline playback + delete. Used by the Media
 // Recordings tab (full list) and the device Overview (recent few). The parent
 // owns fetching + the null/empty states; this renders the rows and dialogs and
@@ -138,14 +149,22 @@ export function RecordingsTable({
               <TableCell>{formatSize(rec.sizeBytes)}</TableCell>
               <TableCell className="capitalize">{rec.trigger}</TableCell>
               <TableCell>
-                <Badge
-                  variant={STATUS_VARIANT[rec.status]}
-                  className="capitalize"
-                >
-                  {rec.status === "recording" && rec.captureStartedAt === null
-                    ? "Starting…"
-                    : rec.status}
-                </Badge>
+                <div className="flex flex-col items-start gap-0.5">
+                  <Badge
+                    variant={STATUS_VARIANT[rec.status]}
+                    className="capitalize"
+                  >
+                    {rec.status === "recording" && rec.captureStartedAt === null
+                      ? "Starting…"
+                      : rec.status}
+                  </Badge>
+                  {rec.endReason &&
+                  (rec.status === "completed" || rec.status === "failed") ? (
+                    <span className="text-muted-foreground text-xs">
+                      {END_REASON_LABEL[rec.endReason] ?? rec.endReason}
+                    </span>
+                  ) : null}
+                </div>
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">

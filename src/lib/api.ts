@@ -364,6 +364,10 @@ export interface Recording {
   streamKey: string
   status: RecordingStatus
   trigger: RecordingTrigger
+  // Why the recording ended: user_stop | device_offline | stream_ended | max_duration
+  // | task_lost | error. null while recording or for a natural EOS. Lets the UI
+  // distinguish a truncated/offline-ended recording from a clean stop.
+  endReason?: string | null
   startedAt: string
   // Set by the recorder on its first received frame (via an IoT "capturing" signal).
   // null while 'recording' but not yet capturing (cold start) -> UI shows "Starting…".
@@ -410,6 +414,40 @@ export async function stopRecording(
   return apiRequest(`/devices/${deviceId}/recordings/${recordingId}/stop`, {
     method: "POST",
   })
+}
+
+/**
+ * Best-effort, fire-and-forget stop that survives page unload (kvs-webrtc-lts
+ * Phase 5). Called from a `pagehide` handler, which cannot await, so it takes a
+ * PRE-CAPTURED id token instead of calling the async getIdToken(); org/workspace
+ * come from the registered getters (synchronous). Uses `fetch(..., keepalive:true)`
+ * rather than `navigator.sendBeacon` because the stop endpoint requires the
+ * Authorization + X-Organization-Id/X-Workspace-Id headers, and sendBeacon cannot
+ * set request headers. This is a courtesy only — the server-side max-duration cap is
+ * the real backstop (locked decision: recording is kept server-side).
+ */
+export function stopRecordingBeacon(
+  deviceId: string,
+  recordingId: string,
+  idToken: string
+): void {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${idToken}`,
+  }
+  const orgId = currentOrgIdGetter()
+  if (orgId) headers["X-Organization-Id"] = orgId
+  const workspaceId = currentWorkspaceIdGetter()
+  if (workspaceId) headers["X-Workspace-Id"] = workspaceId
+  try {
+    void fetch(`${API_URL}/devices/${deviceId}/recordings/${recordingId}/stop`, {
+      method: "POST",
+      headers,
+      keepalive: true,
+    })
+  } catch {
+    // Best-effort; ignore. The max-duration cap ends anything this misses.
+  }
 }
 
 // Presigned GET URL for browser playback (expires; fetch fresh when opening).

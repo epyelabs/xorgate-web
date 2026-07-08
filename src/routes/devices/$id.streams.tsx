@@ -22,7 +22,9 @@ import {
   systemMetrics,
 } from "@/lib/capability-metrics"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   GroupedTelemetryReadout,
   TelemetryReadout,
@@ -42,6 +44,7 @@ export const Route = createFileRoute("/devices/$id/streams")({
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
+  const [metaLoading, setMetaLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { latest, status, error: connError } = useIotTelemetry(id)
 
@@ -75,6 +78,8 @@ function DeviceStreamsPage() {
           setLoadError(message)
           toast.error(message)
         }
+      } finally {
+        if (!cancelled) setMetaLoading(false)
       }
     })()
     return () => {
@@ -104,39 +109,94 @@ function DeviceStreamsPage() {
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}
 
-      {videoCaps.length > 0 ? (
-        <section>
-          <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
-        </section>
-      ) : null}
-
-      {hasTelemetry ? (
+      {metaLoading ? (
+        <StreamsSkeleton />
+      ) : (
         <>
-          <Separator />
-          <section className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold tracking-tight">
-              Telemetry
-            </h2>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-              {imuGroups.length > 0 ? (
-                <GroupedTelemetryReadout
-                  title="IMU"
-                  latest={latest}
-                  groups={imuGroups}
-                />
-              ) : null}
-              {telemetryGroups.map((g) => (
-                <TelemetryReadout
-                  key={g.title}
-                  title={g.title}
-                  latest={latest}
-                  metrics={g.metrics}
-                />
-              ))}
-            </div>
-          </section>
+          {videoCaps.length > 0 ? (
+            <section>
+              <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
+            </section>
+          ) : null}
+
+          {hasTelemetry ? (
+            <>
+              <Separator />
+              <section className="flex flex-col gap-3">
+                <h2 className="text-base font-semibold tracking-tight">
+                  Telemetry
+                </h2>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                  {imuGroups.length > 0 ? (
+                    <GroupedTelemetryReadout
+                      title="IMU"
+                      latest={latest}
+                      groups={imuGroups}
+                    />
+                  ) : null}
+                  {telemetryGroups.map((g) => (
+                    <TelemetryReadout
+                      key={g.title}
+                      title={g.title}
+                      latest={latest}
+                      metrics={g.metrics}
+                    />
+                  ))}
+                </div>
+              </section>
+            </>
+          ) : null}
         </>
-      ) : null}
+      )}
     </div>
+  )
+}
+
+// A single telemetry-card placeholder that mirrors TelemetryReadout's size="sm"
+// card: a short title with a few key/value rows.
+function TelemetryCardSkeleton() {
+  return (
+    <Card size="sm">
+      <CardHeader className="pb-2">
+        <Skeleton className="h-4 w-20" />
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-12" />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+// Loading placeholder for the whole page while the device + model capabilities
+// are fetched. Mirrors the loaded layout (Media grid, then the Telemetry cards)
+// so nothing shifts once the real content arrives.
+function StreamsSkeleton() {
+  return (
+    <>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <Skeleton className="aspect-video max-h-[40vh] w-full" />
+          <Skeleton className="aspect-video max-h-[40vh] w-full" />
+        </div>
+      </section>
+      <Separator />
+      <section className="flex flex-col gap-3">
+        <Skeleton className="h-5 w-24" />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <TelemetryCardSkeleton key={i} />
+          ))}
+        </div>
+      </section>
+    </>
   )
 }

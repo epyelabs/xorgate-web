@@ -4,7 +4,23 @@ import type {
   DeviceWorkflowAttachment,
   ManualRunContext,
 } from "./device-workflow-schemas"
-import type { WorkflowRunSummary } from "./workflow-run-schemas"
+import type {
+  WorkflowRunSummary,
+  WorkflowRunsListParams,
+} from "./workflow-run-schemas"
+import type { Page } from "./api"
+
+// Serialize the standard list params into a query string suffix.
+export function runsListQuery(params: WorkflowRunsListParams = {}): string {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.status) qs.set("status", params.status)
+  if (params.from) qs.set("from", params.from)
+  if (params.to) qs.set("to", params.to)
+  return qs.toString() ? `?${qs.toString()}` : ""
+}
 
 // Real client for the device "Workflows" tab (backend: device-workflows.ts +
 // workflow-runs.ts). Signatures are unchanged from the former in-memory mock, so
@@ -17,10 +33,11 @@ export async function listDeviceAttachments(deviceId: string): Promise<{
   return apiRequest(`/devices/${deviceId}/workflows`)
 }
 
-export async function listDeviceRuns(deviceId: string): Promise<{
-  runs: WorkflowRunSummary[]
-}> {
-  return apiRequest(`/devices/${deviceId}/workflow-runs`)
+export async function listDeviceRuns(
+  deviceId: string,
+  params: WorkflowRunsListParams = {},
+): Promise<{ runs: WorkflowRunSummary[]; page?: Page }> {
+  return apiRequest(`/devices/${deviceId}/workflow-runs${runsListQuery(params)}`)
 }
 
 export async function attachWorkflow(

@@ -204,6 +204,15 @@ export const getKvsChannelsResponseSchema = z.object({
   channels: z.array(kvsChannelSchema),
 })
 
+// Shared pagination block returned by standardized list endpoints
+// (see backend src/utils/list-params.ts).
+export const pageSchema = z.object({
+  limit: z.number(),
+  offset: z.number(),
+  order: z.enum(["asc", "desc"]),
+  total: z.number(),
+})
+
 // --- Recordings: GET /devices/{id}/recordings ---
 export const recordingSchema = z.object({
   id: z.string(),
@@ -227,6 +236,9 @@ export const recordingSchema = z.object({
 
 export const getDeviceRecordingsResponseSchema = z.object({
   recordings: z.array(recordingSchema),
+  // Optional: present on the standardized list endpoint; absent on the compact
+  // (unparameterized) fetches used by the Overview.
+  page: pageSchema.optional(),
 })
 
 // --- Telemetry history (P4): GET /devices/{id}/telemetry(+/latest) ---
@@ -245,12 +257,7 @@ export const getTelemetryResponseSchema = z.object({
 
 export const getTelemetryReadingsResponseSchema = z.object({
   readings: z.array(telemetryReadingSchema),
-  page: z.object({
-    limit: z.number(),
-    offset: z.number(),
-    order: z.enum(["asc", "desc"]),
-    total: z.number(),
-  }),
+  page: pageSchema,
 })
 
 export const deviceLatestRowSchema = z.object({

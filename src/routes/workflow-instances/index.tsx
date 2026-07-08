@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react"
+import { ChevronDownIcon, FilterIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -9,14 +9,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DataTable,
+  DataTableToolbar,
+  formatDuration,
+  type DataTableColumn,
+} from "@/components/data-table"
+import { RunStatusCell } from "@/components/run-status"
 import { formatRelative } from "@/lib/relative-time"
 import { listWorkflowInstances } from "@/lib/workflow-instances-api"
 import {
@@ -27,14 +26,6 @@ import {
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
-import {
-  ColHead,
-  EmptyState,
-  FilteredEmptyState,
-  formatDuration,
-  RunsTableSkeleton,
-  RunStatusCell,
-} from "./-components/runs-table-parts"
 
 export const Route = createFileRoute("/workflow-instances/")({
   beforeLoad: () => {
@@ -111,6 +102,86 @@ function WorkflowInstancesListPage() {
     setQuery("")
     setStatusFilter("any")
   }
+  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+
+  const columns: DataTableColumn<WorkflowRunSummary>[] = [
+    {
+      id: "device",
+      header: "Device",
+      cell: (run) => (
+        <Link
+          to="/workflow-instances/$id"
+          params={{ id: run.id }}
+          className="text-sm font-medium text-foreground tabular-nums hover:underline"
+        >
+          {run.deviceName}
+        </Link>
+      ),
+    },
+    {
+      id: "template",
+      header: "Template",
+      cellClassName: "leading-tight",
+      cell: (run) => (
+        <>
+          <span className="block text-sm">{run.templateName}</span>
+          <span className="block text-xs text-muted-foreground">
+            v{run.templateVersion}
+          </span>
+        </>
+      ),
+    },
+    {
+      id: "trigger",
+      header: "Trigger",
+      cellClassName: "text-muted-foreground",
+      cell: (run) => run.trigger,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (run) => <RunStatusCell status={run.status} />,
+    },
+    {
+      id: "startedAt",
+      header: "Started",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (run) => `${formatRelative(run.startedAt)} ago`,
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (run) => formatDuration(run.durationMs),
+    },
+    {
+      id: "events",
+      header: "Events",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (run) => (run.eventCount > 0 ? run.eventCount : "—"),
+    },
+  ]
+
+  const statusFilterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <FilterIcon />
+          status: {statusFilter}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
+            {opt}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -128,100 +199,50 @@ function WorkflowInstancesListPage() {
         </header>
       </StickyHeader>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full max-w-sm">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by template or device…"
-              className="pl-7"
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          getRowKey={(run) => run.id}
+          loading={isLoading}
+          isFiltered={isFiltered}
+          toolbar={
+            <DataTableToolbar
+              search={{
+                value: query,
+                onChange: setQuery,
+                placeholder: "Filter by template or device…",
+              }}
+              filters={statusFilterMenu}
+              right={runs ? `Showing ${filtered.length} of ${runs.length}` : null}
             />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <FilterIcon />
-                status: {statusFilter}
-                <ChevronDownIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {STATUS_OPTIONS.map((opt) => (
-                <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
-                  {opt}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {runs ? (
-            <span className="ml-auto text-xs text-muted-foreground">
-              Showing {filtered.length} of {runs.length}
-            </span>
-          ) : null}
-        </div>
-
-        {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : isLoading ? (
-          <RunsTableSkeleton />
-        ) : runs && runs.length === 0 ? (
-          <EmptyState />
-        ) : filtered.length === 0 ? (
-          <FilteredEmptyState onClear={clearFilters} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <ColHead>Device</ColHead>
-                <ColHead>Template</ColHead>
-                <ColHead>Trigger</ColHead>
-                <ColHead>Status</ColHead>
-                <ColHead>Started</ColHead>
-                <ColHead>Duration</ColHead>
-                <ColHead>Events</ColHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((run) => (
-                <TableRow key={run.id}>
-                  <TableCell>
-                    <Link
-                      to="/workflow-instances/$id"
-                      params={{ id: run.id }}
-                      className="text-sm font-medium text-foreground tabular-nums hover:underline"
-                    >
-                      {run.deviceName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="leading-tight">
-                    <span className="block text-sm">{run.templateName}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      v{run.templateVersion}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {run.trigger}
-                  </TableCell>
-                  <TableCell>
-                    <RunStatusCell status={run.status} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatRelative(run.startedAt)} ago
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatDuration(run.durationMs)}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {run.eventCount > 0 ? run.eventCount : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+          }
+          empty={
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <p className="text-sm font-medium">No runs in this workspace yet</p>
+              <p className="text-xs text-muted-foreground">
+                Runs appear here when a workflow attached to a device executes.
+              </p>
+            </div>
+          }
+          filteredEmpty={
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                No runs match the current filters.
+              </p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs text-primary underline-offset-2 hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          }
+        />
+      )}
     </div>
   )
 }

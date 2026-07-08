@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { workflowDefinitionSchema } from "./workflow-schemas"
+import { pageSchema } from "./schemas"
 
 // Schemas + types for Workflow Instances (= workflow runs / executions). One row
 // per execution of a workflow attached to a device, scoped to a workspace. These
@@ -61,7 +62,20 @@ export const workflowRunDetailSchema = workflowRunSummarySchema.extend({
 
 export const listWorkflowRunsResponseSchema = z.object({
   runs: z.array(workflowRunSummarySchema),
+  // Optional: present on the standardized list endpoints; absent on older /
+  // unparameterized responses.
+  page: pageSchema.optional(),
 })
+
+// Query params for the standardized workflow-runs list endpoints.
+export interface WorkflowRunsListParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  status?: RunStatus
+  from?: string
+  to?: string
+}
 
 export const getWorkflowRunResponseSchema = z.object({
   run: workflowRunDetailSchema,

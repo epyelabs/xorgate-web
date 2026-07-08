@@ -27,14 +27,7 @@ import {
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable, type DataTableColumn } from "@/components/data-table"
 import {
   ApiError,
   deleteDevice,
@@ -73,6 +66,26 @@ const STATUS_OPTIONS: DeviceStatus[] = [
   "online",
   "offline",
   "decommissioned",
+]
+
+const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
+  {
+    id: "stream",
+    header: "Stream",
+    cellClassName: "font-mono",
+    cell: (channel) => channel.streamKey,
+  },
+  {
+    id: "channel",
+    header: "Channel",
+    cellClassName: "font-mono",
+    cell: (channel) => channel.channelName,
+  },
+  {
+    id: "region",
+    header: "Region",
+    cell: (channel) => channel.region,
+  },
 ]
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
@@ -504,28 +517,12 @@ function DeviceSettingsPage() {
                 No media channels — device not provisioned.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Stream</TableHead>
-                    <TableHead>Channel</TableHead>
-                    <TableHead>Region</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {channels.map((channel) => (
-                    <TableRow key={channel.streamKey}>
-                      <TableCell className="font-mono">
-                        {channel.streamKey}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {channel.channelName}
-                      </TableCell>
-                      <TableCell>{channel.region}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable
+                card={false}
+                columns={kvsChannelColumns}
+                rows={channels}
+                getRowKey={(channel) => channel.streamKey}
+              />
             )}
           </CardContent>
         </Card>

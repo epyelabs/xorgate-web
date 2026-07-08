@@ -24,7 +24,7 @@ import { RunGraph } from "./-components/run-graph"
 import { RunMetrics } from "./-components/run-metrics"
 import { RunRawJson } from "./-components/run-raw-json"
 import { RunTrace } from "./-components/run-trace"
-import { formatDuration } from "./-components/runs-table-parts"
+import { formatDuration } from "@/components/data-table"
 
 export const Route = createFileRoute("/workflow-instances/$id")({
   beforeLoad: () => {

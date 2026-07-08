@@ -1,7 +1,17 @@
+import type { ReactNode } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DataTable,
+  formatBytes,
+  formatDuration,
+  type DataTableColumn,
+  type DataTableExportConfig,
+  type DataTablePaginationConfig,
+  type DataTableSort,
+} from "@/components/data-table"
 import {
   Dialog,
   DialogContent,
@@ -11,14 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   deleteRecording,
   getRecordingPlaybackUrl,
@@ -36,23 +38,12 @@ function formatTimestamp(iso: string): string {
   return Number.isNaN(parsed.getTime()) ? iso : dateTimeFormat.format(parsed)
 }
 
-function formatDuration(rec: Recording): string {
-  let ms = rec.durationMs
-  if (ms == null && rec.endedAt) {
-    ms = new Date(rec.endedAt).getTime() - new Date(rec.startedAt).getTime()
-  }
-  if (ms == null || ms < 0) return "—"
-  const totalSec = Math.round(ms / 1000)
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
-
-function formatSize(bytes: number | null): string {
-  if (bytes == null) return "—"
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+// Effective duration in ms: prefer the stored duration, else derive it from the
+// start/end timestamps (null while still recording).
+function recordingDurationMs(rec: Recording): number | null {
+  if (rec.durationMs != null) return rec.durationMs
+  if (rec.endedAt) return new Date(rec.endedAt).getTime() - new Date(rec.startedAt).getTime()
+  return null
 }
 
 const STATUS_VARIANT: Record<
@@ -76,18 +67,58 @@ const END_REASON_LABEL: Record<string, string> = {
   error: "Error",
 }
 
-// Shared recordings table with inline playback + delete. Used by the Media
-// Recordings tab (full list) and the device Overview (recent few). The parent
-// owns fetching + the null/empty states; this renders the rows and dialogs and
-// calls `onChanged` after a successful delete so the parent can refresh.
+function StatusCell({ rec }: { rec: Recording }) {
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <Badge variant={STATUS_VARIANT[rec.status]} className="capitalize">
+        {rec.status === "recording" && rec.captureStartedAt === null
+          ? "Starting…"
+          : rec.status}
+      </Badge>
+      {rec.endReason && (rec.status === "completed" || rec.status === "failed") ? (
+        <span className="text-muted-foreground text-xs">
+          {END_REASON_LABEL[rec.endReason] ?? rec.endReason}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+// Recordings table built on the shared DataTable, with inline playback + delete.
+// Used by the Media Recordings tab (full, sortable, paginated) and the device
+// Overview (recent few — no sort/pagination). The parent owns fetching and the
+// toolbar/pagination slots; this renders rows + dialogs and calls `onChanged`
+// after a successful delete so the parent can refresh.
 export function RecordingsTable({
   deviceId,
   recordings,
   onChanged,
+  sort,
+  onToggleSort,
+  loading,
+  isFiltered,
+  emptyMessage,
+  filteredEmptyMessage,
+  toolbar,
+  pagination,
+  exportCsv,
+  card = false,
 }: {
   deviceId: string
   recordings: Recording[]
   onChanged?: () => void | Promise<void>
+  sort?: DataTableSort
+  onToggleSort?: (columnId: string) => void
+  loading?: boolean
+  isFiltered?: boolean
+  emptyMessage?: string
+  filteredEmptyMessage?: string
+  toolbar?: ReactNode
+  pagination?: DataTablePaginationConfig
+  exportCsv?: DataTableExportConfig<Recording>
+  // Render as a standalone framed card (Media page) vs. bare inside a host card
+  // (device Overview). Defaults to bare.
+  card?: boolean
 }) {
   const [playing, setPlaying] = useState<Recording | null>(null)
   const [playUrl, setPlayUrl] = useState<string | null>(null)
@@ -126,69 +157,104 @@ export function RecordingsTable({
     }
   }
 
+  const columns: DataTableColumn<Recording>[] = [
+    {
+      id: "stream",
+      header: "Stream",
+      cellClassName: "font-mono",
+      cell: (rec) => rec.streamKey,
+      csvValue: (rec) => rec.streamKey,
+    },
+    {
+      id: "startedAt",
+      header: "Started",
+      sortable: true,
+      cell: (rec) => formatTimestamp(rec.startedAt),
+      csvValue: (rec) => rec.startedAt,
+    },
+    {
+      id: "durationMs",
+      header: "Duration",
+      numeric: true,
+      sortable: true,
+      cell: (rec) => formatDuration(recordingDurationMs(rec)),
+      csvHeader: "Duration (ms)",
+      csvValue: (rec) => recordingDurationMs(rec) ?? "",
+    },
+    {
+      id: "sizeBytes",
+      header: "Size",
+      numeric: true,
+      sortable: true,
+      cell: (rec) => formatBytes(rec.sizeBytes),
+      csvHeader: "Size (bytes)",
+      csvValue: (rec) => rec.sizeBytes ?? "",
+    },
+    {
+      id: "trigger",
+      header: "Trigger",
+      cellClassName: "capitalize",
+      cell: (rec) => rec.trigger,
+      csvValue: (rec) => rec.trigger,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (rec) => <StatusCell rec={rec} />,
+      csvValue: (rec) =>
+        rec.endReason ? `${rec.status} (${rec.endReason})` : rec.status,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      align: "right",
+      cell: (rec) => (
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={rec.status !== "completed"}
+            onClick={() => void openPlayer(rec)}
+          >
+            Play
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => setDeleting(rec)}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Stream</TableHead>
-            <TableHead>Started</TableHead>
-            <TableHead>Duration</TableHead>
-            <TableHead>Size</TableHead>
-            <TableHead>Trigger</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {recordings.map((rec) => (
-            <TableRow key={rec.id}>
-              <TableCell className="font-mono">{rec.streamKey}</TableCell>
-              <TableCell>{formatTimestamp(rec.startedAt)}</TableCell>
-              <TableCell>{formatDuration(rec)}</TableCell>
-              <TableCell>{formatSize(rec.sizeBytes)}</TableCell>
-              <TableCell className="capitalize">{rec.trigger}</TableCell>
-              <TableCell>
-                <div className="flex flex-col items-start gap-0.5">
-                  <Badge
-                    variant={STATUS_VARIANT[rec.status]}
-                    className="capitalize"
-                  >
-                    {rec.status === "recording" && rec.captureStartedAt === null
-                      ? "Starting…"
-                      : rec.status}
-                  </Badge>
-                  {rec.endReason &&
-                  (rec.status === "completed" || rec.status === "failed") ? (
-                    <span className="text-muted-foreground text-xs">
-                      {END_REASON_LABEL[rec.endReason] ?? rec.endReason}
-                    </span>
-                  ) : null}
-                </div>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={rec.status !== "completed"}
-                    onClick={() => void openPlayer(rec)}
-                  >
-                    Play
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setDeleting(rec)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        card={card}
+        columns={columns}
+        rows={recordings}
+        getRowKey={(rec) => rec.id}
+        sort={sort}
+        onToggleSort={onToggleSort}
+        loading={loading}
+        isFiltered={isFiltered}
+        empty={
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {emptyMessage ?? "No recordings yet."}
+          </p>
+        }
+        filteredEmpty={
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {filteredEmptyMessage ?? "No recordings match this filter."}
+          </p>
+        }
+        toolbar={toolbar}
+        pagination={pagination}
+        exportCsv={exportCsv}
+      />
 
       {/* Playback dialog */}
       <Dialog

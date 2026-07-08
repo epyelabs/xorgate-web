@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
@@ -9,14 +9,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -24,12 +16,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DataTable,
+  DataTableToolbar,
+  DateRangeFilter,
+  formatDuration,
+  type DataTableColumn,
+  type DateRangeValue,
+} from "@/components/data-table"
+import { RunStatusCell } from "@/components/run-status"
 import { formatRelative } from "@/lib/relative-time"
 import {
   detachWorkflow,
@@ -49,20 +43,15 @@ import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
   AttachmentsEmptyState,
-  AttachmentsSkeleton,
   AttachmentStatusCell,
   AttachmentTriggerBadge,
   AttachmentVersionCell,
 } from "./-components/attachments-table-parts"
 import { AttachWorkflowSheet } from "./-components/attach-workflow-sheet"
 import { RunNowDialog } from "./-components/run-now-dialog"
-import {
-  ColHead,
-  EmptyState,
-  formatDuration,
-  RunsTableSkeleton,
-  RunStatusCell,
-} from "../workflow-instances/-components/runs-table-parts"
+
+const RUNS_PAGE_SIZES = [25, 50, 100]
+const RUNS_DEFAULT_SIZE = 25
 
 export const Route = createFileRoute("/devices/$id/workflows")({
   beforeLoad: () => {
@@ -79,34 +68,42 @@ function DeviceWorkflowsPage() {
   const [attachments, setAttachments] = useState<
     DeviceWorkflowAttachment[] | null
   >(null)
-  const [runs, setRuns] = useState<WorkflowRunSummary[] | null>(null)
   const [attachOpen, setAttachOpen] = useState(false)
   const [runTarget, setRunTarget] = useState<DeviceWorkflowAttachment | null>(
-    null,
+    null
   )
   const deviceName = useBreadcrumbStore((s) => s.deviceName)
 
+  // Recent runs: server-side sort (by start time), pagination, and date filter;
+  // client-side search over the loaded page.
+  const [runsData, setRunsData] = useState<{
+    runs: WorkflowRunSummary[]
+    total: number
+  } | null>(null)
+  const [runsPage, setRunsPage] = useState(1)
+  const [runsSize, setRunsSize] = useState(RUNS_DEFAULT_SIZE)
+  const [runsOrder, setRunsOrder] = useState<"asc" | "desc">("desc")
+  const [runsRange, setRunsRange] = useState<DateRangeValue>({ mode: "all" })
+  const [runsQuery, setRunsQuery] = useState("")
+
+  const runsFrom = runsRange.mode === "all" ? undefined : runsRange.from
+  const runsTo = runsRange.mode === "all" ? undefined : runsRange.to
+
+  // Attachments load once (small per-device config list).
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const [rawAttachments, rawRuns] = await Promise.all([
-          listDeviceAttachments(id),
-          listDeviceRuns(id),
-        ])
-        const parsedAttachments =
-          listDeviceAttachmentsResponseSchema.safeParse(rawAttachments)
-        const parsedRuns = listWorkflowRunsResponseSchema.safeParse(rawRuns)
-        if (!parsedAttachments.success || !parsedRuns.success) {
+        const raw = await listDeviceAttachments(id)
+        const parsed = listDeviceAttachmentsResponseSchema.safeParse(raw)
+        if (!parsed.success) {
           throw new Error("Unexpected device workflows response shape")
         }
         if (cancelled) return
-        setAttachments(parsedAttachments.data.attachments)
-        setRuns(parsedRuns.data.runs)
+        setAttachments(parsed.data.attachments)
       } catch (err) {
         if (cancelled) return
         setAttachments([])
-        setRuns([])
         toast.error((err as Error).message)
       }
     })()
@@ -115,202 +112,354 @@ function DeviceWorkflowsPage() {
     }
   }, [id])
 
+  // Runs re-fetch on paging/sort change.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const raw = await listDeviceRuns(id, {
+          limit: runsSize,
+          offset: (runsPage - 1) * runsSize,
+          order: runsOrder,
+          from: runsFrom,
+          to: runsTo,
+        })
+        const parsed = listWorkflowRunsResponseSchema.safeParse(raw)
+        if (!parsed.success) {
+          throw new Error("Unexpected workflow runs response shape")
+        }
+        if (cancelled) return
+        setRunsData({
+          runs: parsed.data.runs,
+          total: parsed.data.page?.total ?? parsed.data.runs.length,
+        })
+      } catch (err) {
+        if (cancelled) return
+        setRunsData({ runs: [], total: 0 })
+        toast.error((err as Error).message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, runsPage, runsSize, runsOrder, runsFrom, runsTo])
+
   const replaceAttachment = (next: DeviceWorkflowAttachment) =>
     setAttachments((prev) =>
-      prev ? prev.map((a) => (a.id === next.id ? next : a)) : prev,
+      prev ? prev.map((a) => (a.id === next.id ? next : a)) : prev
     )
 
-  const handleDetach = async (attachment: DeviceWorkflowAttachment) => {
-    try {
-      await detachWorkflow(id, attachment.id)
-      setAttachments((prev) =>
-        prev ? prev.filter((a) => a.id !== attachment.id) : prev,
+  const handleDetach = useCallback(
+    async (attachment: DeviceWorkflowAttachment) => {
+      try {
+        await detachWorkflow(id, attachment.id)
+        setAttachments((prev) =>
+          prev ? prev.filter((a) => a.id !== attachment.id) : prev
+        )
+        toast.success(`Detached "${attachment.templateName}"`)
+      } catch (err) {
+        toast.error((err as Error).message)
+      }
+    },
+    [id]
+  )
+
+  const attachmentColumns: DataTableColumn<DeviceWorkflowAttachment>[] = [
+    {
+      id: "workflow",
+      header: "Workflow",
+      cell: (a) => (
+        <Link
+          to="/workflow-templates/$id"
+          params={{ id: a.templateId }}
+          className="block leading-tight"
+        >
+          <span className="block text-sm font-medium text-foreground hover:underline">
+            {a.templateName}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {a.templateSlug}
+          </span>
+        </Link>
+      ),
+    },
+    {
+      id: "version",
+      header: "Version",
+      cell: (a) => (
+        <AttachmentVersionCell
+          pinnedVersion={a.pinnedVersion}
+          runningVersion={a.runningVersion}
+        />
+      ),
+    },
+    {
+      id: "trigger",
+      header: "Trigger",
+      cellClassName: "leading-tight",
+      cell: (a) => (
+        <div className="flex flex-col gap-1.5">
+          {a.triggers.map((t, i) => (
+            <div key={i}>
+              <AttachmentTriggerBadge type={t.type} />
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {triggerSummary(t)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: "state",
+      header: "State",
+      cell: (a) => <AttachmentStatusCell enabled={a.enabled} />,
+    },
+    {
+      id: "lastRun",
+      header: "Last run",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (a) =>
+        a.lastRunAt ? (
+          <span className="inline-flex items-center gap-1.5">
+            {a.lastRunStatus ? (
+              <RunStatusCell status={a.lastRunStatus} />
+            ) : null}
+            <span>{formatRelative(a.lastRunAt)} ago</span>
+          </span>
+        ) : (
+          "never"
+        ),
+    },
+    {
+      id: "runs",
+      header: "Runs",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (a) => (a.runCount > 0 ? a.runCount : "—"),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (a) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm">
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setRunTarget(a)}>
+              <PlayIcon />
+              Run now
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => handleDetach(a)}
+            >
+              <Trash2Icon />
+              Detach
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ]
+
+  const runColumns: DataTableColumn<WorkflowRunSummary>[] = [
+    {
+      id: "workflow",
+      header: "Workflow",
+      cellClassName: "leading-tight",
+      cell: (run) => (
+        <>
+          <Link
+            to="/workflow-instances/$id"
+            params={{ id: run.id }}
+            className="block text-sm font-medium text-foreground hover:underline"
+          >
+            {run.templateName}
+          </Link>
+          <span className="block text-xs text-muted-foreground">
+            v{run.templateVersion}
+          </span>
+        </>
+      ),
+      csvValue: (run) => `${run.templateName} v${run.templateVersion}`,
+    },
+    {
+      id: "trigger",
+      header: "Trigger",
+      cellClassName: "text-muted-foreground",
+      cell: (run) => run.trigger,
+      csvValue: (run) => run.trigger,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (run) => <RunStatusCell status={run.status} />,
+      csvValue: (run) => run.status,
+    },
+    {
+      id: "startedAt",
+      header: "Started",
+      sortable: true,
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (run) => `${formatRelative(run.startedAt)} ago`,
+      csvValue: (run) => run.startedAt,
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (run) => formatDuration(run.durationMs),
+      csvHeader: "Duration (ms)",
+      csvValue: (run) => run.durationMs ?? "",
+    },
+    {
+      id: "events",
+      header: "Events",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (run) => (run.eventCount > 0 ? run.eventCount : "—"),
+      csvValue: (run) => run.eventCount,
+    },
+  ]
+
+  // Client-side workflow-name search over the current runs page.
+  const runsQ = runsQuery.trim().toLowerCase()
+  const visibleRuns = runsQ
+    ? (runsData?.runs ?? []).filter((r) =>
+        r.templateName.toLowerCase().includes(runsQ)
       )
-      toast.success(`Detached "${attachment.templateName}"`)
-    } catch (err) {
-      toast.error((err as Error).message)
+    : (runsData?.runs ?? [])
+  const runsFiltered = runsQ !== "" || runsRange.mode !== "all"
+
+  // Fetch every run matching the current date filter (paged), then apply the
+  // client search — the table's standard Export CSV calls this.
+  const getRunsExportRows = async (): Promise<WorkflowRunSummary[]> => {
+    const pageLimit = 200
+    const all: WorkflowRunSummary[] = []
+    let off = 0
+    let grandTotal = Infinity
+    while (off < grandTotal && all.length < 5000) {
+      const raw = await listDeviceRuns(id, {
+        limit: pageLimit,
+        offset: off,
+        order: runsOrder,
+        from: runsFrom,
+        to: runsTo,
+      })
+      const parsed = listWorkflowRunsResponseSchema.safeParse(raw)
+      if (!parsed.success) break
+      all.push(...parsed.data.runs)
+      grandTotal = parsed.data.page?.total ?? parsed.data.runs.length
+      if (parsed.data.runs.length === 0) break
+      off += pageLimit
     }
+    return runsQ
+      ? all.filter((r) => r.templateName.toLowerCase().includes(runsQ))
+      : all
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Attached workflows</CardTitle>
-          <CardDescription>
-            Workflow templates that run on this device from its telemetry and
-            recordings.
-          </CardDescription>
-          <CardAction>
-            <Button size="sm" onClick={() => setAttachOpen(true)}>
-              <PlusIcon />
-              Attach workflow
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {attachments === null ? (
-            <AttachmentsSkeleton />
-          ) : attachments.length === 0 ? (
-            <AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <ColHead>Workflow</ColHead>
-                  <ColHead>Version</ColHead>
-                  <ColHead>Trigger</ColHead>
-                  <ColHead>State</ColHead>
-                  <ColHead>Last run</ColHead>
-                  <ColHead>Runs</ColHead>
-                  <ColHead> </ColHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attachments.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell>
-                      <Link
-                        to="/workflow-templates/$id"
-                        params={{ id: a.templateId }}
-                        className="block leading-tight"
-                      >
-                        <span className="block text-sm font-medium text-foreground hover:underline">
-                          {a.templateName}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {a.templateSlug}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <AttachmentVersionCell
-                        pinnedVersion={a.pinnedVersion}
-                        runningVersion={a.runningVersion}
-                      />
-                    </TableCell>
-                    <TableCell className="leading-tight">
-                      <div className="flex flex-col gap-1.5">
-                        {a.triggers.map((t, i) => (
-                          <div key={i}>
-                            <AttachmentTriggerBadge type={t.type} />
-                            <span className="mt-0.5 block text-xs text-muted-foreground">
-                              {triggerSummary(t)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <AttachmentStatusCell enabled={a.enabled} />
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {a.lastRunAt ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          {a.lastRunStatus ? (
-                            <RunStatusCell status={a.lastRunStatus} />
-                          ) : null}
-                          <span>{formatRelative(a.lastRunAt)} ago</span>
-                        </span>
-                      ) : (
-                        "never"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {a.runCount > 0 ? a.runCount : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm">
-                            <MoreHorizontalIcon />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => setRunTarget(a)}>
-                            <PlayIcon />
-                            Run now
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => handleDetach(a)}
-                          >
-                            <Trash2Icon />
-                            Detach
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+    <div className="flex min-w-0 flex-col gap-6">
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="font-heading text-sm font-medium">
+              Attached workflows
+            </h2>
+            <p className="text-xs/relaxed text-muted-foreground">
+              Workflow templates that run on this device from its telemetry and
+              recordings.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setAttachOpen(true)}>
+            <PlusIcon />
+            Attach workflow
+          </Button>
+        </div>
+        <DataTable
+          card
+          columns={attachmentColumns}
+          rows={attachments ?? []}
+          getRowKey={(a) => a.id}
+          loading={attachments === null}
+          skeletonRows={3}
+          empty={<AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />}
+        />
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent runs</CardTitle>
-          <CardDescription>
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="font-heading text-sm font-medium">Recent runs</h2>
+          <p className="text-xs/relaxed text-muted-foreground">
             The latest workflow executions triggered on this device.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {runs === null ? (
-            <RunsTableSkeleton />
-          ) : runs.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <ColHead>Workflow</ColHead>
-                  <ColHead>Trigger</ColHead>
-                  <ColHead>Status</ColHead>
-                  <ColHead>Started</ColHead>
-                  <ColHead>Duration</ColHead>
-                  <ColHead>Events</ColHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.map((run) => (
-                  <TableRow key={run.id}>
-                    <TableCell className="leading-tight">
-                      <Link
-                        to="/workflow-instances/$id"
-                        params={{ id: run.id }}
-                        className="block text-sm font-medium text-foreground hover:underline"
-                      >
-                        {run.templateName}
-                      </Link>
-                      <span className="block text-xs text-muted-foreground">
-                        v{run.templateVersion}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {run.trigger}
-                    </TableCell>
-                    <TableCell>
-                      <RunStatusCell status={run.status} />
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {formatRelative(run.startedAt)} ago
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {formatDuration(run.durationMs)}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {run.eventCount > 0 ? run.eventCount : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </p>
+        </div>
+        <DataTable
+          card
+          columns={runColumns}
+          rows={visibleRuns}
+          getRowKey={(run) => run.id}
+          loading={runsData === null}
+          isFiltered={runsFiltered}
+          sort={{ columnId: "startedAt", dir: runsOrder }}
+          onToggleSort={() => {
+            setRunsOrder((o) => (o === "asc" ? "desc" : "asc"))
+            setRunsPage(1)
+          }}
+          toolbar={
+            <DataTableToolbar
+              filters={
+                <DateRangeFilter
+                  value={runsRange}
+                  onChange={(v) => {
+                    setRunsRange(v)
+                    setRunsPage(1)
+                  }}
+                />
+              }
+              search={{
+                value: runsQuery,
+                onChange: setRunsQuery,
+                placeholder: "Filter by workflow…",
+              }}
+              searchAlign="right"
+            />
+          }
+          empty={
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No workflow runs on this device yet.
+            </p>
+          }
+          filteredEmpty={
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No workflow runs match these filters.
+            </p>
+          }
+          pagination={{
+            page: runsPage,
+            pageSize: runsSize,
+            total: runsData?.total ?? 0,
+            rowsOnPage: visibleRuns.length,
+            pageSizes: RUNS_PAGE_SIZES,
+            onPageChange: setRunsPage,
+            onPageSizeChange: (s) => {
+              setRunsSize(s)
+              setRunsPage(1)
+            },
+          }}
+          exportCsv={{
+            filename: `workflow-runs-${id}.csv`,
+            getRows: getRunsExportRows,
+          }}
+        />
+      </section>
 
       <AttachWorkflowSheet
         deviceId={id}
@@ -319,7 +468,9 @@ function DeviceWorkflowsPage() {
         open={attachOpen}
         onOpenChange={setAttachOpen}
         onAttached={(attachment) =>
-          setAttachments((prev) => (prev ? [attachment, ...prev] : [attachment]))
+          setAttachments((prev) =>
+            prev ? [attachment, ...prev] : [attachment]
+          )
         }
       />
 

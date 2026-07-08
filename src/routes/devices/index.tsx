@@ -6,18 +6,8 @@ import {
   FileDownIcon,
   FilterIcon,
   PlusIcon,
-  SearchIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +19,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  DataTable,
+  DataTableToolbar,
+  StatusDot,
+  type DataTableColumn,
+} from "@/components/data-table"
 import { listDevices, type Device, type DeviceStatus } from "@/lib/api"
 import { listDevicesResponseSchema } from "@/lib/schemas"
 import { formatRelative } from "@/lib/relative-time"
@@ -37,13 +33,6 @@ import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
-import {
-  ColHead,
-  DevicesTableSkeleton,
-  EmptyState,
-  FilteredEmptyState,
-  StatusCell,
-} from "./-components/devices-table-parts"
 
 export const Route = createFileRoute("/devices/")({
   beforeLoad: () => {
@@ -88,6 +77,13 @@ const STATUS_OPTIONS: readonly (DeviceStatus | "any")[] = [
   "provisioned",
   "decommissioned",
 ]
+
+const DEVICE_STATUS_COLOR: Record<DeviceStatus, string> = {
+  online: "bg-emerald-500",
+  offline: "bg-amber-500",
+  provisioned: "bg-sky-500",
+  decommissioned: "bg-zinc-400",
+}
 
 function csvEscape(value: string): string {
   if (/[",\n\r]/.test(value)) {
@@ -197,6 +193,7 @@ function DevicesListPage() {
     setQuery("")
     setStatusFilter("any")
   }
+  const isFiltered = query.trim() !== "" || statusFilter !== "any"
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((d) => selected.has(d.id))
@@ -228,6 +225,97 @@ function DevicesListPage() {
   // Stable so it doesn't churn the dialog's polling effect. Re-fetches the
   // device list once a registration is claimed so the new device appears.
   const handleClaimed = useCallback(() => setReloadNonce((n) => n + 1), [])
+
+  const columns: DataTableColumn<Device>[] = [
+    {
+      id: "device",
+      header: "Device",
+      cell: (device) => (
+        <Link
+          to="/devices/$id"
+          params={{ id: device.id }}
+          className="block leading-tight"
+        >
+          <span className="block text-sm font-medium text-foreground hover:underline">
+            {device.name ?? device.serial}
+          </span>
+          {device.name ? (
+            <span className="block text-xs text-muted-foreground">
+              {device.serial}
+            </span>
+          ) : null}
+        </Link>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (device) => (
+        <StatusDot color={DEVICE_STATUS_COLOR[device.status]} label={device.status} />
+      ),
+    },
+    {
+      id: "firmware",
+      header: "Firmware",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (device) => device.firmwareVersion ?? "—",
+    },
+    {
+      id: "model",
+      header: "Model",
+      cellClassName: "text-muted-foreground",
+      cell: (device) => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-default font-mono">
+              {shortId(device.deviceModelId)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{device.deviceModelId}</TooltipContent>
+        </Tooltip>
+      ),
+    },
+    {
+      id: "lastSeen",
+      header: "Last seen",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (device) => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-default">
+              {formatRelative(device.lastSeenAt)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{formatTimestamp(device.lastSeenAt)}</TooltipContent>
+        </Tooltip>
+      ),
+    },
+    {
+      id: "created",
+      header: "Created",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (device) => formatDate(device.createdAt),
+    },
+  ]
+
+  const statusFilterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <FilterIcon />
+          status: {statusFilter}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
+            {opt}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -264,143 +352,63 @@ function DevicesListPage() {
         <DevicesKpi devices={devices} />
       ) : null}
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full max-w-sm">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by name or serial…"
-              className="pl-7"
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          getRowKey={(device) => device.id}
+          loading={isLoading}
+          skeletonRows={6}
+          isFiltered={isFiltered}
+          selection={{
+            isSelected: (d) => selected.has(d.id),
+            onToggle: (d) => toggleOne(d.id),
+            allSelected: allFilteredSelected,
+            someSelected: someFilteredSelected,
+            onToggleAll: toggleAll,
+            rowLabel: (d) => `Select ${d.serial}`,
+          }}
+          toolbar={
+            <DataTableToolbar
+              search={{
+                value: query,
+                onChange: setQuery,
+                placeholder: "Filter by name or serial…",
+              }}
+              filters={statusFilterMenu}
+              right={
+                devices ? `Showing ${filtered.length} of ${devices.length}` : null
+              }
             />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <FilterIcon />
-                status: {statusFilter}
-                <ChevronDownIcon />
+          }
+          empty={
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">No devices yet</p>
+                <p className="text-xs text-muted-foreground">
+                  Provision your first device to start streaming.
+                </p>
+              </div>
+              <Button variant="default" size="sm" onClick={handleProvision}>
+                <PlusIcon />
+                Register device
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {STATUS_OPTIONS.map((opt) => (
-                <DropdownMenuItem
-                  key={opt}
-                  onSelect={() => setStatusFilter(opt)}
-                >
-                  {opt}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {devices ? (
-            <span className="ml-auto text-xs text-muted-foreground">
-              Showing {filtered.length} of {devices.length}
-            </span>
-          ) : null}
-        </div>
-
-        {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : isLoading ? (
-          <DevicesTableSkeleton />
-        ) : devices && devices.length === 0 ? (
-          <EmptyState onProvision={handleProvision} />
-        ) : filtered.length === 0 ? (
-          <FilteredEmptyState onClear={clearFilters} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8 pl-3">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all"
-                    className="size-3.5 cursor-pointer align-middle accent-primary"
-                    checked={allFilteredSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someFilteredSelected
-                    }}
-                    onChange={toggleAll}
-                  />
-                </TableHead>
-                <ColHead>Device</ColHead>
-                <ColHead>Status</ColHead>
-                <ColHead>Firmware</ColHead>
-                <ColHead>Model</ColHead>
-                <ColHead>Last seen</ColHead>
-                <ColHead>Created</ColHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((device) => (
-                <TableRow
-                  key={device.id}
-                  data-state={selected.has(device.id) ? "selected" : undefined}
-                >
-                  <TableCell className="w-8 pl-3">
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${device.serial}`}
-                      className="size-3.5 cursor-pointer align-middle accent-primary"
-                      checked={selected.has(device.id)}
-                      onChange={() => toggleOne(device.id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      to="/devices/$id"
-                      params={{ id: device.id }}
-                      className="block leading-tight"
-                    >
-                      <span className="block text-sm font-medium text-foreground hover:underline">
-                        {device.name ?? device.serial}
-                      </span>
-                      {device.name ? (
-                        <span className="block text-xs text-muted-foreground">
-                          {device.serial}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <StatusCell status={device.status} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {device.firmwareVersion ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-default font-mono">
-                          {shortId(device.deviceModelId)}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{device.deviceModelId}</TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="cursor-default">
-                          {formatRelative(device.lastSeenAt)}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {formatTimestamp(device.lastSeenAt)}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatDate(device.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+            </div>
+          }
+          filteredEmpty={
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                No devices match the current filters.
+              </p>
+              <Button variant="link" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       <ProvisionDeviceDialog
         open={provisionOpen}

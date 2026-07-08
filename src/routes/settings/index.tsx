@@ -9,14 +9,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { Badge } from "@/components/ui/badge"
 import { StickyHeader } from "@/components/sticky-header"
 import { useAuthStore } from "@/store/auth"
@@ -50,6 +43,26 @@ function OrganizationSettingsPage() {
   const orgName = activeOrg?.name ?? ""
   const tier = authUser?.tier ?? "free"
   const ownerEmail = authUser?.email ?? ""
+
+  const memberColumns: DataTableColumn<(typeof PLACEHOLDER_MEMBERS)[number]>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cellClassName: "font-medium",
+      cell: (member) => member.name,
+    },
+    {
+      id: "email",
+      header: "Email",
+      cellClassName: "text-muted-foreground",
+      cell: (member) => member.email || ownerEmail || "—",
+    },
+    {
+      id: "role",
+      header: "Role",
+      cell: (member) => <Badge variant="secondary">{member.role}</Badge>,
+    },
+  ]
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -93,28 +106,12 @@ function OrganizationSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {PLACEHOLDER_MEMBERS.map((member, index) => (
-                  <TableRow key={member.email || `member-${index}`}>
-                    <TableCell className="font-medium">{member.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {member.email || ownerEmail || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{member.role}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              card={false}
+              columns={memberColumns}
+              rows={PLACEHOLDER_MEMBERS}
+              getRowKey={(member, index) => member.email || `member-${index}`}
+            />
           </CardContent>
         </Card>
 

@@ -416,10 +416,39 @@ export interface Recording {
   createdAt: string
 }
 
+// Standard pagination block returned by list endpoints (see backend
+// src/utils/list-params.ts).
+export interface Page {
+  limit: number
+  offset: number
+  order: "asc" | "desc"
+  total: number
+}
+
+export interface RecordingsListParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  sort?: "createdAt" | "startedAt" | "durationMs" | "sizeBytes"
+  status?: RecordingStatus
+  from?: string
+  to?: string
+}
+
 export async function getDeviceRecordings(
-  deviceId: string
-): Promise<{ recordings: Recording[] }> {
-  return apiRequest(`/devices/${deviceId}/recordings`)
+  deviceId: string,
+  params: RecordingsListParams = {}
+): Promise<{ recordings: Recording[]; page?: Page }> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.sort) qs.set("sort", params.sort)
+  if (params.status) qs.set("status", params.status)
+  if (params.from) qs.set("from", params.from)
+  if (params.to) qs.set("to", params.to)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/devices/${deviceId}/recordings${suffix}`)
 }
 
 // Start recording one stream (cloud recorder joins the channel as a viewer).

@@ -1,18 +1,20 @@
-import { apiRequest } from "./api"
+import { apiRequest, type Page } from "./api"
 import type {
   WorkflowRunDetail,
   WorkflowRunSummary,
+  WorkflowRunsListParams,
 } from "./workflow-run-schemas"
+import { runsListQuery } from "./device-workflows-api"
 
 // Real client for Workflow Instances (runs). Backend: workflow-runs.ts. The list
 // is workspace-scoped server-side via the X-Workspace-Id header that apiRequest
 // attaches automatically; the page still re-fetches on workspace switch.
 // Signatures are unchanged from the former mock, so no page edits were needed.
 
-export async function listWorkflowInstances(): Promise<{
-  runs: WorkflowRunSummary[]
-}> {
-  return apiRequest("/workflow-runs")
+export async function listWorkflowInstances(
+  params: WorkflowRunsListParams = {},
+): Promise<{ runs: WorkflowRunSummary[]; page?: Page }> {
+  return apiRequest(`/workflow-runs${runsListQuery(params)}`)
 }
 
 export async function getWorkflowInstance(

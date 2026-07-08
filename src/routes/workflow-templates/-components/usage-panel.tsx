@@ -1,14 +1,50 @@
 import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { formatRelative } from "@/lib/relative-time"
 import type { WorkflowDeployment } from "@/lib/workflow-schemas"
+
+const columns: DataTableColumn<WorkflowDeployment>[] = [
+  {
+    id: "deployment",
+    header: "Deployment",
+    headClassName: "pl-3",
+    cellClassName: "pl-3 text-sm font-medium",
+    cell: (instance) => instance.name,
+  },
+  {
+    id: "workspace",
+    header: "Workspace",
+    cellClassName: "text-muted-foreground",
+    cell: (instance) => instance.workspaceName,
+  },
+  {
+    id: "version",
+    header: "Version",
+    cellClassName: "tabular-nums",
+    cell: (instance) =>
+      instance.pinnedVersion === null ? (
+        <span className="text-muted-foreground">follows published</span>
+      ) : (
+        <span>pinned v{instance.pinnedVersion}</span>
+      ),
+  },
+  {
+    id: "state",
+    header: "State",
+    cell: (instance) => (
+      <Badge variant={instance.enabled ? "default" : "outline"}>
+        {instance.enabled ? "enabled" : "paused"}
+      </Badge>
+    ),
+  },
+  {
+    id: "lastRun",
+    header: "Last run",
+    cellClassName: "text-muted-foreground tabular-nums",
+    cell: (instance) =>
+      instance.lastRunAt ? `${formatRelative(instance.lastRunAt)} ago` : "never",
+  },
+]
 
 // "Where is this consumed?" — the instances (template deployed + tuned onto
 // devices in a workspace) that reference this template. This is the same data
@@ -28,58 +64,12 @@ export function UsagePanel({ instances }: { instances: WorkflowDeployment[] }) {
 
   return (
     <div className="rounded-lg border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="pl-3 text-[10px] tracking-[0.14em] uppercase">
-              Deployment
-            </TableHead>
-            <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              Workspace
-            </TableHead>
-            <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              Version
-            </TableHead>
-            <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              State
-            </TableHead>
-            <TableHead className="text-[10px] tracking-[0.14em] uppercase">
-              Last run
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {instances.map((instance) => (
-            <TableRow key={instance.id}>
-              <TableCell className="pl-3 text-sm font-medium">
-                {instance.name}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {instance.workspaceName}
-              </TableCell>
-              <TableCell className="text-xs tabular-nums">
-                {instance.pinnedVersion === null ? (
-                  <span className="text-muted-foreground">
-                    follows published
-                  </span>
-                ) : (
-                  <span>pinned v{instance.pinnedVersion}</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <Badge variant={instance.enabled ? "default" : "outline"}>
-                  {instance.enabled ? "enabled" : "paused"}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground tabular-nums">
-                {instance.lastRunAt
-                  ? `${formatRelative(instance.lastRunAt)} ago`
-                  : "never"}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        card={false}
+        columns={columns}
+        rows={instances}
+        getRowKey={(instance) => instance.id}
+      />
     </div>
   )
 }

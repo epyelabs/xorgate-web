@@ -10,7 +10,6 @@ import { type DateRange } from "react-day-picker"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   Popover,
   PopoverContent,
@@ -23,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   ApiError,
   getDevice,
@@ -496,40 +494,28 @@ function DeviceTelemetryPage() {
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}
 
-      {toolbar}
-
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
-        {!capsLoaded || (loading && history.length === 0) ? (
-          <Card className="flex h-full flex-col">
-            <CardContent className="flex flex-1">
-              <Skeleton className="h-full w-full" />
-            </CardContent>
-          </Card>
-        ) : history.length > 0 ? (
-          <TelemetryTable
-            history={history}
-            metrics={columns}
-            units={units}
-            sortDir={order}
-            onToggleSort={toggleSort}
-            pinFirstColumn
-            footer={footer}
-            fillHeight
-          />
-        ) : (
-          <Card className="flex h-full flex-col">
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                {rangeMode === "all"
-                  ? "No telemetry recorded for this device yet."
-                  : "No telemetry in this range."}
-              </p>
-              <div className="mt-auto border-t border-border pt-3">{footer}</div>
-            </CardContent>
-          </Card>
-        )}
+        <TelemetryTable
+          history={history}
+          metrics={columns}
+          units={units}
+          sortDir={order}
+          onToggleSort={toggleSort}
+          pinFirstColumn
+          fillHeight
+          toolbar={toolbar}
+          footer={footer}
+          loading={!capsLoaded || (loading && history.length === 0)}
+          empty={
+            <p className="text-sm text-muted-foreground">
+              {rangeMode === "all"
+                ? "No telemetry recorded for this device yet."
+                : "No telemetry in this range."}
+            </p>
+          }
+        />
       </div>
     </div>
   )

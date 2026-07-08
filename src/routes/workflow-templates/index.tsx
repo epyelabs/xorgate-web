@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import {
-  ChevronDownIcon,
-  FilterIcon,
-  PlusIcon,
-  SearchIcon,
-} from "lucide-react"
+import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,14 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  DataTable,
+  DataTableToolbar,
+  StatusDot,
+  type DataTableColumn,
+} from "@/components/data-table"
 import { formatRelative } from "@/lib/relative-time"
 import { listWorkflowTemplates } from "@/lib/workflow-templates-api"
 import {
@@ -33,13 +26,6 @@ import {
 import { useAuthStore } from "@/store/auth"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
-import {
-  ColHead,
-  EmptyState,
-  FilteredEmptyState,
-  TemplateStatusCell,
-  TemplatesTableSkeleton,
-} from "./-components/templates-table-parts"
 
 export const Route = createFileRoute("/workflow-templates/")({
   beforeLoad: () => {
@@ -56,6 +42,11 @@ const STATUS_OPTIONS: readonly (TemplateStatus | "any")[] = [
   "published",
   "draft",
 ]
+
+const TEMPLATE_STATUS_COLOR: Record<TemplateStatus, string> = {
+  published: "bg-emerald-500",
+  draft: "bg-amber-500",
+}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -114,6 +105,106 @@ function WorkflowTemplatesListPage() {
     setQuery("")
     setStatusFilter("any")
   }
+  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+
+  const columns: DataTableColumn<WorkflowTemplateSummary>[] = [
+    {
+      id: "name",
+      header: "Name",
+      cell: (template) => (
+        <Link
+          to="/workflow-templates/$id"
+          params={{ id: template.id }}
+          className="block leading-tight"
+        >
+          <span className="block text-sm font-medium text-foreground hover:underline">
+            {template.name}
+          </span>
+          {template.description ? (
+            <span className="block max-w-md truncate text-xs text-muted-foreground">
+              {template.description}
+            </span>
+          ) : null}
+        </Link>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (template) => (
+        <StatusDot
+          color={TEMPLATE_STATUS_COLOR[template.status]}
+          label={template.status}
+        />
+      ),
+    },
+    {
+      id: "version",
+      header: "Version",
+      cellClassName: "tabular-nums",
+      cell: (template) => (
+        <>
+          v{template.publishedVersion ?? template.currentVersion}
+          {template.publishedVersion !== null &&
+          template.currentVersion > template.publishedVersion ? (
+            <span className="ml-1 text-muted-foreground">
+              (draft v{template.currentVersion})
+            </span>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "usedBy",
+      header: "Used by",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (template) =>
+        template.usedBy > 0
+          ? `${template.usedBy} ${template.usedBy === 1 ? "deployment" : "deployments"}`
+          : "—",
+    },
+    {
+      id: "createdBy",
+      header: "Created by",
+      cell: (template) => (
+        <span className="inline-flex items-center gap-1.5">
+          <Avatar className="size-5">
+            <AvatarFallback className="text-[9px]">
+              {initials(template.createdBy.name).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-xs text-muted-foreground">
+            {template.createdBy.name}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "updated",
+      header: "Updated",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (template) => `${formatRelative(template.updatedAt)} ago`,
+    },
+  ]
+
+  const statusFilterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <FilterIcon />
+          status: {statusFilter}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
+            {opt}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
@@ -141,117 +232,59 @@ function WorkflowTemplatesListPage() {
         </header>
       </StickyHeader>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full max-w-sm">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by name or description…"
-              className="pl-7"
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          getRowKey={(template) => template.id}
+          loading={isLoading}
+          isFiltered={isFiltered}
+          toolbar={
+            <DataTableToolbar
+              search={{
+                value: query,
+                onChange: setQuery,
+                placeholder: "Filter by name or description…",
+              }}
+              filters={statusFilterMenu}
+              right={
+                templates ? `Showing ${filtered.length} of ${templates.length}` : null
+              }
             />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <FilterIcon />
-                status: {statusFilter}
-                <ChevronDownIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {STATUS_OPTIONS.map((opt) => (
-                <DropdownMenuItem key={opt} onSelect={() => setStatusFilter(opt)}>
-                  {opt}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {templates ? (
-            <span className="ml-auto text-xs text-muted-foreground">
-              Showing {filtered.length} of {templates.length}
-            </span>
-          ) : null}
-        </div>
-
-        {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : isLoading ? (
-          <TemplatesTableSkeleton />
-        ) : templates && templates.length === 0 ? (
-          <EmptyState onCreate={() => setCreateOpen(true)} />
-        ) : filtered.length === 0 ? (
-          <FilteredEmptyState onClear={clearFilters} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <ColHead>Name</ColHead>
-                <ColHead>Status</ColHead>
-                <ColHead>Version</ColHead>
-                <ColHead>Used by</ColHead>
-                <ColHead>Created by</ColHead>
-                <ColHead>Updated</ColHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((template) => (
-                <TableRow key={template.id}>
-                  <TableCell>
-                    <Link
-                      to="/workflow-templates/$id"
-                      params={{ id: template.id }}
-                      className="block leading-tight"
-                    >
-                      <span className="block text-sm font-medium text-foreground hover:underline">
-                        {template.name}
-                      </span>
-                      {template.description ? (
-                        <span className="block max-w-md truncate text-xs text-muted-foreground">
-                          {template.description}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <TemplateStatusCell status={template.status} />
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    v{template.publishedVersion ?? template.currentVersion}
-                    {template.publishedVersion !== null &&
-                    template.currentVersion > template.publishedVersion ? (
-                      <span className="ml-1 text-muted-foreground">
-                        (draft v{template.currentVersion})
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {template.usedBy > 0
-                      ? `${template.usedBy} ${template.usedBy === 1 ? "deployment" : "deployments"}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Avatar className="size-5">
-                        <AvatarFallback className="text-[9px]">
-                          {initials(template.createdBy.name).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs text-muted-foreground">
-                        {template.createdBy.name}
-                      </span>
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatRelative(template.updatedAt)} ago
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+          }
+          empty={
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <p className="text-sm font-medium">No workflow templates yet</p>
+              <p className="text-xs text-muted-foreground">
+                Create a template to compose device data into conclusions.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className="text-xs text-primary underline-offset-2 hover:underline"
+              >
+                New template
+              </button>
+            </div>
+          }
+          filteredEmpty={
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                No templates match the current filters.
+              </p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs text-primary underline-offset-2 hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
+          }
+        />
+      )}
 
       <CreateTemplateDialog
         open={createOpen}

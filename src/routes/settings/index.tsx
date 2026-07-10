@@ -1,19 +1,31 @@
+import { useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
+import { MoreHorizontalIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
-import { Badge } from "@/components/ui/badge"
 import { StickyHeader } from "@/components/sticky-header"
+import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
+import type { Workspace } from "@/lib/api"
+import { EditWorkspaceDialog } from "./-components/edit-workspace-dialog"
+import { DeleteWorkspaceDialog } from "./-components/delete-workspace-dialog"
 
 export const Route = createFileRoute("/settings/")({
   beforeLoad: () => {
@@ -25,42 +37,86 @@ export const Route = createFileRoute("/settings/")({
   component: OrganizationSettingsPage,
 })
 
-// Placeholder member roster shown until member management is wired up.
-const PLACEHOLDER_MEMBERS = [
-  { name: "You", email: "", role: "Owner" },
-  { name: "Teammate", email: "teammate@example.com", role: "Admin" },
-]
+const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" })
+
+function formatDate(iso: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return dateFormat.format(parsed)
+}
 
 function OrganizationSettingsPage() {
-  const authUser = useAuthStore((s) => s.user)
   const organizations = useAuthStore((s) => s.organizations)
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
+  const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const isLoadingWorkspaces = useWorkspaceStore((s) => s.isLoadingWorkspaces)
 
   const activeOrg =
     organizations.find((o) => o.id === currentOrganizationId) ?? null
   const orgName = activeOrg?.name ?? ""
-  const tier = authUser?.tier ?? "free"
-  const ownerEmail = authUser?.email ?? ""
 
-  const memberColumns: DataTableColumn<(typeof PLACEHOLDER_MEMBERS)[number]>[] = [
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editing, setEditing] = useState<Workspace | null>(null)
+  const [deleting, setDeleting] = useState<Workspace | null>(null)
+
+  const workspaceColumns: DataTableColumn<Workspace>[] = [
     {
       id: "name",
       header: "Name",
       cellClassName: "font-medium",
-      cell: (member) => member.name,
+      cell: (workspace) => workspace.name,
     },
     {
-      id: "email",
-      header: "Email",
+      id: "slug",
+      header: "Slug",
+      cellClassName: "font-mono text-muted-foreground",
+      cell: (workspace) => workspace.slug,
+    },
+    {
+      id: "description",
+      header: "Description",
       cellClassName: "text-muted-foreground",
-      cell: (member) => member.email || ownerEmail || "—",
+      cell: (workspace) => workspace.description || "—",
     },
     {
-      id: "role",
-      header: "Role",
-      cell: (member) => <Badge variant="secondary">{member.role}</Badge>,
+      id: "created",
+      header: "Created",
+      cellClassName: "text-muted-foreground tabular-nums",
+      cell: (workspace) => formatDate(workspace.createdAt),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      cell: (workspace) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label={`Actions for ${workspace.name}`}
+            >
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setEditing(workspace)}>
+              <PencilIcon />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={() => setDeleting(workspace)}
+            >
+              <Trash2Icon />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
     },
   ]
 
@@ -100,41 +156,68 @@ function OrganizationSettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Members</CardTitle>
+            <CardTitle>Workspaces</CardTitle>
             <CardDescription>
-              People with access to this organization.
+              Workspaces group related resources inside this organization.
             </CardDescription>
+            <CardAction>
+              <Button
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+                disabled={!currentOrganizationId}
+              >
+                <PlusIcon />
+                New workspace
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <DataTable
               card={false}
-              columns={memberColumns}
-              rows={PLACEHOLDER_MEMBERS}
-              getRowKey={(member, index) => member.email || `member-${index}`}
+              columns={workspaceColumns}
+              rows={workspaces}
+              getRowKey={(workspace) => workspace.id}
+              loading={isLoadingWorkspaces}
+              skeletonRows={3}
+              empty={
+                <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium">No workspaces yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      Create a workspace to start grouping devices and
+                      workflows.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setCreateOpen(true)}
+                    disabled={!currentOrganizationId}
+                  >
+                    <PlusIcon />
+                    New workspace
+                  </Button>
+                </div>
+              }
             />
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Billing</CardTitle>
-            <CardDescription>
-              Your current plan and usage tier.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between gap-4">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium capitalize">{tier} plan</span>
-              <span className="text-xs text-muted-foreground">
-                Billed monthly.
-              </span>
-            </div>
-            <Button variant="outline" disabled>
-              Manage billing
-            </Button>
-          </CardContent>
-        </Card>
       </div>
+
+      <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <EditWorkspaceDialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null)
+        }}
+        workspace={editing}
+      />
+      <DeleteWorkspaceDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        workspace={deleting}
+      />
     </div>
   )
 }

@@ -14,21 +14,39 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { Box, Play, Settings, WorkflowIcon } from "lucide-react"
+import {
+  Box,
+  CreditCard,
+  KeyRound,
+  LayoutDashboard,
+  LayoutPanelTop,
+  Play,
+  Settings,
+  Users,
+  Waypoints,
+  WorkflowIcon,
+} from "lucide-react"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
 const workspaceNav = [
   { title: "Devices", url: "/devices", icon: <Box /> },
-  { title: "Workflow Instances", url: "/workflow-instances", icon: <Play /> },
+  {
+    title: "Workflow Instances",
+    url: "/workflow-instances",
+    icon: <Waypoints />,
+  },
 ]
 
 const organizationNav = [
   {
     title: "Workflow Templates",
     url: "/workflow-templates",
-    icon: <WorkflowIcon />,
+    icon: <LayoutDashboard />,
   },
+  { title: "API Keys", url: "/api-keys", icon: <KeyRound /> },
+  { title: "Members", url: "/members", icon: <Users /> },
+  { title: "Billing", url: "/billing", icon: <CreditCard /> },
   { title: "Settings", url: "/settings", icon: <Settings /> },
 ]
 

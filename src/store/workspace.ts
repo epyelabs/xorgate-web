@@ -3,7 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware"
 import {
   createOrganization as apiCreateOrganization,
   createWorkspace as apiCreateWorkspace,
+  deleteWorkspace as apiDeleteWorkspace,
   listWorkspaces as apiListWorkspaces,
+  updateWorkspace as apiUpdateWorkspace,
   registerOrgIdGetter,
   registerWorkspaceIdGetter,
   type Organization,
@@ -27,6 +29,11 @@ interface WorkspaceState {
     slug: string
     description?: string
   }) => Promise<Workspace>
+  updateWorkspace: (
+    id: string,
+    input: { name?: string; slug?: string; description?: string | null }
+  ) => Promise<Workspace>
+  deleteWorkspace: (id: string) => Promise<void>
   reset: () => void
 }
 
@@ -110,6 +117,30 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           currentWorkspaceId: workspace.id,
         }))
         return workspace
+      },
+
+      updateWorkspace: async (id, input) => {
+        const { workspace } = await apiUpdateWorkspace(id, input)
+        set((state) => ({
+          workspaces: state.workspaces.map((w) =>
+            w.id === workspace.id ? workspace : w
+          ),
+        }))
+        return workspace
+      },
+
+      deleteWorkspace: async (id) => {
+        await apiDeleteWorkspace(id)
+        set((state) => {
+          const workspaces = state.workspaces.filter((w) => w.id !== id)
+          // If the active workspace was deleted, fall back to the first
+          // remaining one so the rest of the app never points at a stale id.
+          const currentWorkspaceId =
+            state.currentWorkspaceId === id
+              ? workspaces[0]?.id ?? null
+              : state.currentWorkspaceId
+          return { workspaces, currentWorkspaceId }
+        })
       },
 
       reset: () => {

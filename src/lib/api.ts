@@ -85,12 +85,24 @@ export interface Organization {
 
 export interface Workspace {
   id: string
-  organization_id: string
+  organizationId: string
   name: string
   slug: string
   description: string | null
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApiKeyScope = "edge" | "cloud" | "client"
+
+export interface ApiKey {
+  id: string
+  organizationId: string
+  name: string
+  scope: ApiKeyScope
+  lastUsedAt: string | null
+  revokedAt: string | null
+  createdAt: string
 }
 
 export interface MeResponse {
@@ -130,6 +142,39 @@ export async function createWorkspace(input: {
     method: "POST",
     body: JSON.stringify(input),
   })
+}
+
+export async function updateWorkspace(
+  id: string,
+  input: { name?: string; slug?: string; description?: string | null }
+): Promise<{ workspace: Workspace }> {
+  return apiRequest(`/workspaces/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteWorkspace(id: string): Promise<void> {
+  await apiRequest<void>(`/workspaces/${id}`, { method: "DELETE" })
+}
+
+export async function listApiKeys(): Promise<{ api_keys: ApiKey[] }> {
+  return apiRequest("/api-keys")
+}
+
+// The plaintext key is returned exactly once, at creation time.
+export async function createApiKey(input: {
+  name: string
+  scope: ApiKeyScope
+}): Promise<{ api_key: ApiKey; plaintext_key: string }> {
+  return apiRequest("/api-keys", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteApiKey(id: string): Promise<void> {
+  await apiRequest<void>(`/api-keys/${id}`, { method: "DELETE" })
 }
 
 export type DeviceStatus =

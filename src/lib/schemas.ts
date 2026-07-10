@@ -71,6 +71,13 @@ export const createWorkspaceSchema = z.object({
   description: z.string().max(280, "Description is too long").optional(),
 })
 
+export const apiKeyScopeSchema = z.enum(["edge", "cloud", "client"])
+
+export const createApiKeySchema = z.object({
+  name: z.string().min(1, "Name is required").max(80, "Name is too long"),
+  scope: apiKeyScopeSchema,
+})
+
 export const deviceStatusSchema = z.enum([
   "provisioned",
   "online",
@@ -287,3 +294,4 @@ export type SignupInput = z.infer<typeof signupSchema>
 export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>
+export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>

@@ -58,6 +58,9 @@ function resolveCrumbs(
     ]
   }
   if (pathname === "/settings") return [{ label: "Settings" }]
+  if (pathname === "/members") return [{ label: "Members" }]
+  if (pathname === "/api-keys") return [{ label: "API Keys" }]
+  if (pathname === "/billing") return [{ label: "Billing" }]
   if (pathname === "/devices") return [{ label: "Devices" }]
   if (pathname.startsWith("/devices/")) {
     const deviceCrumb: Crumb = { label: deviceName ?? "Device" }

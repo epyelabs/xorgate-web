@@ -21,14 +21,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  BadgeCheckIcon,
   BellIcon,
-  CreditCardIcon,
   EllipsisVerticalIcon,
   LogOutIcon,
   MonitorIcon,
   MoonIcon,
-  SparklesIcon,
   SunIcon,
   User,
 } from "lucide-react"

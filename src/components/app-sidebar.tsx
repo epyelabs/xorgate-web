@@ -19,12 +19,9 @@ import {
   CreditCard,
   KeyRound,
   LayoutDashboard,
-  LayoutPanelTop,
-  Play,
   Settings,
   Users,
   Waypoints,
-  WorkflowIcon,
 } from "lucide-react"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"

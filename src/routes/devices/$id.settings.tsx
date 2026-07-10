@@ -35,6 +35,7 @@ import {
   getDeviceIdentity,
   getKvsChannels,
   updateDevice,
+  type ActiveStreamsViewType,
   type Device,
   type DeviceIdentity,
   type DeviceStatus,
@@ -66,6 +67,11 @@ const STATUS_OPTIONS: DeviceStatus[] = [
   "online",
   "offline",
   "decommissioned",
+]
+
+const VIEW_TYPE_OPTIONS: { value: ActiveStreamsViewType; label: string }[] = [
+  { value: "card", label: "Card View (Default)" },
+  { value: "map", label: "Map View" },
 ]
 
 const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
@@ -113,11 +119,13 @@ function DeviceSettingsPage() {
   const [status, setStatus] = useState<DeviceStatus>("provisioned")
   const [persistTelemetry, setPersistTelemetry] = useState(false)
   const [autoRecord, setAutoRecord] = useState(false)
+  const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
     persistTelemetry: boolean
     autoRecord: boolean
+    activeStreamsViewType: ActiveStreamsViewType
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -145,11 +153,13 @@ function DeviceSettingsPage() {
         setStatus(fetched.status)
         setPersistTelemetry(fetched.persistTelemetry)
         setAutoRecord(fetched.autoRecord)
+        setViewType(fetched.activeStreamsViewType)
         setBaseline({
           name: initialName,
           status: fetched.status,
           persistTelemetry: fetched.persistTelemetry,
           autoRecord: fetched.autoRecord,
+          activeStreamsViewType: fetched.activeStreamsViewType,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -226,11 +236,13 @@ function DeviceSettingsPage() {
       const nextName = updated.name ?? ""
       setName(nextName)
       setStatus(updated.status)
+      setViewType(updated.activeStreamsViewType)
       setBaseline({
         name: nextName,
         status: updated.status,
         persistTelemetry: updated.persistTelemetry,
         autoRecord: updated.autoRecord,
+        activeStreamsViewType: updated.activeStreamsViewType,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -286,6 +298,32 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setAutoRecord(baseline.autoRecord)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Default Active Streams layout. Same optimistic-select + rollback-on-error
+  // pattern as the toggles above. Persisted per-device; the Active Streams tab
+  // reads it on next mount.
+  async function commitViewType(next: ActiveStreamsViewType) {
+    if (saving || baseline === null || next === baseline.activeStreamsViewType)
+      return
+    setViewType(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { activeStreamsViewType: next })
+      const updated = res.device
+      setDevice(updated)
+      setViewType(updated.activeStreamsViewType)
+      setBaseline({
+        ...baseline,
+        activeStreamsViewType: updated.activeStreamsViewType,
+      })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setViewType(baseline.activeStreamsViewType)
     } finally {
       setSaving(false)
     }
@@ -372,6 +410,33 @@ function DeviceSettingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="device-view-type">
+                      Default stream view
+                    </FieldLabel>
+                    <Select
+                      value={viewType}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitViewType(v as ActiveStreamsViewType)
+                      }
+                    >
+                      <SelectTrigger id="device-view-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VIEW_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Layout for the Active Streams tab. Saved automatically.
+                    </FieldDescription>
                   </Field>
 
                   <Field orientation="horizontal">

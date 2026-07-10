@@ -5,6 +5,7 @@ import {
   ApiError,
   getDevice,
   getDeviceModel,
+  type ActiveStreamsViewType,
   type IoCapabilities,
 } from "@/lib/api"
 import {
@@ -30,6 +31,8 @@ import {
   TelemetryReadout,
 } from "@/components/telemetry-readout"
 import { LiveVideoGrid } from "@/components/live-video-grid"
+import { LiveLocationMap } from "@/components/live-location-map"
+import { TelemetryStrip } from "@/components/telemetry-strip"
 
 export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: () => {
@@ -44,9 +47,10 @@ export const Route = createFileRoute("/devices/$id/streams")({
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
+  const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [metaLoading, setMetaLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const { latest, status, error: connError } = useIotTelemetry(id)
+  const { latest, history, status, error: connError } = useIotTelemetry(id)
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +67,7 @@ function DeviceStreamsPage() {
           .setDeviceName(
             parsedDevice.data.device.name ?? parsedDevice.data.device.serial
           )
+        setViewType(parsedDevice.data.device.activeStreamsViewType)
 
         const rawModel = await getDeviceModel(
           parsedDevice.data.device.deviceModelId
@@ -88,6 +93,22 @@ function DeviceStreamsPage() {
   }, [id])
 
   const videoCaps = caps?.media?.video ?? []
+
+  // Live position + trailing breadcrumb for the Map View, derived from the same
+  // telemetry the card view reads. Coordinates are [lon, lat] (Mapbox order).
+  const lat = latest["gps.lat"]?.value
+  const lon = latest["gps.lon"]?.value
+  const position: [number, number] | null =
+    typeof lat === "number" && typeof lon === "number" ? [lon, lat] : null
+  const track: [number, number][] = []
+  for (const p of history) {
+    const pLat = p["gps.lat"]
+    const pLon = p["gps.lon"]
+    if (typeof pLat === "number" && typeof pLon === "number") {
+      track.push([pLon, pLat])
+    }
+  }
+
   const imuGroups = [
     { label: "Orientation", metrics: imuQuaternionMetrics(caps) },
     { label: "Euler", metrics: imuEulerMetrics(caps) },
@@ -99,6 +120,39 @@ function DeviceStreamsPage() {
     { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
   const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
+
+  // Map View: a full-height location-first layout. The map fills the tab, the
+  // telemetry rides as an icon strip up top, and the live media floats bottom-
+  // right. `h-full` fills the tab's scroll wrapper so nothing overflows the page.
+  if (viewType === "map") {
+    return (
+      <div className="relative h-full w-full overflow-hidden rounded-lg border">
+        <LiveLocationMap position={position} track={track} />
+
+        {!position ? (
+          <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
+            Waiting for GPS fix…
+          </div>
+        ) : null}
+
+        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
+          <div className="pointer-events-auto max-w-full">
+            <TelemetryStrip caps={caps} latest={latest} />
+          </div>
+        </div>
+
+        {videoCaps.length > 0 ? (
+          <div className="absolute bottom-3 right-3 w-[36rem] max-w-[70%]">
+            <LiveVideoGrid
+              deviceId={id}
+              videoCaps={videoCaps}
+              showRecordAll={false}
+            />
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">

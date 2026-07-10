@@ -221,6 +221,10 @@ export type DeviceStatus =
   | "offline"
   | "decommissioned"
 
+// Pre-made layout the Active Streams tab renders. More views (and user-built
+// layouts) come later; keep parsers forward-compatible.
+export type ActiveStreamsViewType = "card" | "map"
+
 export interface Device {
   id: string
   workspaceId: string
@@ -231,6 +235,7 @@ export interface Device {
   status: DeviceStatus
   persistTelemetry: boolean
   autoRecord: boolean
+  activeStreamsViewType: ActiveStreamsViewType
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -271,6 +276,7 @@ export async function updateDevice(
     firmwareVersion?: string | null
     persistTelemetry?: boolean
     autoRecord?: boolean
+    activeStreamsViewType?: ActiveStreamsViewType
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {

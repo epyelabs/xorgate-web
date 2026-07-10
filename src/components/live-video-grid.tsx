@@ -132,10 +132,14 @@ export function LiveVideoGrid({
   deviceId,
   videoCaps,
   title,
+  showRecordAll = true,
 }: {
   deviceId: string
   videoCaps: { key: string; label?: string }[]
   title?: string
+  // When false, hides the bulk "Record all" control (per-tile Record stays).
+  // Used by the Map View overlay, which omits the bulk action to save space.
+  showRecordAll?: boolean
 }) {
   const [channels, setChannels] = useState<KvsChannel[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -297,7 +301,7 @@ export function LiveVideoGrid({
   const labelFor = (streamKey: string) =>
     videoCaps.find((c) => c.key === streamKey)?.label ?? streamKey
 
-  const canRecordAll = channels !== null && channels.length > 0
+  const canRecordAll = showRecordAll && channels !== null && channels.length > 0
 
   let body
   if (loadError) {
@@ -334,26 +338,28 @@ export function LiveVideoGrid({
 
   return (
     <div className="flex flex-col gap-3">
-      <div
-        className={cn(
-          "flex items-center gap-2",
-          title ? "justify-between" : "justify-end",
-        )}
-      >
-        {title ? (
-          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        ) : null}
-        {canRecordAll ? (
-          <Button
-            size="sm"
-            variant={allRecording ? "destructive" : "default"}
-            disabled={allBusy}
-            onClick={toggleAll}
-          >
-            {allBusy ? "…" : allRecording ? "Stop all" : "Record all"}
-          </Button>
-        ) : null}
-      </div>
+      {title || canRecordAll ? (
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            title ? "justify-between" : "justify-end",
+          )}
+        >
+          {title ? (
+            <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          ) : null}
+          {canRecordAll ? (
+            <Button
+              size="sm"
+              variant={allRecording ? "destructive" : "default"}
+              disabled={allBusy}
+              onClick={toggleAll}
+            >
+              {allBusy ? "…" : allRecording ? "Stop all" : "Record all"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {body}
     </div>
   )

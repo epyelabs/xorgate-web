@@ -30,6 +30,7 @@ import {
   MoonIcon,
   SparklesIcon,
   SunIcon,
+  User,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth"
 import { useTheme, type Theme } from "@/components/theme-provider"
@@ -123,19 +124,8 @@ export function NavUser({ user }: { user: NavUserData }) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem disabled>
-                <SparklesIcon />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem disabled>
-                <BadgeCheckIcon />
+                <User />
                 Account
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <CreditCardIcon />
-                Billing
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 <BellIcon />

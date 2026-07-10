@@ -170,7 +170,7 @@ function DeviceLayout() {
               </Avatar>
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-semibold tracking-tight">
+                  <h1 className="text-md font-semibold tracking-tight">
                     {device?.name ?? device?.serial ?? "Device"}
                   </h1>
                   {device ? (

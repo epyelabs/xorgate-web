@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -22,15 +21,19 @@ import {
 import { getIdToken } from "@/lib/cognito"
 import { useKvsViewer, type KvsStatus } from "@/hooks/use-kvs-viewer"
 
+// Live-status dot shown top-left of each tile, in place of a text badge. Green =
+// connected, amber (pulsing) = transient states (connecting / reconnecting), light
+// gray = waiting for the device, red = error. The label rides along as a tooltip +
+// aria-label so the meaning stays accessible without taking up space.
 const STATUS_META: Record<
   KvsStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  { label: string; dot: string; pulse: boolean }
 > = {
-  connecting: { label: "Connecting", variant: "secondary" },
-  waiting: { label: "Waiting for device", variant: "outline" },
-  connected: { label: "Live", variant: "default" },
-  closed: { label: "Reconnecting", variant: "outline" },
-  error: { label: "Error", variant: "destructive" },
+  connecting: { label: "Connecting", dot: "bg-amber-400", pulse: true },
+  waiting: { label: "Waiting for device", dot: "bg-zinc-300", pulse: false },
+  connected: { label: "Live", dot: "bg-green-500", pulse: false },
+  closed: { label: "Reconnecting", dot: "bg-amber-400", pulse: true },
+  error: { label: "Error", dot: "bg-red-500", pulse: false },
 }
 
 const POLL_MS = 5000
@@ -85,7 +88,7 @@ function LiveVideoTile({
   const isRecording = recording !== undefined
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden py-0">
       <CardContent className="p-0">
         <div className="relative aspect-video max-h-[40vh] w-full bg-black">
           <video
@@ -93,16 +96,25 @@ function LiveVideoTile({
             autoPlay
             playsInline
             muted
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
           />
-          <div className="absolute left-2 top-2 flex items-center gap-2">
-            <Badge variant={meta.variant}>{meta.label}</Badge>
+          <div className="absolute top-2 left-2 flex items-center gap-2">
+            <span
+              role="status"
+              aria-label={meta.label}
+              title={meta.label}
+              className={cn(
+                "inline-block size-2 rounded-full shadow-[0_0_2px_rgba(0,0,0,0.6)] ring-1 ring-white/70",
+                meta.dot,
+                meta.pulse && "animate-pulse"
+              )}
+            />
             {recording ? <CaptureIndicator recording={recording} /> : null}
           </div>
           <div className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
             {label}
           </div>
-          <div className="absolute bottom-2 right-2">
+          <div className="absolute right-2 bottom-2">
             <Button
               size="sm"
               variant={isRecording ? "destructive" : "secondary"}
@@ -114,7 +126,7 @@ function LiveVideoTile({
           </div>
         </div>
         {status === "error" && error ? (
-          <p className="text-destructive p-2 text-xs">{error}</p>
+          <p className="p-2 text-xs text-destructive">{error}</p>
         ) : null}
       </CardContent>
     </Card>
@@ -305,7 +317,7 @@ export function LiveVideoGrid({
 
   let body
   if (loadError) {
-    body = <p className="text-destructive text-sm">{loadError}</p>
+    body = <p className="text-sm text-destructive">{loadError}</p>
   } else if (channels === null) {
     body = (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -315,7 +327,7 @@ export function LiveVideoGrid({
     )
   } else if (channels.length === 0) {
     body = (
-      <p className="text-muted-foreground text-sm">
+      <p className="text-sm text-muted-foreground">
         No live video channels. Provision the device to enable streaming.
       </p>
     )
@@ -342,7 +354,7 @@ export function LiveVideoGrid({
         <div
           className={cn(
             "flex items-center gap-2",
-            title ? "justify-between" : "justify-end",
+            title ? "justify-between" : "justify-end"
           )}
         >
           {title ? (

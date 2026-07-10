@@ -144,7 +144,9 @@ export function SimulatorOutput({
   const sizeBytes =
     videoBinding?.kind === "video-file"
       ? videoBinding.file.size
-      : (videoBinding?.recording.sizeBytes ?? null)
+      : videoBinding?.kind === "video-recording"
+        ? videoBinding.recording.sizeBytes
+        : null
 
   if (running) {
     return (

@@ -13,10 +13,16 @@ export function DeviceRadioList({
   active,
   selectedId,
   onSelect,
+  filter,
+  emptyLabel,
 }: {
   active: boolean
   selectedId: string | null
   onSelect: (device: Device) => void
+  // Optional predicate to narrow the fleet (e.g. online-only for live streams).
+  filter?: (device: Device) => boolean
+  // Message shown when no device matches (defaults to the generic empty state).
+  emptyLabel?: string
 }) {
   const [devices, setDevices] = useState<Device[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -66,16 +72,17 @@ export function DeviceRadioList({
       </div>
     )
   }
-  if (devices.length === 0) {
+  const shown = filter ? devices.filter(filter) : devices
+  if (shown.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-        No devices in this workspace yet.
+        {emptyLabel ?? "No devices in this workspace yet."}
       </p>
     )
   }
   return (
     <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto rounded-md border border-border p-1">
-      {devices.map((d) => {
+      {shown.map((d) => {
         const on = d.id === selectedId
         return (
           <button

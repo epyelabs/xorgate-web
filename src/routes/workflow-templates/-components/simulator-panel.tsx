@@ -15,7 +15,7 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 import { SourceInputRow } from "./source-input-row"
 import { SourcePreviewDialog } from "./source-preview-dialog"
 import { SimulatorOutput } from "./simulator-output"
-import type { SourceBinding } from "./simulator-types"
+import type { SourceBinding, VideoBinding } from "./simulator-types"
 
 const EMPTY_DEFINITION: WorkflowDefinition = { nodes: [], edges: [] }
 
@@ -62,10 +62,7 @@ export function SimulatorPanel({
   }, [nodes])
 
   const [bindings, setBindings] = useState<Record<string, SourceBinding>>({})
-  const [preview, setPreview] = useState<Extract<
-    SourceBinding,
-    { kind: "video-file" | "video-recording" }
-  > | null>(null)
+  const [preview, setPreview] = useState<VideoBinding | null>(null)
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [ranDefinition, setRanDefinition] =

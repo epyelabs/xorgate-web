@@ -1,4 +1,4 @@
-import type { Device, Recording } from "@/lib/api"
+import type { Device, KvsChannel, Recording } from "@/lib/api"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 
@@ -19,6 +19,13 @@ export type SourceBinding =
       deviceName: string
       recording: Recording
     }
+  | {
+      kind: "video-live"
+      deviceId: string
+      deviceName: string
+      channel: KvsChannel
+    }
+  | { kind: "video-webcam"; name: string; deviceId?: string }
   | { kind: "csv-file"; file: File; name: string }
   | {
       kind: "device-telemetry"
@@ -27,9 +34,17 @@ export type SourceBinding =
       window?: ManualWindow
     }
 
-// The mode dropdown options differ by source group: video sources pick a file or
-// a device recording; sensor sources pick a CSV or a device's telemetry.
-export type VideoMode = "file" | "recordings"
+// Any binding that feeds a video source and can be previewed as video: an uploaded
+// file, a device recording, a live device stream, or the local webcam.
+export type VideoBinding = Extract<
+  SourceBinding,
+  { kind: "video-file" | "video-recording" | "video-live" | "video-webcam" }
+>
+
+// The mode dropdown options differ by source group: video sources pick a file, a
+// device recording, a live device stream, or the local webcam; sensor sources pick
+// a CSV or a device's telemetry.
+export type VideoMode = "file" | "recordings" | "live" | "webcam"
 export type SensorMode = "csv" | "device"
 
 // Video source catalog type; everything else in the "source" group is a sensor.
@@ -37,10 +52,13 @@ export function isVideoSource(catalogType: string): boolean {
   return catalogType === "source.video"
 }
 
-export function isVideoBinding(
-  b: SourceBinding,
-): b is Extract<SourceBinding, { kind: "video-file" | "video-recording" }> {
-  return b.kind === "video-file" || b.kind === "video-recording"
+export function isVideoBinding(b: SourceBinding): b is VideoBinding {
+  return (
+    b.kind === "video-file" ||
+    b.kind === "video-recording" ||
+    b.kind === "video-live" ||
+    b.kind === "video-webcam"
+  )
 }
 
 // One-line label for the "bound" chip.
@@ -50,6 +68,10 @@ export function bindingLabel(b: SourceBinding): string {
       return b.name
     case "video-recording":
       return `${b.deviceName} · ${b.recording.streamKey}`
+    case "video-live":
+      return `${b.deviceName} · ${b.channel.streamKey}`
+    case "video-webcam":
+      return b.name
     case "csv-file":
       return b.name
     case "device-telemetry":
@@ -80,7 +102,7 @@ export function formatSeconds(sec: number): string {
 // the Video / Frames output tabs.
 export function firstVideoBinding(
   bindings: Record<string, SourceBinding>,
-): Extract<SourceBinding, { kind: "video-file" | "video-recording" }> | null {
+): VideoBinding | null {
   for (const b of Object.values(bindings)) if (isVideoBinding(b)) return b
   return null
 }
@@ -118,6 +140,10 @@ export function bindingMeta(b: SourceBinding): string | null {
       ].filter(Boolean)
       return parts.length ? parts.join(" · ") : null
     }
+    case "video-live":
+      return `Live · ${b.channel.region}`
+    case "video-webcam":
+      return "Local camera"
     case "device-telemetry":
       if (!b.window) return null
       return b.window.mode === "lastN"

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { RadioIcon } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -8,21 +9,26 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getRecordingPlaybackUrl } from "@/lib/api"
-import type { SourceBinding } from "./simulator-types"
+import type { VideoBinding } from "./simulator-types"
 import { bindingLabel } from "./simulator-types"
 
+const DESCRIPTION: Record<VideoBinding["kind"], string> = {
+  "video-file": "Local preview — this file is not uploaded.",
+  "video-recording": "Playback from S3 (link expires).",
+  "video-live": "Live device stream (simulated preview).",
+  "video-webcam": "Live camera preview — nothing is uploaded.",
+}
+
 // Plays the video behind a bound source. Uploaded files play straight from their
-// in-browser object URL; device recordings fetch a fresh presigned S3 URL on open
-// (mirrors the recordings-table playback dialog). Only opened for video bindings.
+// in-browser object URL; device recordings fetch a fresh presigned S3 URL on open;
+// the webcam re-acquires the local camera; a live device stream shows a simulated
+// live panel. Only opened for video bindings.
 export function SourcePreviewDialog({
   binding,
   open,
   onOpenChange,
 }: {
-  binding: Extract<
-    SourceBinding,
-    { kind: "video-file" | "video-recording" }
-  > | null
+  binding: VideoBinding | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
@@ -30,6 +36,7 @@ export function SourcePreviewDialog({
   // only device recordings need an async presigned URL, tracked here.
   const [remoteUrl, setRemoteUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const webcamRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     if (!open || !binding || binding.kind !== "video-recording") return
@@ -54,6 +61,38 @@ export function SourcePreviewDialog({
     }
   }, [open, binding])
 
+  // Webcam: acquire the live camera stream while the dialog is open, releasing it
+  // (and stopping the camera light) on close.
+  useEffect(() => {
+    if (!open || !binding || binding.kind !== "video-webcam") return
+    let cancelled = false
+    let stream: MediaStream | null = null
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    ;(async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: binding.deviceId
+            ? { deviceId: { exact: binding.deviceId } }
+            : true,
+          audio: false,
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        if (webcamRef.current) webcamRef.current.srcObject = stream
+      } catch (err) {
+        if (!cancelled) setError((err as Error).message)
+      }
+    })()
+    return () => {
+      cancelled = true
+      stream?.getTracks().forEach((t) => t.stop())
+    }
+  }, [open, binding])
+
   const url = binding?.kind === "video-file" ? binding.url : remoteUrl
 
   return (
@@ -64,15 +103,32 @@ export function SourcePreviewDialog({
             {binding ? bindingLabel(binding) : "Preview"}
           </DialogTitle>
           <DialogDescription>
-            {binding?.kind === "video-recording"
-              ? "Playback from S3 (link expires)."
-              : "Local preview — this file is not uploaded."}
+            {binding ? DESCRIPTION[binding.kind] : null}
           </DialogDescription>
         </DialogHeader>
         {error ? (
           <p className="rounded-md border border-dashed border-destructive/50 px-3 py-6 text-center text-xs text-destructive">
             Couldn&apos;t load video: {error}
           </p>
+        ) : binding?.kind === "video-webcam" ? (
+          <video
+            ref={webcamRef}
+            autoPlay
+            muted
+            playsInline
+            className="aspect-video w-full rounded bg-black object-cover"
+          />
+        ) : binding?.kind === "video-live" ? (
+          <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded bg-gradient-to-br from-zinc-800 to-zinc-900">
+            <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-[11px] font-medium text-white">
+              <span className="size-2 animate-pulse rounded-full bg-red-500" />
+              LIVE
+            </span>
+            <div className="flex flex-col items-center gap-2 text-zinc-400">
+              <RadioIcon className="size-8" />
+              <span className="text-xs">{bindingLabel(binding)}</span>
+            </div>
+          </div>
         ) : !url ? (
           <Skeleton className="aspect-video w-full" />
         ) : (

@@ -2,8 +2,11 @@ import { useRef, useState } from "react"
 import {
   FileTextIcon,
   HardDriveIcon,
+  type LucideIcon,
   PlayIcon,
+  RadioIcon,
   UploadIcon,
+  WebcamIcon,
   XIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +21,8 @@ import { NODE_CATALOG_BY_TYPE } from "@/lib/workflow-nodes"
 import { cn } from "@/lib/utils"
 import { SourceMediaDialog } from "./source-media-dialog"
 import { SourceDeviceDialog } from "./source-device-dialog"
+import { SourceLiveDialog } from "./source-live-dialog"
+import { SourceWebcamDialog } from "./source-webcam-dialog"
 import {
   bindingLabel,
   bindingMeta,
@@ -25,8 +30,17 @@ import {
   isVideoSource,
   type SensorMode,
   type SourceBinding,
+  type VideoBinding,
   type VideoMode,
 } from "./simulator-types"
+
+// Action button label + icon per video input mode.
+const VIDEO_ACTION: Record<VideoMode, { label: string; icon: LucideIcon }> = {
+  file: { label: "Upload video", icon: UploadIcon },
+  recordings: { label: "Select media from device", icon: HardDriveIcon },
+  live: { label: "Select live stream", icon: RadioIcon },
+  webcam: { label: "Use webcam", icon: WebcamIcon },
+}
 
 // One row of the "Sources (Inputs)" section: an unbound source shows a mode
 // dropdown + an action button; a bound source shows a chip (name + remove, and a
@@ -45,9 +59,7 @@ export function SourceInputRow({
   binding: SourceBinding | undefined
   onBind: (binding: SourceBinding) => void
   onUnbind: () => void
-  onPreview: (
-    binding: Extract<SourceBinding, { kind: "video-file" | "video-recording" }>,
-  ) => void
+  onPreview: (binding: VideoBinding) => void
 }) {
   const isVideo = isVideoSource(catalogType)
   const Icon = NODE_CATALOG_BY_TYPE[catalogType]?.icon ?? HardDriveIcon
@@ -55,6 +67,8 @@ export function SourceInputRow({
   const [videoMode, setVideoMode] = useState<VideoMode>("file")
   const [sensorMode, setSensorMode] = useState<SensorMode>("csv")
   const [mediaOpen, setMediaOpen] = useState(false)
+  const [liveOpen, setLiveOpen] = useState(false)
+  const [webcamOpen, setWebcamOpen] = useState(false)
   const [deviceOpen, setDeviceOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -78,20 +92,21 @@ export function SourceInputRow({
   const runAction = () => {
     if (isVideo) {
       if (videoMode === "file") fileRef.current?.click()
-      else setMediaOpen(true)
+      else if (videoMode === "recordings") setMediaOpen(true)
+      else if (videoMode === "live") setLiveOpen(true)
+      else setWebcamOpen(true)
     } else {
       if (sensorMode === "csv") fileRef.current?.click()
       else setDeviceOpen(true)
     }
   }
 
-  const actionLabel = isVideo
-    ? videoMode === "file"
-      ? "Upload video"
-      : "Select media from device"
+  const action = isVideo
+    ? VIDEO_ACTION[videoMode]
     : sensorMode === "csv"
-      ? "Upload .csv file"
-      : "Select Device"
+      ? { label: "Upload .csv file", icon: UploadIcon }
+      : { label: "Select Device", icon: HardDriveIcon }
+  const ActionIcon = action.icon
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -152,12 +167,14 @@ export function SourceInputRow({
               value={videoMode}
               onValueChange={(v) => setVideoMode(v as VideoMode)}
             >
-              <SelectTrigger className="h-9 w-32 shrink-0">
+              <SelectTrigger className="h-9 w-36 shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="file">File</SelectItem>
                 <SelectItem value="recordings">Recordings</SelectItem>
+                <SelectItem value="live">Live Stream</SelectItem>
+                <SelectItem value="webcam">Webcam</SelectItem>
               </SelectContent>
             </Select>
           ) : (
@@ -180,8 +197,8 @@ export function SourceInputRow({
             className={cn("h-9 flex-1 justify-center gap-1.5")}
             onClick={runAction}
           >
-            <UploadIcon className="size-3.5" />
-            <span className="truncate">{actionLabel}</span>
+            <ActionIcon className="size-3.5" />
+            <span className="truncate">{action.label}</span>
           </Button>
         </div>
       )}
@@ -197,6 +214,16 @@ export function SourceInputRow({
       <SourceMediaDialog
         open={mediaOpen}
         onOpenChange={setMediaOpen}
+        onConfirm={onBind}
+      />
+      <SourceLiveDialog
+        open={liveOpen}
+        onOpenChange={setLiveOpen}
+        onConfirm={onBind}
+      />
+      <SourceWebcamDialog
+        open={webcamOpen}
+        onOpenChange={setWebcamOpen}
         onConfirm={onBind}
       />
       <SourceDeviceDialog

@@ -8,8 +8,8 @@ import {
 } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusDot } from "@/components/data-table/status-dot"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ApiError,
@@ -43,18 +43,26 @@ export const Route = createFileRoute("/devices/$id")({
   component: DeviceLayout,
 })
 
-function statusVariant(
-  status: DeviceStatus
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
+const DEVICE_STATUS_COLOR: Record<DeviceStatus, string> = {
+  online: "bg-emerald-500",
+  offline: "bg-amber-500",
+  provisioned: "bg-sky-500",
+  decommissioned: "bg-zinc-400",
+}
+
+// Folds the online/offline badge and the "Last seen" line into a single status
+// phrase: a live device just reads "Online" (last-seen is now, so it's noise),
+// while everything else surfaces the recency that actually matters.
+function deviceStatusLabel(device: Device): string {
+  switch (device.status) {
     case "online":
-      return "default"
+      return "Online"
     case "offline":
-      return "destructive"
+      return `Last seen ${formatRelative(device.lastSeenAt)}`
     case "provisioned":
-      return "secondary"
+      return "Provisioned"
     case "decommissioned":
-      return "outline"
+      return "Decommissioned"
   }
 }
 
@@ -163,40 +171,41 @@ function DeviceLayout() {
         <header className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Avatar size="lg">
+              <Avatar size="sm">
                 <AvatarFallback>
                   {device ? deviceInitials(device) : "—"}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-3">
-                  <h1 className="text-md font-semibold tracking-tight">
-                    {device?.name ?? device?.serial ?? "Device"}
-                  </h1>
-                  {device ? (
-                    <Badge variant={statusVariant(device.status)}>
-                      {device.status}
-                    </Badge>
-                  ) : null}
-                </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <h1 className="text-md truncate font-semibold tracking-tight">
+                  {device?.name ?? device?.serial ?? "Device"}
+                </h1>
                 {device ? (
-                  <p className="text-xs text-muted-foreground">
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {deviceModel ? (
                       <>
+                        <span
+                          aria-hidden
+                          className="h-3 w-px shrink-0 bg-border"
+                        />
                         <button
                           type="button"
                           onClick={() => setModelDialogOpen(true)}
-                          className="underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
+                          className="truncate underline decoration-dotted underline-offset-2 transition-colors hover:text-foreground"
                         >
                           {deviceModel.name}
                         </button>
-                        {" · "}
                       </>
                     ) : null}
-                    Last seen {formatRelative(device.lastSeenAt)}
-                  </p>
+                    <span aria-hidden className="h-3 w-px shrink-0 bg-border" />
+                    <StatusDot
+                      color={DEVICE_STATUS_COLOR[device.status]}
+                      label={deviceStatusLabel(device)}
+                      pulse={device.status === "online"}
+                    />
+                  </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">{id}</p>
+                  <span className="text-xs text-muted-foreground">{id}</span>
                 )}
               </div>
             </div>

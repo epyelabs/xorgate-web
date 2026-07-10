@@ -26,9 +26,15 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const navigate = useNavigate()
   const login = useAuthStore((s) => s.login)
+  const completeNewPassword = useAuthStore((s) => s.completeNewPassword)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  // Invitees signing in with a temporary password are switched to a second step
+  // where they choose a real password (the Cognito NEW_PASSWORD_REQUIRED flow).
+  const [needsNewPassword, setNeedsNewPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,13 +45,90 @@ export function LoginForm({
     }
     setSubmitting(true)
     try {
-      await login(parsed.data.email, parsed.data.password)
+      const result = await login(parsed.data.email, parsed.data.password)
+      if (result.status === "newPasswordRequired") {
+        setNeedsNewPassword(true)
+        return
+      }
       navigate({ to: "/devices" })
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  async function handleSetNewPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match")
+      return
+    }
+    setSubmitting(true)
+    try {
+      await completeNewPassword(newPassword)
+      navigate({ to: "/devices" })
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (needsNewPassword) {
+    return (
+      <div className={cn("flex flex-col gap-6", className)} {...props}>
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl">Set your password</CardTitle>
+            <CardDescription>
+              You were invited to xorgate. Choose a password to finish setting up
+              your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSetNewPassword}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="new-password">New password</FieldLabel>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="confirm-password">
+                    Confirm password
+                  </FieldLabel>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Saving..." : "Set password and continue"}
+                  </Button>
+                </Field>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

@@ -5,6 +5,7 @@ import {
   confirmSignUp,
   signOut,
   getCurrentSession,
+  completeNewPassword as cognitoCompleteNewPassword,
 } from "@/lib/cognito"
 import {
   getMe,
@@ -12,6 +13,10 @@ import {
   type Membership,
   type Organization,
 } from "@/lib/api"
+
+// login() resolves to "newPasswordRequired" when an admin-created invitee signs
+// in with their temporary password and must set a new one before continuing.
+export type LoginResult = { status: "ok" } | { status: "newPasswordRequired" }
 
 interface AuthState {
   user: MeUser | null
@@ -22,7 +27,8 @@ interface AuthState {
   error: string | null
 
   initialize: () => Promise<void>
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<LoginResult>
+  completeNewPassword: (newPassword: string) => Promise<void>
   signup: (email: string, password: string) => Promise<void>
   confirmSignup: (email: string, code: string) => Promise<void>
   logout: () => void
@@ -47,6 +53,30 @@ async function hydrateFromMe(set: (partial: Partial<AuthState>) => void) {
     memberships: me.memberships,
     organizations: me.organizations,
   })
+}
+
+// Marks the session authenticated from a fresh id token, then best-effort
+// hydrates the full profile from /me. Shared by login + completeNewPassword.
+async function applyIdToken(
+  idToken: string,
+  set: (partial: Partial<AuthState>) => void
+) {
+  const claims = decodeIdToken(idToken)
+  set({
+    user: {
+      id: claims.sub,
+      email: claims.email,
+      name: null,
+      tier: "free",
+      role: "user",
+    },
+    isAuthenticated: true,
+  })
+  try {
+    await hydrateFromMe(set)
+  } catch {
+    // proceed even if /me isn't reachable yet; token claims carry the basics
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -89,23 +119,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email, password) => {
     set({ error: null })
     try {
-      const session = await signIn(email, password)
-      const claims = decodeIdToken(session.getIdToken().getJwtToken())
-      set({
-        user: {
-          id: claims.sub,
-          email: claims.email,
-          name: null,
-          tier: "free",
-          role: "user",
-        },
-        isAuthenticated: true,
-      })
-      try {
-        await hydrateFromMe(set)
-      } catch {
-        // proceed even if /me fails immediately after login
+      const result = await signIn(email, password)
+      if (result.challenge === "NEW_PASSWORD_REQUIRED") {
+        // Invitee's first sign-in: they must set a password before we have a
+        // session. The login form routes to the set-password step.
+        return { status: "newPasswordRequired" }
       }
+      await applyIdToken(result.session.getIdToken().getJwtToken(), set)
+      return { status: "ok" }
+    } catch (err) {
+      set({ error: (err as Error).message })
+      throw err
+    }
+  },
+
+  completeNewPassword: async (newPassword) => {
+    set({ error: null })
+    try {
+      const session = await cognitoCompleteNewPassword(newPassword)
+      await applyIdToken(session.getIdToken().getJwtToken(), set)
     } catch (err) {
       set({ error: (err as Error).message })
       throw err

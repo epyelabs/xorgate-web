@@ -10,13 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
-import { Route as MembersRouteImport } from './routes/members'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
 import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as MembersIndexRouteImport } from './routes/members/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
 import { Route as ApiKeysIndexRouteImport } from './routes/api-keys/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
@@ -34,11 +34,6 @@ import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.ben
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MembersRoute = MembersRouteImport.update({
-  id: '/members',
-  path: '/members',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -69,6 +64,11 @@ const WorkflowInstancesIndexRoute = WorkflowInstancesIndexRouteImport.update({
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MembersIndexRoute = MembersIndexRouteImport.update({
+  id: '/members/',
+  path: '/members/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevicesIndexRoute = DevicesIndexRouteImport.update({
@@ -141,13 +141,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/billing': typeof BillingRoute
   '/login': typeof LoginRoute
-  '/members': typeof MembersRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
   '/devices/': typeof DevicesIndexRoute
+  '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
@@ -164,12 +164,12 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/billing': typeof BillingRoute
   '/login': typeof LoginRoute
-  '/members': typeof MembersRoute
   '/signup': typeof SignupRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys': typeof ApiKeysIndexRoute
   '/devices': typeof DevicesIndexRoute
+  '/members': typeof MembersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
@@ -187,13 +187,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/billing': typeof BillingRoute
   '/login': typeof LoginRoute
-  '/members': typeof MembersRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
   '/devices/': typeof DevicesIndexRoute
+  '/members/': typeof MembersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
@@ -212,13 +212,13 @@ export interface FileRouteTypes {
     | '/'
     | '/billing'
     | '/login'
-    | '/members'
     | '/signup'
     | '/devices/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
     | '/devices/'
+    | '/members/'
     | '/settings/'
     | '/workflow-instances/'
     | '/workflow-templates/'
@@ -235,12 +235,12 @@ export interface FileRouteTypes {
     | '/'
     | '/billing'
     | '/login'
-    | '/members'
     | '/signup'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys'
     | '/devices'
+    | '/members'
     | '/settings'
     | '/workflow-instances'
     | '/workflow-templates'
@@ -257,13 +257,13 @@ export interface FileRouteTypes {
     | '/'
     | '/billing'
     | '/login'
-    | '/members'
     | '/signup'
     | '/devices/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
     | '/devices/'
+    | '/members/'
     | '/settings/'
     | '/workflow-instances/'
     | '/workflow-templates/'
@@ -281,13 +281,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BillingRoute: typeof BillingRoute
   LoginRoute: typeof LoginRoute
-  MembersRoute: typeof MembersRoute
   SignupRoute: typeof SignupRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
   ApiKeysIndexRoute: typeof ApiKeysIndexRoute
   DevicesIndexRoute: typeof DevicesIndexRoute
+  MembersIndexRoute: typeof MembersIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   WorkflowInstancesIndexRoute: typeof WorkflowInstancesIndexRoute
   WorkflowTemplatesIndexRoute: typeof WorkflowTemplatesIndexRoute
@@ -300,13 +300,6 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/members': {
-      id: '/members'
-      path: '/members'
-      fullPath: '/members'
-      preLoaderRoute: typeof MembersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -349,6 +342,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings/'
       preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/members/': {
+      id: '/members/'
+      path: '/members'
+      fullPath: '/members/'
+      preLoaderRoute: typeof MembersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/devices/': {
@@ -475,13 +475,13 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BillingRoute: BillingRoute,
   LoginRoute: LoginRoute,
-  MembersRoute: MembersRoute,
   SignupRoute: SignupRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,
   ApiKeysIndexRoute: ApiKeysIndexRoute,
   DevicesIndexRoute: DevicesIndexRoute,
+  MembersIndexRoute: MembersIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   WorkflowInstancesIndexRoute: WorkflowInstancesIndexRoute,
   WorkflowTemplatesIndexRoute: WorkflowTemplatesIndexRoute,

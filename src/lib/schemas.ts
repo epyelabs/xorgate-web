@@ -71,6 +71,19 @@ export const createWorkspaceSchema = z.object({
   description: z.string().max(280, "Description is too long").optional(),
 })
 
+export const membershipRoleSchema = z.enum([
+  "owner",
+  "admin",
+  "member",
+  "viewer",
+])
+
+// Add-member form: identify an existing user by email and assign a role.
+export const addMemberSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  role: membershipRoleSchema,
+})
+
 export const apiKeyScopeSchema = z.enum(["edge", "cloud", "client"])
 
 export const createApiKeySchema = z.object({
@@ -295,3 +308,4 @@ export type ConfirmSignupInput = z.infer<typeof confirmSignupSchema>
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>
 export type CreateApiKeyInput = z.infer<typeof createApiKeySchema>
+export type AddMemberInput = z.infer<typeof addMemberSchema>

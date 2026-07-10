@@ -33,10 +33,22 @@ export function confirmSignUp(email: string, code: string): Promise<void> {
   })
 }
 
+// A successful sign-in either returns a session, or reports that the account is
+// in FORCE_CHANGE_PASSWORD (an admin-created invitee signing in with the
+// temporary password) and must set a new one via completeNewPassword().
+export type SignInResult =
+  | { challenge: "NONE"; session: CognitoUserSession }
+  | { challenge: "NEW_PASSWORD_REQUIRED" }
+
+// The CognitoUser mid-challenge is held here so completeNewPassword() can finish
+// the same authentication flow. Set only between signIn() resolving with
+// NEW_PASSWORD_REQUIRED and completeNewPassword() succeeding.
+let pendingChallengeUser: CognitoUser | null = null
+
 export function signIn(
   email: string,
   password: string
-): Promise<CognitoUserSession> {
+): Promise<SignInResult> {
   return new Promise((resolve, reject) => {
     const user = new CognitoUser({ Username: email, Pool: userPool })
     const authDetails = new AuthenticationDetails({
@@ -44,9 +56,44 @@ export function signIn(
       Password: password,
     })
     user.authenticateUser(authDetails, {
-      onSuccess: (session) => resolve(session),
-      onFailure: (err) => reject(err),
+      onSuccess: (session) => {
+        pendingChallengeUser = null
+        resolve({ challenge: "NONE", session })
+      },
+      onFailure: (err) => {
+        pendingChallengeUser = null
+        reject(err)
+      },
+      newPasswordRequired: () => {
+        pendingChallengeUser = user
+        resolve({ challenge: "NEW_PASSWORD_REQUIRED" })
+      },
     })
+  })
+}
+
+// Completes the NEW_PASSWORD_REQUIRED challenge for the user returned by the most
+// recent signIn(). email/email_verified were set at admin-create time, so no
+// additional required attributes are supplied.
+export function completeNewPassword(
+  newPassword: string
+): Promise<CognitoUserSession> {
+  return new Promise((resolve, reject) => {
+    const user = pendingChallengeUser
+    if (!user) {
+      return reject(new Error("No password challenge in progress"))
+    }
+    user.completeNewPasswordChallenge(
+      newPassword,
+      {},
+      {
+        onSuccess: (session) => {
+          pendingChallengeUser = null
+          resolve(session)
+        },
+        onFailure: (err) => reject(err),
+      }
+    )
   })
 }
 

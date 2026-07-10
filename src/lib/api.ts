@@ -75,6 +75,19 @@ export interface Membership {
   createdAt: string
 }
 
+// The member's identity embedded in each roster row by GET /memberships.
+export interface MembershipUser {
+  id: string
+  email: string
+  name: string | null
+}
+
+// A membership enriched with its member's identity, as returned by
+// GET /memberships. `user` is null only if the referenced user row is missing.
+export interface OrgMember extends Membership {
+  user: MembershipUser | null
+}
+
 export interface Organization {
   id: string
   name: string
@@ -127,6 +140,31 @@ export async function createOrganization(input: {
     method: "POST",
     body: JSON.stringify(input),
   })
+}
+
+// --- Organization members (roster) ---
+export async function listMemberships(): Promise<{ memberships: OrgMember[] }> {
+  return apiRequest("/memberships")
+}
+
+// Adds a member (by email) to the active organization. If the email has no
+// account yet, the backend provisions a Cognito account and emails an
+// invitation to set a password — `invited` is true in that case. Owner/admin
+// only.
+export async function addMembership(input: {
+  email: string
+  role: MembershipRole
+}): Promise<{ membership: Membership; invited: boolean }> {
+  return apiRequest("/memberships", {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+// Removes a member from the active organization (owner/admin only). The backend
+// refuses to remove the last owner. Returns 204 (no content).
+export async function removeMembership(id: string): Promise<void> {
+  await apiRequest<void>(`/memberships/${id}`, { method: "DELETE" })
 }
 
 export async function listWorkspaces(): Promise<{ workspaces: Workspace[] }> {

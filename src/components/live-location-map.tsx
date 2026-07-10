@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import Map, {
-  Layer,
-  Marker,
-  Source,
-  type MapRef,
-} from "react-map-gl/mapbox"
+import Map, { Layer, Marker, Source, type MapRef } from "react-map-gl/mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
@@ -44,25 +39,35 @@ function useIsDark(): boolean {
 export function LiveLocationMap({
   position,
   track,
+  following,
+  onInteract,
 }: {
   position: [number, number] | null
   track: [number, number][]
+  // Follow state is owned by the parent so the Recenter control can live in the
+  // telemetry strip; `onInteract` fires on a user pan/zoom to pause following.
+  following: boolean
+  onInteract: () => void
 }) {
   const mapRef = useRef<MapRef>(null)
-
-  // Follow the device: ease the camera to each new fix. Kept as a light pan so
-  // the operator stays oriented rather than being snapped around.
-  useEffect(() => {
-    if (!position) return
-    mapRef.current?.easeTo({ center: position, duration: 600 })
-  }, [position])
-
   const isDark = useIsDark()
+
+  const lon = position?.[0]
+  const lat = position?.[1]
+
+  // Ease the camera to each new fix — but only while following, and keyed on the
+  // lon/lat values (not the array identity) so it doesn't re-fire on every
+  // telemetry flush, only when the coordinates actually change.
+  useEffect(() => {
+    if (!following || lon === undefined || lat === undefined) return
+    mapRef.current?.easeTo({ center: [lon, lat], duration: 600 })
+  }, [following, lon, lat])
 
   if (!MAPBOX_TOKEN) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
-        Map view needs a Mapbox token. Set VITE_MAPBOX_TOKEN in your environment.
+        Map view needs a Mapbox token. Set VITE_MAPBOX_TOKEN in your
+        environment.
       </div>
     )
   }
@@ -82,12 +87,17 @@ export function LiveLocationMap({
       mapboxAccessToken={MAPBOX_TOKEN}
       mapStyle={isDark ? DARK_STYLE : LIGHT_STYLE}
       initialViewState={{
-        longitude: position?.[0] ?? 0,
-        latitude: position?.[1] ?? 20,
+        longitude: lon ?? 0,
+        latitude: lat ?? 20,
         zoom: position ? 15 : 1.5,
       }}
       style={{ width: "100%", height: "100%" }}
       attributionControl={false}
+      onMoveStart={(e) => {
+        // Only user gestures carry originalEvent; our own easeTo moves don't,
+        // so this pauses auto-follow on pan/zoom but not on programmatic pans.
+        if ("originalEvent" in e && e.originalEvent) onInteract()
+      }}
     >
       {trackGeojson ? (
         <Source id="gps-trail" type="geojson" data={trackGeojson}>

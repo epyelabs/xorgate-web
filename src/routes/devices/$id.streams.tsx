@@ -33,6 +33,8 @@ import {
 import { LiveVideoGrid } from "@/components/live-video-grid"
 import { LiveLocationMap } from "@/components/live-location-map"
 import { TelemetryStrip } from "@/components/telemetry-strip"
+import { Button } from "@/components/ui/button"
+import { LocateFixedIcon } from "lucide-react"
 
 export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: () => {
@@ -50,6 +52,10 @@ function DeviceStreamsPage() {
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [metaLoading, setMetaLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Map View camera follow: auto-centres on new fixes until the operator pans or
+  // zooms, then pauses (Recenter resumes). Owned here so the Recenter control can
+  // sit inline with the telemetry strip.
+  const [following, setFollowing] = useState(true)
   const { latest, history, status, error: connError } = useIotTelemetry(id)
 
   useEffect(() => {
@@ -127,22 +133,44 @@ function DeviceStreamsPage() {
   if (viewType === "map") {
     return (
       <div className="relative h-full w-full overflow-hidden rounded-lg border">
-        <LiveLocationMap position={position} track={track} />
+        <LiveLocationMap
+          position={position}
+          track={track}
+          following={following}
+          onInteract={() => setFollowing(false)}
+        />
 
         {!position ? (
-          <div className="absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
             Waiting for GPS fix…
           </div>
         ) : null}
 
+        {/* Telemetry strip centered up top; the Recenter control floats at the
+            right so it never steals width from (or scrolls) the strip. */}
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
           <div className="pointer-events-auto max-w-full">
             <TelemetryStrip caps={caps} latest={latest} />
           </div>
         </div>
 
+        {!following && position ? (
+          <div className="pointer-events-auto absolute top-3 right-3">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setFollowing(true)}
+              title="Recenter map on device"
+              aria-label="Recenter map on device"
+              className="size-8 rounded-full border bg-background/85 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
+            >
+              <LocateFixedIcon className="size-4" />
+            </Button>
+          </div>
+        ) : null}
+
         {videoCaps.length > 0 ? (
-          <div className="absolute bottom-3 right-3 w-[36rem] max-w-[70%]">
+          <div className="absolute right-3 bottom-3 w-[36rem] max-w-[70%]">
             <LiveVideoGrid
               deviceId={id}
               videoCaps={videoCaps}
@@ -169,7 +197,11 @@ function DeviceStreamsPage() {
         <>
           {videoCaps.length > 0 ? (
             <section>
-              <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
+              <LiveVideoGrid
+                deviceId={id}
+                videoCaps={videoCaps}
+                title="Media"
+              />
             </section>
           ) : null}
 

@@ -8,6 +8,11 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
 const DARK_STYLE = "mapbox://styles/mapbox/dark-v11"
 const LIGHT_STYLE = "mapbox://styles/mapbox/light-v11"
 
+// Camera: start fully zoomed out (earth view), then fly in to street level on
+// the first GPS fix and hold that zoom while following.
+const EARTH_ZOOM = 1.5
+const FOLLOW_ZOOM = 15
+
 // Track whether the app is currently in dark mode by watching the `dark` class
 // the ThemeProvider toggles on <html>. This reflects the resolved theme (so it
 // reacts to both explicit toggles and system changes) without reaching into the
@@ -51,18 +56,31 @@ export function LiveLocationMap({
 }) {
   const mapRef = useRef<MapRef>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const didZoomInRef = useRef(false)
+  const [mapLoaded, setMapLoaded] = useState(false)
   const isDark = useIsDark()
 
   const lon = position?.[0]
   const lat = position?.[1]
 
-  // Ease the camera to each new fix — but only while following, and keyed on the
-  // lon/lat values (not the array identity) so it doesn't re-fire on every
-  // telemetry flush, only when the coordinates actually change.
+  // Follow the device. On the FIRST fix, fly from the earth view down to the
+  // device at FOLLOW_ZOOM; on later fixes (and on Recenter) ease to the new fix,
+  // holding the follow zoom. Keyed on the lon/lat values (not the array identity)
+  // so it fires only when the coordinates change, and waits for the map to load
+  // so the first move animates rather than jumping. Manual pan/zoom clears
+  // `following` (see onMoveStart); Recenter sets it back true → this re-runs.
   useEffect(() => {
-    if (!following || lon === undefined || lat === undefined) return
-    mapRef.current?.easeTo({ center: [lon, lat], duration: 600 })
-  }, [following, lon, lat])
+    if (!mapLoaded || !following || lon === undefined || lat === undefined)
+      return
+    const map = mapRef.current
+    if (!map) return
+    if (didZoomInRef.current) {
+      map.easeTo({ center: [lon, lat], zoom: FOLLOW_ZOOM, duration: 600 })
+    } else {
+      didZoomInRef.current = true
+      map.flyTo({ center: [lon, lat], zoom: FOLLOW_ZOOM, duration: 2000 })
+    }
+  }, [mapLoaded, following, lon, lat])
 
   // mapbox-gl only auto-resizes on window resize, not when its container changes
   // width — e.g. the app sidebar collapsing (a CSS width transition, which fires
@@ -103,10 +121,11 @@ export function LiveLocationMap({
         initialViewState={{
           longitude: lon ?? 0,
           latitude: lat ?? 20,
-          zoom: position ? 15 : 1.5,
+          zoom: EARTH_ZOOM,
         }}
         style={{ width: "100%", height: "100%" }}
         attributionControl={false}
+        onLoad={() => setMapLoaded(true)}
         onMoveStart={(e) => {
           // Only user gestures carry originalEvent; our own easeTo moves don't,
           // so this pauses auto-follow on pan/zoom but not on programmatic pans.

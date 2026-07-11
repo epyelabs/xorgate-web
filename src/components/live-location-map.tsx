@@ -50,6 +50,7 @@ export function LiveLocationMap({
   onInteract: () => void
 }) {
   const mapRef = useRef<MapRef>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const isDark = useIsDark()
 
   const lon = position?.[0]
@@ -62,6 +63,18 @@ export function LiveLocationMap({
     if (!following || lon === undefined || lat === undefined) return
     mapRef.current?.easeTo({ center: [lon, lat], duration: 600 })
   }, [following, lon, lat])
+
+  // mapbox-gl only auto-resizes on window resize, not when its container changes
+  // width — e.g. the app sidebar collapsing (a CSS width transition, which fires
+  // no window resize). Observe the container and resize the canvas so it always
+  // fills the available space instead of leaving a white gap on the side.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => mapRef.current?.resize())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   if (!MAPBOX_TOKEN) {
     return (
@@ -82,46 +95,52 @@ export function LiveLocationMap({
       : null
 
   return (
-    <Map
-      ref={mapRef}
-      mapboxAccessToken={MAPBOX_TOKEN}
-      mapStyle={isDark ? DARK_STYLE : LIGHT_STYLE}
-      initialViewState={{
-        longitude: lon ?? 0,
-        latitude: lat ?? 20,
-        zoom: position ? 15 : 1.5,
-      }}
-      style={{ width: "100%", height: "100%" }}
-      attributionControl={false}
-      onMoveStart={(e) => {
-        // Only user gestures carry originalEvent; our own easeTo moves don't,
-        // so this pauses auto-follow on pan/zoom but not on programmatic pans.
-        if ("originalEvent" in e && e.originalEvent) onInteract()
-      }}
-    >
-      {trackGeojson ? (
-        <Source id="gps-trail" type="geojson" data={trackGeojson}>
-          <Layer
-            id="gps-trail-line"
-            type="line"
-            layout={{ "line-cap": "round", "line-join": "round" }}
-            paint={{
-              "line-color": "#3b82f6",
-              "line-width": 3,
-              "line-opacity": 0.85,
-            }}
-          />
-        </Source>
-      ) : null}
+    <div ref={containerRef} className="h-full w-full">
+      <Map
+        ref={mapRef}
+        mapboxAccessToken={MAPBOX_TOKEN}
+        mapStyle={isDark ? DARK_STYLE : LIGHT_STYLE}
+        initialViewState={{
+          longitude: lon ?? 0,
+          latitude: lat ?? 20,
+          zoom: position ? 15 : 1.5,
+        }}
+        style={{ width: "100%", height: "100%" }}
+        attributionControl={false}
+        onMoveStart={(e) => {
+          // Only user gestures carry originalEvent; our own easeTo moves don't,
+          // so this pauses auto-follow on pan/zoom but not on programmatic pans.
+          if ("originalEvent" in e && e.originalEvent) onInteract()
+        }}
+      >
+        {trackGeojson ? (
+          <Source id="gps-trail" type="geojson" data={trackGeojson}>
+            <Layer
+              id="gps-trail-line"
+              type="line"
+              layout={{ "line-cap": "round", "line-join": "round" }}
+              paint={{
+                "line-color": "#3b82f6",
+                "line-width": 3,
+                "line-opacity": 0.85,
+              }}
+            />
+          </Source>
+        ) : null}
 
-      {position ? (
-        <Marker longitude={position[0]} latitude={position[1]} anchor="center">
-          <span className="relative flex h-3.5 w-3.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
-            <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 shadow" />
-          </span>
-        </Marker>
-      ) : null}
-    </Map>
+        {position ? (
+          <Marker
+            longitude={position[0]}
+            latitude={position[1]}
+            anchor="center"
+          >
+            <span className="relative flex h-3.5 w-3.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
+              <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 shadow" />
+            </span>
+          </Marker>
+        ) : null}
+      </Map>
+    </div>
   )
 }

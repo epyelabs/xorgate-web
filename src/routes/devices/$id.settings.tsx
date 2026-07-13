@@ -119,12 +119,14 @@ function DeviceSettingsPage() {
   const [status, setStatus] = useState<DeviceStatus>("provisioned")
   const [persistTelemetry, setPersistTelemetry] = useState(false)
   const [autoRecord, setAutoRecord] = useState(false)
+  const [gnssAntBias, setGnssAntBias] = useState(false)
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
     persistTelemetry: boolean
     autoRecord: boolean
+    gnssAntBias: boolean
     activeStreamsViewType: ActiveStreamsViewType
   } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -153,12 +155,14 @@ function DeviceSettingsPage() {
         setStatus(fetched.status)
         setPersistTelemetry(fetched.persistTelemetry)
         setAutoRecord(fetched.autoRecord)
+        setGnssAntBias(fetched.gnssAntBias)
         setViewType(fetched.activeStreamsViewType)
         setBaseline({
           name: initialName,
           status: fetched.status,
           persistTelemetry: fetched.persistTelemetry,
           autoRecord: fetched.autoRecord,
+          gnssAntBias: fetched.gnssAntBias,
           activeStreamsViewType: fetched.activeStreamsViewType,
         })
       } catch (err) {
@@ -242,6 +246,7 @@ function DeviceSettingsPage() {
         status: updated.status,
         persistTelemetry: updated.persistTelemetry,
         autoRecord: updated.autoRecord,
+        gnssAntBias: updated.gnssAntBias,
         activeStreamsViewType: updated.activeStreamsViewType,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
@@ -298,6 +303,28 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setAutoRecord(baseline.autoRecord)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // GPS antenna power (GNSS antenna bias). Same optimistic-flip + rollback-on-
+  // error pattern. The backend persists the flag and delivers it to the device
+  // as a retained MQTT config message; the modem daemon applies it live.
+  async function commitGnssAntBias(next: boolean) {
+    if (saving || baseline === null || next === baseline.gnssAntBias) return
+    setGnssAntBias(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { gnssAntBias: next })
+      const updated = res.device
+      setDevice(updated)
+      setGnssAntBias(updated.gnssAntBias)
+      setBaseline({ ...baseline, gnssAntBias: updated.gnssAntBias })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setGnssAntBias(baseline.gnssAntBias)
     } finally {
       setSaving(false)
     }
@@ -473,6 +500,26 @@ function DeviceSettingsPage() {
                       checked={autoRecord}
                       disabled={saving}
                       onCheckedChange={commitAutoRecord}
+                    />
+                  </Field>
+
+                  <Field orientation="horizontal">
+                    <FieldContent>
+                      <FieldLabel htmlFor="device-gnss-ant-bias">
+                        Power the GPS antenna
+                      </FieldLabel>
+                      <FieldDescription>
+                        Off by default. Active GPS antennas have a built-in
+                        amplifier that needs power over the antenna cable; turn
+                        this on only when one is fitted. Keep it off for
+                        passive antennas.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id="device-gnss-ant-bias"
+                      checked={gnssAntBias}
+                      disabled={saving}
+                      onCheckedChange={commitGnssAntBias}
                     />
                   </Field>
                 </FieldGroup>

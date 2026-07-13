@@ -235,6 +235,7 @@ export interface Device {
   status: DeviceStatus
   persistTelemetry: boolean
   autoRecord: boolean
+  gnssAntBias: boolean
   activeStreamsViewType: ActiveStreamsViewType
   lastSeenAt: string | null
   createdAt: string
@@ -276,6 +277,7 @@ export async function updateDevice(
     firmwareVersion?: string | null
     persistTelemetry?: boolean
     autoRecord?: boolean
+    gnssAntBias?: boolean
     activeStreamsViewType?: ActiveStreamsViewType
   }
 ): Promise<{ device: Device }> {

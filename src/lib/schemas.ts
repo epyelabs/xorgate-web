@@ -108,6 +108,8 @@ export const deviceSchema = z.object({
   status: deviceStatusSchema,
   persistTelemetry: z.boolean(),
   autoRecord: z.boolean(),
+  // Tolerate an older backend that doesn't return the field yet.
+  gnssAntBias: z.boolean().catch(false),
   // .catch keeps an older client forward-compatible when new view types ship.
   activeStreamsViewType: z.enum(["card", "map"]).catch("card"),
   lastSeenAt: z.string().nullable(),

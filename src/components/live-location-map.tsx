@@ -11,7 +11,7 @@ const LIGHT_STYLE = "mapbox://styles/mapbox/light-v11"
 // Camera: start fully zoomed out (earth view), then fly in to street level on
 // the first GPS fix and hold that zoom while following.
 const EARTH_ZOOM = 1.5
-const FOLLOW_ZOOM = 15
+const FOLLOW_ZOOM = 16
 
 // Track whether the app is currently in dark mode by watching the `dark` class
 // the ThemeProvider toggles on <html>. This reflects the resolved theme (so it

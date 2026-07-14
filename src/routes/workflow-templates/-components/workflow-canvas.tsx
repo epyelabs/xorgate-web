@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   Background,
   ControlButton,
   Controls,
+  type Connection,
   type Edge,
   MiniMap,
   type NodeTypes,
@@ -12,7 +13,9 @@ import {
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { Map as MapIcon, Maximize, Minus, Network, Plus } from "lucide-react"
+import { channelsCompatible } from "@/lib/workflow-catalog-schemas"
 import { type WfNode } from "@/lib/workflow-nodes"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { WorkflowNodeCard } from "./nodes/workflow-node-card"
 
@@ -67,11 +70,59 @@ function CanvasInner() {
     requestAnimationFrame(() => fitView({ padding: 0.2, duration: 300 }))
   }, [autoLayout, fitView])
 
+  // Typed-edge validation while dragging a connection: channels (+ json tags)
+  // must match and single-connection inputs must be free. Permissive whenever
+  // the catalog can't resolve a node or port — publish validation on the
+  // backend is authoritative and reports precisely.
+  const isValidConnection = useCallback((conn: Connection | Edge): boolean => {
+    if (!conn.source || !conn.target || conn.source === conn.target) return false
+    const { byType } = useWorkflowCatalog.getState()
+    const { nodes: allNodes, edges: allEdges } = useWorkflowEditor.getState()
+    const sourceNode = allNodes.find((n) => n.id === conn.source)
+    const targetNode = allNodes.find((n) => n.id === conn.target)
+    const sourceDef = sourceNode && byType[sourceNode.data.catalogType]
+    const targetDef = targetNode && byType[targetNode.data.catalogType]
+    if (!sourceDef || !targetDef) return true
+    const out =
+      sourceDef.outputs.find((p) => p.id === conn.sourceHandle) ??
+      (sourceDef.outputs.length === 1 ? sourceDef.outputs[0] : undefined)
+    const inp =
+      targetDef.inputs.find((p) => p.id === conn.targetHandle) ??
+      (targetDef.inputs.length === 1 ? targetDef.inputs[0] : undefined)
+    if (!out || !inp) return true
+    if (!channelsCompatible(out, inp)) return false
+    if (inp.cardinality === "one") {
+      const taken = allEdges.some(
+        (e) =>
+          e.target === conn.target &&
+          (e.targetHandle ?? (targetDef.inputs.length === 1 ? inp.id : undefined)) ===
+            inp.id,
+      )
+      if (taken) return false
+    }
+    return true
+  }, [])
+
+  // Publish-validation issues anchored to edges tint those edges destructive.
+  const publishIssues = useWorkflowEditor((s) => s.publishIssues)
+  const decoratedEdges = useMemo(() => {
+    const badEdges = new Set(
+      publishIssues.map((iss) => iss.edgeId).filter(Boolean) as string[],
+    )
+    if (badEdges.size === 0) return edges
+    return edges.map((e) =>
+      badEdges.has(e.id)
+        ? { ...e, style: { ...e.style, stroke: "var(--destructive)" } }
+        : e,
+    )
+  }, [edges, publishIssues])
+
   return (
     <div className="h-full w-full" onDrop={onDrop} onDragOver={onDragOver}>
       <ReactFlow<WfNode, Edge>
         nodes={nodes}
-        edges={edges}
+        edges={decoratedEdges}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

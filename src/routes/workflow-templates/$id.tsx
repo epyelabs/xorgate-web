@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { BracesIcon, PlayIcon, WorkflowIcon } from "lucide-react"
+import {
+  BracesIcon,
+  CircleAlertIcon,
+  PlayIcon,
+  WorkflowIcon,
+  XIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError } from "@/lib/api"
+import { parsePublishIssues } from "@/lib/workflow-catalog-schemas"
 import { cn } from "@/lib/utils"
 import {
   getWorkflowTemplate,
@@ -20,6 +27,7 @@ import {
 } from "@/lib/workflow-schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
@@ -74,6 +82,13 @@ function WorkflowTemplateDetailPage() {
   const [jsonRevision, setJsonRevision] = useState(0)
 
   const dirty = useWorkflowEditor((s) => s.dirty)
+  const publishIssues = useWorkflowEditor((s) => s.publishIssues)
+
+  // The palette, node cards, config forms, and edge typing all render from the
+  // served catalog; kick the fetch off with the page.
+  useEffect(() => {
+    void useWorkflowCatalog.getState().ensureLoaded()
+  }, [])
 
   const loadVersionIntoEditor = (version: WorkflowTemplateVersion) => {
     useWorkflowEditor.getState().loadDefinition(version.definition)
@@ -164,6 +179,22 @@ function WorkflowTemplateDetailPage() {
     }
   }
 
+  // A failed publish returns typed validation issues (WORKFLOW_VALIDATION_FAILED);
+  // push them into the editor store so the canvas highlights the offending
+  // nodes/edges, and summarize in a toast. Other errors toast as before.
+  const surfacePublishError = (err: unknown): void => {
+    const issues =
+      err instanceof ApiError ? parsePublishIssues(err.message) : null
+    if (issues && issues.length > 0) {
+      useWorkflowEditor.getState().setPublishIssues(issues)
+      toast.error(
+        `Publish blocked: ${issues.length} validation ${issues.length === 1 ? "issue" : "issues"}`,
+      )
+      return
+    }
+    toast.error((err as Error).message)
+  }
+
   const handlePublish = async () => {
     setBusy(true)
     try {
@@ -178,9 +209,10 @@ function WorkflowTemplateDetailPage() {
       setTemplate(updated)
       setLoadedVersionId(versionId)
       useWorkflowEditor.getState().markSaved()
+      useWorkflowEditor.getState().setPublishIssues([])
       toast.success("Template published")
     } catch (err) {
-      toast.error((err as Error).message)
+      surfacePublishError(err)
     } finally {
       setBusy(false)
     }
@@ -195,7 +227,7 @@ function WorkflowTemplateDetailPage() {
       if (published) loadVersionIntoEditor(published)
       toast.success(`Published v${version.version}`)
     } catch (err) {
-      toast.error((err as Error).message)
+      surfacePublishError(err)
     } finally {
       setBusy(false)
     }
@@ -326,6 +358,31 @@ function WorkflowTemplateDetailPage() {
             </Button>
           </div>
         </div>
+        {publishIssues.length > 0 ? (
+          <div className="flex shrink-0 items-start gap-2 border-b border-destructive/30 bg-destructive/5 px-4 py-2">
+            <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-destructive">
+                Publish blocked by {publishIssues.length} validation{" "}
+                {publishIssues.length === 1 ? "issue" : "issues"}
+              </p>
+              <ul className="mt-0.5 max-h-24 list-disc overflow-y-auto pl-4 text-[11px] text-muted-foreground">
+                {publishIssues.map((issue, i) => (
+                  <li key={i}>{issue.message}</li>
+                ))}
+              </ul>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => useWorkflowEditor.getState().setPublishIssues([])}
+              title="Dismiss"
+              aria-label="Dismiss validation issues"
+            >
+              <XIcon className="size-3.5" />
+            </Button>
+          </div>
+        ) : null}
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1">
             {editorMode === "gui" ? (

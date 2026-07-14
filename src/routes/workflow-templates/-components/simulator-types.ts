@@ -47,7 +47,9 @@ export type VideoBinding = Extract<
 export type VideoMode = "file" | "recordings" | "live" | "webcam"
 export type SensorMode = "csv" | "device"
 
-// Video source catalog type; everything else in the "source" group is a sensor.
+// Video source catalog type; everything else in the "source" group is a sensor
+// (telemetry). The catalog has exactly one abstract video source; its concrete
+// feed (file / recording / live / webcam) is what the mode dropdown binds.
 export function isVideoSource(catalogType: string): boolean {
   return catalogType === "source.video"
 }

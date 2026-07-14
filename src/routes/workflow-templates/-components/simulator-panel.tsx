@@ -8,9 +8,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { NODE_CATALOG_BY_TYPE } from "@/lib/workflow-nodes"
 import { simulate } from "@/lib/workflow-templates-api"
 import type { SimulationResult, WorkflowDefinition } from "@/lib/workflow-schemas"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { SourceInputRow } from "./source-input-row"
 import { SourcePreviewDialog } from "./source-preview-dialog"
@@ -36,21 +36,24 @@ export function SimulatorPanel({
   onClose: () => void
 }) {
   const nodes = useWorkflowEditor((s) => s.nodes)
+  const byType = useWorkflowCatalog((s) => s.byType)
 
   // Source rows, with a per-type index suffix when a type appears more than once
-  // (e.g. two "Video Stream" nodes -> "Video Stream 1" / "Video Stream 2").
+  // (e.g. two "Video File" nodes -> "Video File 1" / "Video File 2"). Connector
+  // sources (Google Roads) take graph inputs rather than test bindings, so only
+  // true sources (no input ports) get a row.
   const sources = useMemo(() => {
-    const src = nodes.filter(
-      (n) => NODE_CATALOG_BY_TYPE[n.data.catalogType]?.group === "source",
-    )
+    const src = nodes.filter((n) => {
+      const entry = byType[n.data.catalogType]
+      return entry?.group === "source" && entry.inputs.length === 0
+    })
     const totals = new Map<string, number>()
     for (const n of src)
       totals.set(n.data.catalogType, (totals.get(n.data.catalogType) ?? 0) + 1)
     const seen = new Map<string, number>()
     return src.map((n) => {
       const ct = n.data.catalogType
-      const base =
-        n.data.label || NODE_CATALOG_BY_TYPE[ct]?.label || ct
+      const base = n.data.label || byType[ct]?.label || ct
       let label = base
       if ((totals.get(ct) ?? 0) > 1) {
         const idx = (seen.get(ct) ?? 0) + 1
@@ -59,7 +62,7 @@ export function SimulatorPanel({
       }
       return { id: n.id, catalogType: ct, label }
     })
-  }, [nodes])
+  }, [nodes, byType])
 
   const [bindings, setBindings] = useState<Record<string, SourceBinding>>({})
   const [preview, setPreview] = useState<VideoBinding | null>(null)

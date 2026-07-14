@@ -9,21 +9,197 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { NODE_CATALOG_BY_TYPE } from "@/lib/workflow-nodes"
+import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 
-// The node editor body, rendered inside the per-node popover. Fields are driven
-// by the catalog entry so adding a knob is a data change, not a UI change.
+// The node editor body, rendered inside the per-node popover. Fields are
+// GENERATED from the served catalog's per-node config JSON Schema (drafted from
+// the backend zod via zod-to-json-schema), so the form always matches what
+// publish validation will accept. Covers the shapes the M1 catalog emits:
+// number/integer, string, string enum, boolean, string array, enum array.
+
+// Loose structural view of a JSON Schema property (draft-07 subset).
+interface PropSchema {
+  type?: string
+  enum?: unknown[]
+  default?: unknown
+  description?: string
+  minimum?: number
+  maximum?: number
+  exclusiveMinimum?: number
+  items?: { type?: string; enum?: unknown[] }
+}
+
+interface ObjectSchema {
+  properties?: Record<string, PropSchema>
+  required?: string[]
+}
+
+// "minConfidence" -> "Min confidence", "cacheTtlSeconds" -> "Cache ttl seconds"
+function humanize(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
+}
+
+function ConfigField({
+  nodeId,
+  fieldKey,
+  schema,
+  required,
+  value,
+}: {
+  nodeId: string
+  fieldKey: string
+  schema: PropSchema
+  required: boolean
+  value: unknown
+}) {
+  const updateNodeConfig = useWorkflowEditor((s) => s.updateNodeConfig)
+  const fieldId = `cfg-${fieldKey}`
+  const setValue = (v: unknown) => updateNodeConfig(nodeId, fieldKey, v)
+
+  let control: React.ReactNode
+  if (schema.enum) {
+    // String enum -> select.
+    control = (
+      <Select
+        value={String(value ?? schema.default ?? "")}
+        onValueChange={(v) => setValue(v)}
+      >
+        <SelectTrigger id={fieldId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {schema.enum.map((opt) => (
+            <SelectItem key={String(opt)} value={String(opt)}>
+              {String(opt)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    )
+  } else if (schema.type === "boolean") {
+    control = (
+      <Switch
+        id={fieldId}
+        checked={Boolean(value ?? schema.default ?? false)}
+        onCheckedChange={(checked) => setValue(checked)}
+      />
+    )
+  } else if (schema.type === "number" || schema.type === "integer") {
+    control = (
+      <Input
+        id={fieldId}
+        type="number"
+        min={schema.minimum ?? schema.exclusiveMinimum}
+        max={schema.maximum}
+        step={schema.type === "integer" ? 1 : "any"}
+        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        value={value === undefined || value === null ? "" : String(value)}
+        onChange={(e) =>
+          setValue(e.target.value === "" ? undefined : Number(e.target.value))
+        }
+      />
+    )
+  } else if (schema.type === "array" && schema.items?.enum) {
+    // Enum array (e.g. visualization overlays) -> toggle chips.
+    const selected = new Set(asStringArray(value ?? schema.default))
+    control = (
+      <div className="flex flex-wrap gap-1">
+        {schema.items.enum.map((opt) => {
+          const key = String(opt)
+          const on = selected.has(key)
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => {
+                const next = new Set(selected)
+                if (on) next.delete(key)
+                else next.add(key)
+                setValue([...next])
+              }}
+              className={cn(
+                "rounded-md border px-2 py-1 text-[11px] transition-colors",
+                on
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {key}
+            </button>
+          )
+        })}
+      </div>
+    )
+  } else if (schema.type === "array") {
+    // String array (metrics, classes) -> comma-separated text input.
+    control = (
+      <Input
+        id={fieldId}
+        placeholder="comma, separated, values"
+        value={asStringArray(value).join(", ")}
+        onChange={(e) => {
+          const items = e.target.value
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+          setValue(items.length > 0 ? items : undefined)
+        }}
+      />
+    )
+  } else {
+    // Strings and anything unrecognized.
+    control = (
+      <Input
+        id={fieldId}
+        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        value={value === undefined || value === null ? "" : String(value)}
+        onChange={(e) => setValue(e.target.value === "" ? undefined : e.target.value)}
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={fieldId} className="text-xs">
+        {humanize(fieldKey)}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </Label>
+      {control}
+      {schema.description ? (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          {schema.description}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const node = useWorkflowEditor((s) => s.nodes.find((n) => n.id === nodeId))
   const updateNodeLabel = useWorkflowEditor((s) => s.updateNodeLabel)
-  const updateNodeConfig = useWorkflowEditor((s) => s.updateNodeConfig)
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
+  const entry = useWorkflowCatalog((s) =>
+    node ? s.byType[node.data.catalogType] : undefined,
+  )
 
   if (!node) return null
 
-  const entry = NODE_CATALOG_BY_TYPE[node.data.catalogType]
   const config = node.data.config
+  const objectSchema = (entry?.configSchema ?? {}) as ObjectSchema
+  const properties = Object.entries(objectSchema.properties ?? {})
+  const requiredKeys = new Set(objectSchema.required ?? [])
 
   return (
     <div className="flex flex-col gap-3">
@@ -47,69 +223,31 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
         </div>
 
         {entry?.description ? (
-          <p className="text-[11px] text-muted-foreground">
-            {entry.description}
+          <p className="text-[11px] text-muted-foreground">{entry.description}</p>
+        ) : (
+          <p className="text-[11px] text-destructive">
+            Unknown node type — not in the served catalog. It will fail publish
+            validation.
+          </p>
+        )}
+
+        {entry?.ui.editor ? (
+          <p className="rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
+            This node gets a rich {entry.ui.editor} editor in a later milestone;
+            plain fields below for now.
           </p>
         ) : null}
 
-        {entry?.fields.map((field) => {
-          const value = config[field.key]
-          const fieldId = `cfg-${field.key}`
-          return (
-            <div key={field.key} className="flex flex-col gap-1.5">
-              <Label htmlFor={fieldId} className="text-xs">
-                {field.label}
-                {field.unit ? (
-                  <span className="ml-1 text-muted-foreground">
-                    ({field.unit})
-                  </span>
-                ) : null}
-              </Label>
-              {field.type === "select" ? (
-                <Select
-                  value={String(value ?? "")}
-                  onValueChange={(v) => updateNodeConfig(node.id, field.key, v)}
-                >
-                  <SelectTrigger id={fieldId}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(field.options ?? []).map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : field.type === "number" ? (
-                <Input
-                  id={fieldId}
-                  type="number"
-                  value={
-                    value === undefined || value === null ? "" : String(value)
-                  }
-                  onChange={(e) =>
-                    updateNodeConfig(
-                      node.id,
-                      field.key,
-                      e.target.value === "" ? "" : Number(e.target.value),
-                    )
-                  }
-                />
-              ) : (
-                <Input
-                  id={fieldId}
-                  value={
-                    value === undefined || value === null ? "" : String(value)
-                  }
-                  onChange={(e) =>
-                    updateNodeConfig(node.id, field.key, e.target.value)
-                  }
-                />
-              )}
-            </div>
-          )
-        })}
+        {properties.map(([key, schema]) => (
+          <ConfigField
+            key={key}
+            nodeId={node.id}
+            fieldKey={key}
+            schema={schema}
+            required={requiredKeys.has(key)}
+            value={config[key]}
+          />
+        ))}
       </div>
 
       <div className="border-t border-border pt-3">

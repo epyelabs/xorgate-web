@@ -9,13 +9,13 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import {
-  defaultConfig,
   definitionToFlow,
   flowToDefinition,
-  NODE_CATALOG_BY_TYPE,
   type WfNode,
 } from "@/lib/workflow-nodes"
 import { layoutVertical } from "@/lib/workflow-layout"
+import type { PublishIssue } from "@/lib/workflow-catalog-schemas"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import {
   workflowDefinitionSchema,
   type WorkflowDefinition,
@@ -33,6 +33,10 @@ interface WorkflowEditorState {
   selectedNodeId: string | null
   // True when the graph diverges from the last loaded/saved definition.
   dirty: boolean
+  // Server-side publish validation issues from the last failed publish, mapped
+  // onto nodes/edges by id for canvas highlighting. Cleared on load/publish.
+  publishIssues: PublishIssue[]
+  setPublishIssues: (issues: PublishIssue[]) => void
 
   loadDefinition: (definition: WorkflowDefinition) => void
   reset: () => void
@@ -98,13 +102,17 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   edges: [],
   selectedNodeId: null,
   dirty: false,
+  publishIssues: [],
+
+  setPublishIssues: (issues) => set({ publishIssues: issues }),
 
   loadDefinition: (definition) => {
     const { nodes, edges } = definitionToFlow(definition)
-    set({ nodes, edges, selectedNodeId: null, dirty: false })
+    set({ nodes, edges, selectedNodeId: null, dirty: false, publishIssues: [] })
   },
 
-  reset: () => set({ nodes: [], edges: [], selectedNodeId: null, dirty: false }),
+  reset: () =>
+    set({ nodes: [], edges: [], selectedNodeId: null, dirty: false, publishIssues: [] }),
 
   markSaved: () => set({ dirty: false }),
 
@@ -127,14 +135,21 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
     })),
 
   addNode: (catalogType, position) => {
-    const entry = NODE_CATALOG_BY_TYPE[catalogType]
+    // Label + config defaults come from the served catalog (see the
+    // workflow-catalog store, loaded by the editor page before the palette
+    // can produce a type to add).
+    const entry = useWorkflowCatalog.getState().byType[catalogType]
     if (!entry) return
     const id = uid("n")
     const node: WfNode = {
       id,
       type: "wfNode",
       position: position ?? stackedBelow(get().nodes),
-      data: { label: entry.label, catalogType, config: defaultConfig(catalogType) },
+      data: {
+        label: entry.label,
+        catalogType,
+        config: { ...entry.configDefaults },
+      },
     }
     // Drop the node in unselected so it doesn't auto-open the settings popover;
     // the user clicks it when they actually want to edit. Any prior selection is
@@ -193,7 +208,20 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       const issue = result.error.issues[0]
       return issue ? `${issue.path.join(".")}: ${issue.message}` : "Invalid workflow definition"
     }
-    const { nodes, edges } = definitionToFlow(result.data)
+    // Hand-pasted v1 JSON: map PoC node types onto their catalog equivalents
+    // via the served alias table (types only; configs are left as-is and any
+    // mismatch surfaces as a publish validation issue).
+    let definition = result.data
+    if ((definition.schemaVersion ?? 1) < 2) {
+      const aliases = useWorkflowCatalog.getState().catalog?.aliases ?? {}
+      definition = {
+        ...definition,
+        nodes: definition.nodes.map((n) =>
+          aliases[n.type] ? { ...n, type: aliases[n.type] } : n,
+        ),
+      }
+    }
+    const { nodes, edges } = definitionToFlow(definition)
     set({ nodes, edges, selectedNodeId: null, dirty: true })
     return null
   },

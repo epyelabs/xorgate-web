@@ -28,6 +28,9 @@ export const workflowEdgeSchema = z.object({
 })
 
 export const workflowDefinitionSchema = z.object({
+  // Absent = v1 (PoC node types); 2 = catalog node types. The backend upgrades
+  // v1 on read, and this editor stamps 2 on save (flowToDefinition).
+  schemaVersion: z.number().int().optional(),
   nodes: z.array(workflowNodeSchema),
   edges: z.array(workflowEdgeSchema),
 })

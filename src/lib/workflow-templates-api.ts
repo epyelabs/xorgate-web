@@ -1,5 +1,4 @@
 import { apiRequest, type Page } from "./api"
-import { NODE_CATALOG_BY_TYPE } from "./workflow-nodes"
 import type {
   SimulationResult,
   WorkflowDefinition,
@@ -104,32 +103,38 @@ function sampleOutput(catalogType: string): string {
   switch (catalogType) {
     case "source.video":
       return "1280×720 @ 30fps, 142 frames"
-    case "source.gps":
-      return "412 fixes, 8 sats avg"
-    case "source.imu":
-      return "412 samples @ 100Hz"
     case "source.telemetry":
       return "412 readings"
-    case "processor.decode_sample":
+    case "connector.third_party":
+      return "9 speed-limit segments"
+    case "video.decode_sample":
       return "284 sampled frames"
-    case "processor.object_detection":
+    case "video.scale":
+      return "284 frames @ 640px"
+    case "model.object_detection":
       return "37 detections (vehicle, person)"
-    case "processor.speed_from_gps":
+    case "model.depth":
+      return "284 depth maps"
+    case "telemetry.derivative":
       return "peak decel -0.52 g"
-    case "processor.imu_decel":
-      return "spike -0.61 g @ 02:13"
-    case "processor.speed_limit_check":
-      return "over limit 2× (peak +14 kph)"
-    case "processor.sensor_fusion":
+    case "telemetry.ema":
+    case "telemetry.kalman":
+      return "smoothed 412 samples"
+    case "telemetry.time_align":
       return "aligned 3 streams"
     case "logic.threshold":
+    case "logic.comparator":
       return "crossed 2×"
-    case "logic.composite_rule":
+    case "logic.boolean":
       return "matched 2 windows"
+    case "logic.debounce":
+      return "passed 2 of 5"
     case "output.event":
       return "emitted 2 events"
-    case "output.alert":
-      return "raised 1 alert"
+    case "output.data_capture":
+      return "captured 37 records"
+    case "output.visualization":
+      return "rendered overlay"
     default:
       return "ok"
   }
@@ -166,7 +171,7 @@ export async function simulate(
   await new Promise<void>((resolve) => setTimeout(resolve, 120))
   const steps = orderNodes(definition).map((n) => ({
     nodeId: n.id,
-    label: NODE_CATALOG_BY_TYPE[n.type]?.label ?? n.data.label,
+    label: n.data.label || n.type,
     output: sampleOutput(n.type),
   }))
   const emits = definition.nodes.filter((n) => n.type.startsWith("output."))

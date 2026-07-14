@@ -5,26 +5,30 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react"
-import {
-  GROUP_META,
-  GROUP_ORDER,
-  NODE_CATALOG,
-  type NodeCatalogEntry,
-} from "@/lib/workflow-nodes"
+import type { CatalogNode } from "@/lib/workflow-catalog-schemas"
+import { catalogIcon } from "@/lib/workflow-node-icons"
+import { GROUP_META, GROUP_ORDER } from "@/lib/workflow-nodes"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
 const COLLAPSED_KEY = "wf-node-palette-collapsed"
 
-// Left rail of the editor. Each entry is draggable onto the canvas (HTML5 DnD,
-// picked up by WorkflowCanvas.onDrop) and also click-to-add as a fallback for
-// when dragging onto an empty canvas feels fiddly. The rail collapses to a thin
-// strip to reclaim canvas space, and its nodes can be searched. The catalog
-// grows over time, so search is load-bearing.
+// Left rail of the editor, rendered from the SERVED catalog (GET
+// /workflow-catalog) — the palette can only offer what the deployed backend
+// will validate. Each entry is draggable onto the canvas (HTML5 DnD, picked up
+// by WorkflowCanvas.onDrop) and also click-to-add as a fallback for when
+// dragging onto an empty canvas feels fiddly. The rail collapses to a thin
+// strip to reclaim canvas space, and its nodes can be searched.
 export function NodePalette() {
   const addNode = useWorkflowEditor((s) => s.addNode)
+  const catalog = useWorkflowCatalog((s) => s.catalog)
+  const catalogStatus = useWorkflowCatalog((s) => s.status)
+  const catalogError = useWorkflowCatalog((s) => s.error)
+  const ensureLoaded = useWorkflowCatalog((s) => s.ensureLoaded)
 
   // Persist the collapsed state so the rail stays how the user left it.
   const [collapsed, setCollapsed] = useState(
@@ -36,7 +40,7 @@ export function NodePalette() {
 
   const [query, setQuery] = useState("")
 
-  const onDragStart = (event: React.DragEvent, entry: NodeCatalogEntry) => {
+  const onDragStart = (event: React.DragEvent, entry: CatalogNode) => {
     event.dataTransfer.setData("application/x-wf-node", entry.type)
     event.dataTransfer.effectAllowed = "move"
   }
@@ -45,9 +49,10 @@ export function NodePalette() {
   // headers. Groups with no surviving entries drop out entirely.
   const filteredGroups = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const nodes = catalog?.nodes ?? []
     return GROUP_ORDER.map((group) => ({
       group,
-      entries: NODE_CATALOG.filter(
+      entries: nodes.filter(
         (n) =>
           n.group === group &&
           (q === "" ||
@@ -56,7 +61,7 @@ export function NodePalette() {
             n.type.toLowerCase().includes(q))
       ),
     })).filter((g) => g.entries.length > 0)
-  }, [query])
+  }, [catalog, query])
 
   const resultCount = filteredGroups.reduce((sum, g) => sum + g.entries.length, 0)
 
@@ -119,7 +124,22 @@ export function NodePalette() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2.5 pb-2.5">
-        {resultCount === 0 ? (
+        {catalogStatus === "loading" || catalogStatus === "idle" ? (
+          <div className="flex flex-col gap-2 pt-1">
+            {Array.from({ length: 8 }, (_, i) => (
+              <Skeleton key={i} className="h-7 w-full" />
+            ))}
+          </div>
+        ) : catalogStatus === "error" ? (
+          <div className="flex flex-col gap-2 px-1 pt-2">
+            <p className="text-xs text-destructive">
+              Couldn&apos;t load the node catalog{catalogError ? `: ${catalogError}` : "."}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void ensureLoaded()}>
+              Retry
+            </Button>
+          </div>
+        ) : resultCount === 0 ? (
           <p className="px-1 pt-2 text-xs text-muted-foreground">
             No nodes match your search.
           </p>
@@ -135,7 +155,7 @@ export function NodePalette() {
                   </span>
                 </div>
                 {entries.map((entry) => {
-                  const Icon = entry.icon
+                  const Icon = catalogIcon(entry.ui.icon) ?? meta.icon
                   return (
                     <button
                       key={entry.type}

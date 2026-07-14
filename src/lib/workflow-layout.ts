@@ -2,7 +2,7 @@ import type { Edge } from "@xyflow/react"
 import type { WfNode } from "./workflow-nodes"
 
 // Spacing between successive depth rows (y) and parallel lanes (x). Matches the
-// hand-placed seed layouts in mock-workflows.ts so auto-laid graphs blend in.
+// hand-placed seed layouts of the original demo graphs so auto-laid graphs blend in.
 const ROW_GAP = 130
 const LANE_GAP = 240
 // Fallback node width used only when react-flow hasn't measured a node yet

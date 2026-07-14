@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { NODE_CATALOG_BY_TYPE } from "@/lib/workflow-nodes"
+import { catalogIcon } from "@/lib/workflow-node-icons"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { cn } from "@/lib/utils"
 import { SourceMediaDialog } from "./source-media-dialog"
 import { SourceDeviceDialog } from "./source-device-dialog"
@@ -62,7 +63,8 @@ export function SourceInputRow({
   onPreview: (binding: VideoBinding) => void
 }) {
   const isVideo = isVideoSource(catalogType)
-  const Icon = NODE_CATALOG_BY_TYPE[catalogType]?.icon ?? HardDriveIcon
+  const entry = useWorkflowCatalog((s) => s.byType[catalogType])
+  const Icon = catalogIcon(entry?.ui.icon) ?? HardDriveIcon
 
   const [videoMode, setVideoMode] = useState<VideoMode>("file")
   const [sensorMode, setSensorMode] = useState<SensorMode>("csv")

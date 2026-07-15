@@ -119,7 +119,7 @@ function WorkflowInstancesListPage() {
     ? runs.filter(
         (r) =>
           r.templateName.toLowerCase().includes(q) ||
-          r.deviceName.toLowerCase().includes(q)
+          (r.deviceName ?? "").toLowerCase().includes(q)
       )
     : runs
   const isFiltered = q !== "" || statusFilter !== "any"
@@ -159,7 +159,7 @@ function WorkflowInstancesListPage() {
       ? all.filter(
           (r) =>
             r.templateName.toLowerCase().includes(q) ||
-            r.deviceName.toLowerCase().includes(q)
+            (r.deviceName ?? "").toLowerCase().includes(q)
         )
       : all
   }
@@ -174,10 +174,10 @@ function WorkflowInstancesListPage() {
           params={{ id: run.id }}
           className="text-sm font-medium text-foreground tabular-nums hover:underline"
         >
-          {run.deviceName}
+          {run.deviceName ?? "—"}
         </Link>
       ),
-      csvValue: (run) => run.deviceName,
+      csvValue: (run) => run.deviceName ?? "",
     },
     {
       id: "template",

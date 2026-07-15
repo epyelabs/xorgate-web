@@ -117,24 +117,6 @@ export const createWorkflowTemplateSchema = z.object({
   description: z.string().max(280, "Description is too long").optional(),
 })
 
-// --- Simulation (mocked client-side this pass) --------------------------------
-export const simulationStepSchema = z.object({
-  nodeId: z.string(),
-  label: z.string(),
-  output: z.string(),
-})
-
-export const simulationEventSchema = z.object({
-  kind: z.string(),
-  at: z.string(),
-  confidence: z.number(),
-})
-
-export const simulationResultSchema = z.object({
-  steps: z.array(simulationStepSchema),
-  events: z.array(simulationEventSchema),
-})
-
 export type WorkflowNodeDef = z.infer<typeof workflowNodeSchema>
 export type WorkflowEdgeDef = z.infer<typeof workflowEdgeSchema>
 export type WorkflowDefinition = z.infer<typeof workflowDefinitionSchema>
@@ -146,6 +128,3 @@ export type WorkflowDeployment = z.infer<typeof workflowDeploymentSchema>
 export type WorkflowTemplateSummary = z.infer<typeof workflowTemplateSummarySchema>
 export type WorkflowTemplateDetail = z.infer<typeof workflowTemplateDetailSchema>
 export type CreateWorkflowTemplateInput = z.infer<typeof createWorkflowTemplateSchema>
-export type SimulationStep = z.infer<typeof simulationStepSchema>
-export type SimulationEvent = z.infer<typeof simulationEventSchema>
-export type SimulationResult = z.infer<typeof simulationResultSchema>

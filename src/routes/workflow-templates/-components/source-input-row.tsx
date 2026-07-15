@@ -4,9 +4,7 @@ import {
   HardDriveIcon,
   type LucideIcon,
   PlayIcon,
-  RadioIcon,
   UploadIcon,
-  WebcamIcon,
   XIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -22,8 +20,6 @@ import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { cn } from "@/lib/utils"
 import { SourceMediaDialog } from "./source-media-dialog"
 import { SourceDeviceDialog } from "./source-device-dialog"
-import { SourceLiveDialog } from "./source-live-dialog"
-import { SourceWebcamDialog } from "./source-webcam-dialog"
 import {
   bindingLabel,
   bindingMeta,
@@ -35,22 +31,25 @@ import {
   type VideoMode,
 } from "./simulator-types"
 
-// Action button label + icon per video input mode.
+// Action button label + icon per video input mode. Live/webcam land with M5
+// (their select options are disabled below; the API rejects those bindings).
 const VIDEO_ACTION: Record<VideoMode, { label: string; icon: LucideIcon }> = {
   file: { label: "Upload video", icon: UploadIcon },
   recordings: { label: "Select media from device", icon: HardDriveIcon },
-  live: { label: "Select live stream", icon: RadioIcon },
-  webcam: { label: "Use webcam", icon: WebcamIcon },
+  live: { label: "Select live stream", icon: HardDriveIcon },
+  webcam: { label: "Use webcam", icon: HardDriveIcon },
 }
 
 // One row of the "Sources (Inputs)" section: an unbound source shows a mode
 // dropdown + an action button; a bound source shows a chip (name + remove, and a
 // play affordance for video). The selector shape is driven by the source's group
-// — video vs sensor (GPS / IMU / telemetry).
+// — video vs sensor (telemetry). `issue` renders a per-row binding error
+// (SIMULATION_BINDING_INVALID by nodeId, or a local upload/window failure).
 export function SourceInputRow({
   label,
   catalogType,
   binding,
+  issue,
   onBind,
   onUnbind,
   onPreview,
@@ -58,6 +57,7 @@ export function SourceInputRow({
   label: string
   catalogType: string
   binding: SourceBinding | undefined
+  issue?: string
   onBind: (binding: SourceBinding) => void
   onUnbind: () => void
   onPreview: (binding: VideoBinding) => void
@@ -69,8 +69,6 @@ export function SourceInputRow({
   const [videoMode, setVideoMode] = useState<VideoMode>("file")
   const [sensorMode, setSensorMode] = useState<SensorMode>("csv")
   const [mediaOpen, setMediaOpen] = useState(false)
-  const [liveOpen, setLiveOpen] = useState(false)
-  const [webcamOpen, setWebcamOpen] = useState(false)
   const [deviceOpen, setDeviceOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -95,8 +93,7 @@ export function SourceInputRow({
     if (isVideo) {
       if (videoMode === "file") fileRef.current?.click()
       else if (videoMode === "recordings") setMediaOpen(true)
-      else if (videoMode === "live") setLiveOpen(true)
-      else setWebcamOpen(true)
+      // live/webcam options are disabled (M5); unreachable.
     } else {
       if (sensorMode === "csv") fileRef.current?.click()
       else setDeviceOpen(true)
@@ -120,7 +117,12 @@ export function SourceInputRow({
       </div>
 
       {binding ? (
-        <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5">
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5",
+            issue && "border-destructive/60",
+          )}
+        >
           {isVideoBinding(binding) ? (
             <Button
               type="button"
@@ -175,8 +177,12 @@ export function SourceInputRow({
               <SelectContent>
                 <SelectItem value="file">File</SelectItem>
                 <SelectItem value="recordings">Recordings</SelectItem>
-                <SelectItem value="live">Live Stream</SelectItem>
-                <SelectItem value="webcam">Webcam</SelectItem>
+                <SelectItem value="live" disabled>
+                  Live Stream (M5)
+                </SelectItem>
+                <SelectItem value="webcam" disabled>
+                  Webcam (M5)
+                </SelectItem>
               </SelectContent>
             </Select>
           ) : (
@@ -205,6 +211,8 @@ export function SourceInputRow({
         </div>
       )}
 
+      {issue ? <p className="px-0.5 text-[11px] text-destructive">{issue}</p> : null}
+
       <input
         ref={fileRef}
         type="file"
@@ -216,16 +224,6 @@ export function SourceInputRow({
       <SourceMediaDialog
         open={mediaOpen}
         onOpenChange={setMediaOpen}
-        onConfirm={onBind}
-      />
-      <SourceLiveDialog
-        open={liveOpen}
-        onOpenChange={setLiveOpen}
-        onConfirm={onBind}
-      />
-      <SourceWebcamDialog
-        open={webcamOpen}
-        onOpenChange={setWebcamOpen}
         onConfirm={onBind}
       />
       <SourceDeviceDialog

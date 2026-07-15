@@ -95,7 +95,9 @@ function WorkflowInstanceDetailPage() {
         setRun(fetched)
         useBreadcrumbStore
           .getState()
-          .setInstanceName(`${fetched.templateName} · ${fetched.deviceName}`)
+          .setInstanceName(
+            `${fetched.templateName} · ${fetched.deviceName ?? "simulation"}`,
+          )
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           if (!cancelled) setNotFound(true)
@@ -181,26 +183,36 @@ function WorkflowInstanceDetailPage() {
               v{run.templateVersion}
             </span>
             <div className="ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRerun}
-                disabled={busy}
-              >
-                <RotateCwIcon />
-                Re-run
-              </Button>
+              {/* Simulation runs re-run from the editor's simulator (the
+                  backend returns 400 for them). */}
+              {run.mode !== "simulation" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRerun}
+                  disabled={busy}
+                >
+                  <RotateCwIcon />
+                  Re-run
+                </Button>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {run.mode === "simulation" ? (
+              <>
+                <Badge variant="outline">simulation</Badge>
+                <span>·</span>
+              </>
+            ) : null}
             <span>
               Device{" "}
               <span className="font-medium text-foreground">
-                {run.deviceName}
+                {run.deviceName ?? "—"}
               </span>
             </span>
             <span>·</span>
-            <span>Workspace {run.workspaceName}</span>
+            <span>Workspace {run.workspaceName ?? "—"}</span>
             <span>·</span>
             <span>trigger: {run.trigger}</span>
             <span>·</span>

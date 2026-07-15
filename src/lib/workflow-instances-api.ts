@@ -25,7 +25,21 @@ export async function getWorkflowInstance(
 
 // Re-run: clones the source run's snapshot definition + trigger context into a
 // fresh execution (backend returns 202 with the new run; the caller ignores it
-// and refreshes the list).
+// and refreshes the list). Simulation runs return 400 (re-run them from the
+// editor's simulator instead).
 export async function rerunWorkflowInstance(id: string): Promise<void> {
   await apiRequest(`/workflow-runs/${id}/rerun`, { method: "POST" })
+}
+
+// Presigned GET for a v2 run artifact (Data Capture records, events.jsonl,
+// visualization frames). `key` must come from the run detail's `artifacts`
+// map; the backend rejects keys outside the run's S3 prefix. URL expires in
+// ~5 minutes, so fetch fresh per download/read.
+export async function getRunArtifactUrl(
+  runId: string,
+  key: string,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  return apiRequest(
+    `/workflow-runs/${runId}/artifact-url?key=${encodeURIComponent(key)}`,
+  )
 }

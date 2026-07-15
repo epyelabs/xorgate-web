@@ -2,14 +2,18 @@ import { z } from "zod"
 import { workflowDefinitionSchema } from "./workflow-schemas"
 import { pageSchema } from "./schemas"
 
-// Schemas + types for Workflow Instances (= workflow runs / executions). One row
-// per execution of a workflow attached to a device, scoped to a workspace. These
-// mirror the shapes the real `workflow_runs` + `events` backend will return, so
-// swapping the mock client in `workflow-instances-api.ts` for `apiRequest` is a
-// drop-in change validated by the same `.safeParse()` pattern.
+// Schemas + types for Workflow Instances (= workflow runs / executions),
+// mirroring backend workflow-runs.ts. Since M3, runs carry a `mode`
+// ("production" | "simulation"); device-less simulation runs have null
+// workspace/device fields (migration 0015), and v2 engine runs expose their
+// S3 artifacts map for Data Capture downloads via
+// GET /workflow-runs/{id}/artifact-url.
 
 export const runStatusSchema = z.enum(["running", "succeeded", "failed"])
-export const runTriggerSchema = z.enum(["event", "schedule", "manual"])
+// Raw trigger value from the run row: telemetry_condition | recording_saved |
+// schedule | manual | simulation (open set server-side, so keep it a string).
+export const runTriggerSchema = z.string()
+export const runModeSchema = z.enum(["production", "simulation"])
 export const runStepStatusSchema = z.enum(["ok", "failed", "skipped"])
 
 // One node's execution in the run trace (mirrors a node in the definition).
@@ -31,16 +35,33 @@ export const runEventSchema = z.object({
   payloadSummary: z.string(),
 })
 
+// Where a v2 run's S3 artifacts live (run detail `artifacts` column; null on
+// PoC runs). Keys are fetchable via GET /workflow-runs/{id}/artifact-url.
+export const runArtifactsSchema = z.object({
+  eventsKey: z.string().nullable(),
+  outputs: z.record(
+    z.string(),
+    z.object({
+      recordsKey: z.string(),
+      count: z.number(),
+      format: z.string(),
+    }),
+  ),
+})
+export type RunArtifacts = z.infer<typeof runArtifactsSchema>
+
 // List-row summary: enough to render the table without the heavy trace.
+// workspace/device fields are null on device-less simulation runs.
 export const workflowRunSummarySchema = z.object({
   id: z.string(),
-  workspaceId: z.string(),
+  workspaceId: z.string().nullable(),
   templateId: z.string(),
   templateName: z.string(),
   templateVersion: z.number(),
-  deviceId: z.string(),
-  deviceName: z.string(),
+  deviceId: z.string().nullable(),
+  deviceName: z.string().nullable(),
   trigger: runTriggerSchema,
+  mode: runModeSchema,
   status: runStatusSchema,
   startedAt: z.string(),
   endedAt: z.string().nullable(),
@@ -50,12 +71,15 @@ export const workflowRunSummarySchema = z.object({
 
 // Detail = summary plus the full trace, events, metrics and (snapshot) graph.
 export const workflowRunDetailSchema = workflowRunSummarySchema.extend({
-  workspaceName: z.string(),
+  workspaceName: z.string().nullable(),
   triggeredBy: z.string(), // the deployment/attachment name that fired this run
   definition: workflowDefinitionSchema, // the graph that actually ran
   steps: z.array(runStepSchema),
   events: z.array(runEventSchema),
   metrics: z.record(z.string(), z.union([z.number(), z.string()])),
+  // v2 engine runs only (null on PoC runs).
+  engineVersion: z.number().nullable(),
+  artifacts: runArtifactsSchema.nullable(),
   error: z.string().nullable(),
   failedNodeId: z.string().nullable(),
 })
@@ -83,6 +107,7 @@ export const getWorkflowRunResponseSchema = z.object({
 
 export type RunStatus = z.infer<typeof runStatusSchema>
 export type RunTrigger = z.infer<typeof runTriggerSchema>
+export type RunMode = z.infer<typeof runModeSchema>
 export type RunStepStatus = z.infer<typeof runStepStatusSchema>
 export type RunStep = z.infer<typeof runStepSchema>
 export type RunEvent = z.infer<typeof runEventSchema>

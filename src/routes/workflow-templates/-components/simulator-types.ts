@@ -1,18 +1,19 @@
 import type { Device, KvsChannel, Recording } from "@/lib/api"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
-import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 
 // Display name for a device: its label falls back to the serial.
 export function deviceLabel(d: Device): string {
   return d.name ?? d.serial
 }
 
-// The concrete test input a user binds to one source node in the simulator pane.
-// Everything stays client-side (uploaded files become object URLs; device picks
-// reference real recordings/devices via read-only APIs) — nothing is uploaded or
-// persisted this pass.
+// The concrete test input a user binds to one source node in the simulator
+// pane. Files keep a local object URL for in-browser playback/preview; at run
+// time they are uploaded via the presigned-POST flow and the resulting S3 key
+// is cached back onto the binding (`uploadKey`) so tweak-and-rerun cycles skip
+// the re-upload. Live/webcam kinds remain in the union for M5 but can no
+// longer be created (the mode options are disabled; the API rejects them).
 export type SourceBinding =
-  | { kind: "video-file"; file: File; url: string; name: string }
+  | { kind: "video-file"; file: File; url: string; name: string; uploadKey?: string }
   | {
       kind: "video-recording"
       deviceId: string
@@ -26,7 +27,7 @@ export type SourceBinding =
       channel: KvsChannel
     }
   | { kind: "video-webcam"; name: string; deviceId?: string }
-  | { kind: "csv-file"; file: File; name: string }
+  | { kind: "csv-file"; file: File; name: string; uploadKey?: string }
   | {
       kind: "device-telemetry"
       deviceId: string
@@ -154,22 +155,3 @@ export function bindingMeta(b: SourceBinding): string | null {
   }
 }
 
-// Node types that make a graph "vision" (needs a video recording to run). Mirrors
-// the backend's VIDEO_NODE_TYPES routing set in workflow-runner.ts.
-const VISION_NODE_TYPES = new Set([
-  "source.video",
-  "processor.decode_sample",
-  "processor.object_detection",
-])
-
-export function isVisionGraph(def: WorkflowDefinition): boolean {
-  return def.nodes.some((n) => VISION_NODE_TYPES.has(n.type))
-}
-
-// The detector node's min-confidence gates which mock boxes are drawn, so tweaking
-// the Object Detection node visibly changes the output. Defaults to 0.4.
-export function detectorMinConfidence(def: WorkflowDefinition): number {
-  const det = def.nodes.find((n) => n.type === "processor.object_detection")
-  const v = Number(det?.data.config?.minConfidence)
-  return Number.isFinite(v) ? v : 0.4
-}

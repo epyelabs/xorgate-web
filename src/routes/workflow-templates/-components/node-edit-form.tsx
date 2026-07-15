@@ -37,6 +37,20 @@ interface ObjectSchema {
   required?: string[]
 }
 
+// Visualization overlay options are filtered by which tagged inputs are
+// connected (architecture §3.3: the multi-select is ordinary config whose
+// options depend on connections). Each option lists the input port ids that
+// make it meaningful; an option shows when ANY of them has an edge. Backend
+// executors log-and-skip unavailable overlays, so this is editor ergonomics,
+// not validation.
+const VISUALIZATION_OVERLAY_PORTS: Record<string, string[]> = {
+  boxes: ["detections"],
+  confidence: ["detections"],
+  labels: ["detections", "segments"],
+  depth_map: ["depth"],
+  masks: ["segments"],
+}
+
 // "minConfidence" -> "Min confidence", "cacheTtlSeconds" -> "Cache ttl seconds"
 function humanize(key: string): string {
   const words = key
@@ -56,12 +70,15 @@ function ConfigField({
   schema,
   required,
   value,
+  enumFilter,
 }: {
   nodeId: string
   fieldKey: string
   schema: PropSchema
   required: boolean
   value: unknown
+  /** Optional per-option gate for enum-array fields (overlay filtering). */
+  enumFilter?: (option: string) => boolean
 }) {
   const updateNodeConfig = useWorkflowEditor((s) => s.updateNodeConfig)
   const fieldId = `cfg-${fieldKey}`
@@ -111,11 +128,15 @@ function ConfigField({
       />
     )
   } else if (schema.type === "array" && schema.items?.enum) {
-    // Enum array (e.g. visualization overlays) -> toggle chips.
+    // Enum array (e.g. visualization overlays) -> toggle chips. Options an
+    // enumFilter rejects are hidden but still-selected values are preserved.
     const selected = new Set(asStringArray(value ?? schema.default))
+    const options = schema.items.enum.filter(
+      (opt) => !enumFilter || enumFilter(String(opt)) || selected.has(String(opt)),
+    )
     control = (
       <div className="flex flex-wrap gap-1">
-        {schema.items.enum.map((opt) => {
+        {options.map((opt) => {
           const key = String(opt)
           const on = selected.has(key)
           return (
@@ -188,6 +209,7 @@ function ConfigField({
 
 export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const node = useWorkflowEditor((s) => s.nodes.find((n) => n.id === nodeId))
+  const edges = useWorkflowEditor((s) => s.edges)
   const updateNodeLabel = useWorkflowEditor((s) => s.updateNodeLabel)
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
   const entry = useWorkflowCatalog((s) =>
@@ -200,6 +222,19 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const objectSchema = (entry?.configSchema ?? {}) as ObjectSchema
   const properties = Object.entries(objectSchema.properties ?? {})
   const requiredKeys = new Set(objectSchema.required ?? [])
+
+  // Visualization overlays: only offer layers whose tagged input is connected.
+  // New edges always carry explicit port-id handles; a legacy null handle
+  // disables filtering rather than hiding options on a guess.
+  let overlayFilter: ((option: string) => boolean) | undefined
+  if (node.data.catalogType === "output.visualization") {
+    const incoming = edges.filter((e) => e.target === node.id)
+    if (incoming.every((e) => typeof e.targetHandle === "string")) {
+      const connected = new Set(incoming.map((e) => e.targetHandle as string))
+      overlayFilter = (option) =>
+        (VISUALIZATION_OVERLAY_PORTS[option] ?? []).some((port) => connected.has(port))
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -246,6 +281,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
             schema={schema}
             required={requiredKeys.has(key)}
             value={config[key]}
+            enumFilter={key === "overlays" ? overlayFilter : undefined}
           />
         ))}
       </div>

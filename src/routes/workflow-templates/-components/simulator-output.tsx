@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -22,9 +22,14 @@ import type {
   RunStepStatus,
   WorkflowRunDetail,
 } from "@/lib/workflow-run-schemas"
-import type { DetectionsPayload, SimEvent } from "@/lib/workflow-sim-schemas"
+import {
+  detectionsPayloadSchema,
+  type DetectionsPayload,
+  type SimEvent,
+} from "@/lib/workflow-sim-schemas"
 import type { SimProgress } from "@/hooks/use-sim-progress"
-import { DetectionVideo } from "./detection-overlay"
+import type { WebcamIngest } from "@/hooks/use-webcam-ingest"
+import { DetectionBoxes, DetectionVideo } from "./detection-overlay"
 import type { SimPhase } from "./simulator-panel"
 import {
   firstVideoBinding,
@@ -104,6 +109,99 @@ function ElapsedSince({ since }: { since: string }) {
   return <span className="tabular-nums">{sec}s</span>
 }
 
+// Live webcam view (M5): the local camera stream with the engine's freshest
+// json:detections record overlaid (the records topic runs at live pace during
+// live runs, so it IS the overlay driver here, unlike batch replays). Stale
+// records (> 2.5 s) expire rather than freezing a box on screen.
+const LIVE_RECORD_MAX_AGE_MS = 2500
+
+function latestLiveDetections(progress: SimProgress): DetectionsPayload | null {
+  let best: DetectionsPayload | null = null
+  let bestTs = -Infinity
+  for (const ring of Object.values(progress.records)) {
+    for (let i = ring.length - 1; i >= 0; i--) {
+      const rec = ring[i]
+      if (rec.tag !== "detections") break
+      const parsed = detectionsPayloadSchema.safeParse(rec.payload)
+      if (parsed.success && parsed.data.ts > bestTs) {
+        bestTs = parsed.data.ts
+        best = parsed.data
+      }
+      break // only the newest entry per ring matters
+    }
+  }
+  return best
+}
+
+function LiveWebcamView({
+  webcam,
+  progress,
+}: {
+  webcam: WebcamIngest
+  progress: SimProgress
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    if (videoRef.current && webcam.stream) {
+      videoRef.current.srcObject = webcam.stream
+    }
+  }, [webcam.stream])
+
+  // Tick so stale overlay records expire even when no new messages arrive.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(t)
+  }, [])
+  const record = latestLiveDetections(progress)
+  const fresh = record !== null && now - record.ts <= LIVE_RECORD_MAX_AGE_MS
+
+  if (webcam.status === "error") {
+    return (
+      <p className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
+        Webcam ingest failed: {webcam.error}
+      </p>
+    )
+  }
+  if (webcam.status === "stopped") {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Webcam stopped ({webcam.framesSent} frames sent); waiting for the run
+        to drain…
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="relative w-full overflow-hidden rounded-md border border-border bg-black">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="block aspect-video w-full object-cover"
+        />
+        {fresh && record ? <DetectionBoxes record={record} /> : null}
+        <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
+          LIVE · {webcam.framesSent} frames
+        </span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-muted-foreground">
+          {webcam.status === "publishing"
+            ? "Publishing webcam frames to the engine…"
+            : "Starting camera…"}
+        </span>
+        <Button type="button" size="sm" variant="outline" onClick={webcam.stop}>
+          <XIcon className="size-3.5" />
+          Stop webcam
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // Latest engine-rendered preview JPEG per node (the Q2 fallback plane),
 // streamed while media graphs run; full-res frames land in S3.
 function PreviewFrames({
@@ -148,6 +246,7 @@ export function SimulatorOutput({
   ranDefinition,
   bindings,
   detections,
+  webcam,
   onDownload,
 }: {
   phase: SimPhase
@@ -159,6 +258,7 @@ export function SimulatorOutput({
   ranDefinition: WorkflowDefinition | null
   bindings: Record<string, SourceBinding>
   detections: DetectionsPayload[] | null
+  webcam: WebcamIngest | null
   onDownload: (key: string) => void
 }) {
   const nodeLabels = useMemo(() => {
@@ -225,7 +325,17 @@ export function SimulatorOutput({
 
   if (phase === "running") {
     const steps = [...progress.steps].sort((a, b) => a.seq - b.seq)
-    const coldStarting = engineTarget === "fargate" && steps.length === 0
+    // "Cold start" means the ENGINE has not spoken yet. Steps alone are the
+    // wrong signal for live runs (nodes only complete when the stream ends,
+    // so a webcam run would show "Starting sandbox" for its whole duration);
+    // any message on the run's topics means the sandbox is up.
+    const engineStarted =
+      steps.length > 0 ||
+      progress.status !== null ||
+      progress.events.length > 0 ||
+      Object.keys(progress.records).length > 0 ||
+      Object.keys(progress.previews).length > 0
+    const coldStarting = engineTarget === "fargate" && !engineStarted
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -248,6 +358,7 @@ export function SimulatorOutput({
             the run to finish.
           </p>
         ) : null}
+        {webcam ? <LiveWebcamView webcam={webcam} progress={progress} /> : null}
         {steps.length > 0 ? (
           <div className="flex flex-col">
             {steps.map((s) => (

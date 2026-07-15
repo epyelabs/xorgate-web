@@ -28,6 +28,7 @@ import {
 } from "@/lib/workflow-sim-schemas"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import { useSimProgress } from "@/hooks/use-sim-progress"
+import { useWebcamIngest } from "@/hooks/use-webcam-ingest"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import {
@@ -124,6 +125,24 @@ export function SimulatorPanel({
   const progress = useSimProgress(
     phase === "running" ? (activeRun?.progress.topicPrefix ?? null) : null,
   )
+
+  // Webcam capture publisher (M5): while a run with a webcam binding is live,
+  // sample the camera and publish frames to the run's ingest topic. Stopping
+  // (or unmount) publishes the end message so the engine drains cleanly.
+  const webcamEntry = useMemo(() => {
+    const entry = Object.entries(bindings).find(
+      ([, b]) => b.kind === "video-webcam",
+    )
+    return entry
+      ? { nodeId: entry[0], deviceId: (entry[1] as { deviceId?: string }).deviceId }
+      : null
+  }, [bindings])
+  const webcamIngest = useWebcamIngest({
+    active: phase === "running" && webcamEntry !== null,
+    topicPrefix: activeRun?.progress.topicPrefix ?? null,
+    nodeId: webcamEntry?.nodeId ?? null,
+    cameraDeviceId: webcamEntry?.deviceId,
+  })
 
   // Keep a live ref so the unmount cleanup revokes whatever is bound at the time.
   const bindingsRef = useRef(bindings)
@@ -415,6 +434,7 @@ export function SimulatorPanel({
                 ranDefinition={ranDefinition}
                 bindings={bindings}
                 detections={detections}
+                webcam={webcamEntry ? webcamIngest : null}
                 onDownload={(key) => {
                   if (activeRun) void downloadArtifact(activeRun.run.id, key)
                 }}

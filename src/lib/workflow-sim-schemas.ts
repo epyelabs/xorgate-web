@@ -27,6 +27,12 @@ export const simulationBindingSchema = z.discriminatedUnion("kind", [
     uploadKey: z.string(),
     metrics: z.array(z.string()).optional(),
   }),
+  // M5 live plane: the browser publishes sampled JPEG frames to
+  // <topicPrefix>/ingest/<nodeId> while the run is live; nothing is uploaded.
+  z.object({
+    kind: z.literal("webcam"),
+    maxDurationSeconds: z.number().optional(),
+  }),
 ])
 export type SimulationApiBinding = z.infer<typeof simulationBindingSchema>
 

@@ -10,8 +10,10 @@ export function deviceLabel(d: Device): string {
 // pane. Files keep a local object URL for in-browser playback/preview; at run
 // time they are uploaded via the presigned-POST flow and the resulting S3 key
 // is cached back onto the binding (`uploadKey`) so tweak-and-rerun cycles skip
-// the re-upload. Live/webcam kinds remain in the union for M5 but can no
-// longer be created (the mode options are disabled; the API rejects them).
+// the re-upload. Webcam bindings (M5) upload nothing: once the run is live the
+// capture publisher samples the camera and publishes JPEG frames to the run's
+// ingest topic (use-webcam-ingest). Live device streams stay disabled until
+// devices publish sampled frames.
 export type SourceBinding =
   | { kind: "video-file"; file: File; url: string; name: string; uploadKey?: string }
   | {

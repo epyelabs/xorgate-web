@@ -5,6 +5,7 @@ import {
   type LucideIcon,
   PlayIcon,
   UploadIcon,
+  WebcamIcon,
   XIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,7 @@ import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { cn } from "@/lib/utils"
 import { SourceMediaDialog } from "./source-media-dialog"
 import { SourceDeviceDialog } from "./source-device-dialog"
+import { SourceWebcamDialog } from "./source-webcam-dialog"
 import {
   bindingLabel,
   bindingMeta,
@@ -31,13 +33,13 @@ import {
   type VideoMode,
 } from "./simulator-types"
 
-// Action button label + icon per video input mode. Live/webcam land with M5
-// (their select options are disabled below; the API rejects those bindings).
+// Action button label + icon per video input mode. Webcam is live (M5); the
+// device live-stream mode stays disabled until devices publish sampled frames.
 const VIDEO_ACTION: Record<VideoMode, { label: string; icon: LucideIcon }> = {
   file: { label: "Upload video", icon: UploadIcon },
   recordings: { label: "Select media from device", icon: HardDriveIcon },
   live: { label: "Select live stream", icon: HardDriveIcon },
-  webcam: { label: "Use webcam", icon: HardDriveIcon },
+  webcam: { label: "Use webcam", icon: WebcamIcon },
 }
 
 // One row of the "Sources (Inputs)" section: an unbound source shows a mode
@@ -70,6 +72,7 @@ export function SourceInputRow({
   const [sensorMode, setSensorMode] = useState<SensorMode>("csv")
   const [mediaOpen, setMediaOpen] = useState(false)
   const [deviceOpen, setDeviceOpen] = useState(false)
+  const [webcamOpen, setWebcamOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +96,8 @@ export function SourceInputRow({
     if (isVideo) {
       if (videoMode === "file") fileRef.current?.click()
       else if (videoMode === "recordings") setMediaOpen(true)
-      // live/webcam options are disabled (M5); unreachable.
+      else if (videoMode === "webcam") setWebcamOpen(true)
+      // the live (device stream) option remains disabled; unreachable.
     } else {
       if (sensorMode === "csv") fileRef.current?.click()
       else setDeviceOpen(true)
@@ -178,11 +182,9 @@ export function SourceInputRow({
                 <SelectItem value="file">File</SelectItem>
                 <SelectItem value="recordings">Recordings</SelectItem>
                 <SelectItem value="live" disabled>
-                  Live Stream (M5)
+                  Live Stream (soon)
                 </SelectItem>
-                <SelectItem value="webcam" disabled>
-                  Webcam (M5)
-                </SelectItem>
+                <SelectItem value="webcam">Webcam</SelectItem>
               </SelectContent>
             </Select>
           ) : (
@@ -229,6 +231,11 @@ export function SourceInputRow({
       <SourceDeviceDialog
         open={deviceOpen}
         onOpenChange={setDeviceOpen}
+        onConfirm={onBind}
+      />
+      <SourceWebcamDialog
+        open={webcamOpen}
+        onOpenChange={setWebcamOpen}
         onConfirm={onBind}
       />
     </div>

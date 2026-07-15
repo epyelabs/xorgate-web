@@ -157,11 +157,15 @@ export async function resolveApiBindings(
         }
         break
       }
-      case "video-live":
       case "video-webcam":
+        // The capture publisher starts once the run is live (use-webcam-ingest);
+        // the API binding just declares the live ingest plane for this node.
+        api[nodeId] = { kind: "webcam" }
+        break
+      case "video-live":
         throw new BindingResolveError(
           nodeId,
-          "Live and webcam inputs arrive with M5; bind a file or recording",
+          "Live device streams need device-side frame publishing (not yet enabled); bind a file, recording, or webcam",
         )
     }
   }

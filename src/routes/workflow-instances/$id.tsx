@@ -18,6 +18,7 @@ import {
 } from "@/lib/workflow-run-schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { StickyHeader } from "@/components/sticky-header"
 import { RunEvents } from "./-components/run-events"
 import { RunGraph } from "./-components/run-graph"
@@ -80,6 +81,15 @@ function WorkflowInstanceDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
+  // RunGraph reuses the editor's node card, whose handles are typed from the
+  // served catalog; the run graph edges carry those port ids. Load the catalog
+  // and gate the graph on it so edges bind on first paint (RunGraph is
+  // uncontrolled and can't resync after mount).
+  const catalogStatus = useWorkflowCatalog((s) => s.status)
+
+  useEffect(() => {
+    void useWorkflowCatalog.getState().ensureLoaded()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -252,11 +262,17 @@ function WorkflowInstanceDetailPage() {
       <Section title="Pipeline trace">
         <div className="grid gap-3 lg:grid-cols-[1fr_340px]">
           <div className="h-[360px] overflow-hidden rounded-lg border border-border">
-            <RunGraph
-              key={run.id}
-              definition={run.definition}
-              failedNodeId={run.failedNodeId}
-            />
+            {catalogStatus === "idle" || catalogStatus === "loading" ? (
+              <Skeleton className="h-full w-full" />
+            ) : (
+              // Key on the catalog status too so a late-arriving catalog re-seeds
+              // the uncontrolled defaults and binds the typed edges.
+              <RunGraph
+                key={`${run.id}:${catalogStatus}`}
+                definition={run.definition}
+                failedNodeId={run.failedNodeId}
+              />
+            )}
           </div>
           <RunTrace steps={run.steps} />
         </div>

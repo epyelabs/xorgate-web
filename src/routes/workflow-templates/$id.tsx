@@ -83,6 +83,11 @@ function WorkflowTemplateDetailPage() {
 
   const dirty = useWorkflowEditor((s) => s.dirty)
   const publishIssues = useWorkflowEditor((s) => s.publishIssues)
+  // Node cards register TYPED handles (one per catalog port) only once the
+  // catalog resolves; loaded edges carry those port ids as source/targetHandle.
+  // Mounting the canvas before the catalog settles makes react-flow drop edges
+  // whose handles aren't registered yet, so gate the canvas on it.
+  const catalogStatus = useWorkflowCatalog((s) => s.status)
 
   // The palette, node cards, config forms, and edge typing all render from the
   // served catalog; kick the fetch off with the page.
@@ -277,7 +282,11 @@ function WorkflowTemplateDetailPage() {
     )
   }
 
-  if (!template) {
+  // Wait for the catalog to settle before mounting the editor so node cards can
+  // register their typed handles and loaded edges bind on the first paint.
+  // "error" counts as settled: NodePalette surfaces the error + a Retry button,
+  // so the editor must still mount.
+  if (!template || catalogStatus === "idle" || catalogStatus === "loading") {
     return (
       <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
         <Skeleton className="h-12 w-full max-w-2xl" />
@@ -389,7 +398,11 @@ function WorkflowTemplateDetailPage() {
               <div className="flex h-full">
                 <NodePalette />
                 <div className="min-w-0 flex-1">
-                  <WorkflowCanvas />
+                  {/* Remount if the catalog transitions (e.g. error -> Retry ->
+                      ready) so handles re-register and edges re-bind. In the
+                      normal gated path status is already settled here, so the
+                      key is stable and this is a no-op. */}
+                  <WorkflowCanvas key={catalogStatus} />
                 </div>
               </div>
             ) : (

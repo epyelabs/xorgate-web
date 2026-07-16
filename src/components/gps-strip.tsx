@@ -17,7 +17,7 @@ import {
 import type { IoCapabilities } from "@/lib/api"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
 import { gpsMetrics } from "@/lib/capability-metrics"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 // Metric key → icon. Keeps the strip label-free so it stays narrow enough to
 // float over the map; the full label surfaces in the tooltip.
@@ -68,7 +68,7 @@ function StableValue({
       <span className="font-medium tabular-nums">{text}</span>
       {reading?.unit ? (
         <span className="ml-0.5 text-xs font-normal text-muted-foreground">
-          {reading.unit}
+          {formatUnit(reading.unit)}
         </span>
       ) : null}
       {pad > 0 ? (

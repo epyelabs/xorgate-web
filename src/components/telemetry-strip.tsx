@@ -33,7 +33,7 @@ import {
   signalMetrics,
   systemMetrics,
 } from "@/lib/capability-metrics"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 // Metric key → icon. Keeps the strip label-free to save horizontal space; the
 // full label surfaces in the tooltip.
@@ -91,7 +91,7 @@ function StableValue({
       <span className="font-medium tabular-nums">{text}</span>
       {reading?.unit ? (
         <span className="ml-0.5 text-[0.65rem] font-normal text-muted-foreground">
-          {reading.unit}
+          {formatUnit(reading.unit)}
         </span>
       ) : null}
       {pad > 0 ? (

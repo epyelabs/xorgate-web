@@ -2,7 +2,7 @@ import { Fragment } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 // A single key/value row. Renders "—" until the first reading arrives, keeping
 // the layout stable while the telemetry connection is still warming up.
@@ -20,7 +20,7 @@ function MetricRow({
         {reading ? formatMetricValue(reading.value, metric) : "—"}
         {reading?.unit ? (
           <span className="text-muted-foreground ml-1 text-xs font-normal">
-            {reading.unit}
+            {formatUnit(reading.unit)}
           </span>
         ) : null}
       </span>
@@ -90,7 +90,7 @@ export function GroupedTelemetryReadout({
                       {r ? formatMetricValue(r.value, m) : "—"}
                       {r?.unit ? (
                         <span className="text-muted-foreground ml-1 text-xs font-normal">
-                          {r.unit}
+                          {formatUnit(r.unit)}
                         </span>
                       ) : null}
                     </span>

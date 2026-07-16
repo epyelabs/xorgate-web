@@ -9,7 +9,7 @@ import { TelemetryTable } from "@/components/telemetry-table"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 import {
   ApiError,
   getDevice,
@@ -196,7 +196,7 @@ function DeviceOverviewPage() {
                       {r ? formatMetricValue(r.value, m) : "—"}
                       {r?.unit ? (
                         <span className="ml-1 text-xs font-normal text-muted-foreground">
-                          {r.unit}
+                          {formatUnit(r.unit)}
                         </span>
                       ) : null}
                     </span>

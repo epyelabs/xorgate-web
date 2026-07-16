@@ -30,6 +30,31 @@ export function metricLabel(metric: string): string {
   return METRIC_LABELS[metric] ?? metric
 }
 
+const SUPERSCRIPT_DIGITS: Record<string, string> = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "-": "⁻",
+}
+
+// Devices publish exponents in ASCII caret form ("m/s^2"); render them as real
+// superscript glyphs. Unicode rather than <sup> so the result stays a plain
+// string — table headers and their CSV export take it as-is, and the glyphs are
+// designed for the size instead of being a scaled-down baseline shift.
+export function formatUnit(unit: string): string {
+  return unit.replace(/\^(-?\d+)/g, (whole, exp: string) => {
+    const sup = [...exp].map((c) => SUPERSCRIPT_DIGITS[c])
+    return sup.every(Boolean) ? sup.join("") : whole
+  })
+}
+
 // Canonical column order for telemetry tables: metrics known to METRIC_LABELS
 // come first (in their declared order), unknown keys fall to the end sorted
 // alphabetically. Used to give data-derived column sets a stable, readable order.

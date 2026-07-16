@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
 import { formatDateTime } from "@/lib/format-time"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 // Thin adapter over the shared DataTable: maps pivoted telemetry rows + the
 // capability-derived metric keys into DataTable columns. Kept as its own
@@ -66,7 +66,7 @@ export function TelemetryTable({
     ...metrics.map(
       (m): DataTableColumn<HistoryPoint> => ({
         id: m,
-        header: `${metricLabel(m)}${units[m] ? ` (${units[m]})` : ""}`,
+        header: `${metricLabel(m)}${units[m] ? ` (${formatUnit(units[m])})` : ""}`,
         numeric: true,
         cell: (point) => {
           const value = point[m]

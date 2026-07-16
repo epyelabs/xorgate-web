@@ -34,7 +34,7 @@ import {
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
-import { metricLabel, orderMetrics } from "@/lib/telemetry-meta"
+import { formatUnit, metricLabel, orderMetrics } from "@/lib/telemetry-meta"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryReadings } from "@/hooks/use-telemetry-readings"
@@ -332,7 +332,9 @@ function DeviceTelemetryPage() {
       const header = [
         "Time",
         ...cols.map(
-          (m) => metricLabel(m) + (exportUnits[m] ? ` (${exportUnits[m]})` : "")
+          (m) =>
+            metricLabel(m) +
+            (exportUnits[m] ? ` (${formatUnit(exportUnits[m])})` : "")
         ),
       ]
       const lines = [header.map(csvCell).join(",")]

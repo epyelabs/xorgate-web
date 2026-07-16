@@ -1,5 +1,5 @@
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
-import { formatMetricValue, metricLabel } from "@/lib/telemetry-meta"
+import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 // One metric: name stacked directly above its value, matching the card view's
 // GroupedTelemetryReadout. Stacking (rather than a name/value row) keeps the two
@@ -26,7 +26,7 @@ export function MetricCell({
         {reading ? formatMetricValue(reading.value, metric) : "—"}
         {reading?.unit ? (
           <span className="ml-0.5 text-xs font-normal text-muted-foreground">
-            {reading.unit}
+            {formatUnit(reading.unit)}
           </span>
         ) : null}
       </span>

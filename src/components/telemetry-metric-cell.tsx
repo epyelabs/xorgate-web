@@ -1,5 +1,9 @@
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 
 // One metric: name stacked directly above its value, matching the card view's
 // GroupedTelemetryReadout. Stacking (rather than a name/value row) keeps the two

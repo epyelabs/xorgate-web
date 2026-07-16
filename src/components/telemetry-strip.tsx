@@ -33,7 +33,11 @@ import {
   signalMetrics,
   systemMetrics,
 } from "@/lib/capability-metrics"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 
 // Metric key → icon. Keeps the strip label-free to save horizontal space; the
 // full label surfaces in the tooltip.

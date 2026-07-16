@@ -7,19 +7,30 @@ import {
   useLocation,
 } from "@tanstack/react-router"
 import { toast } from "sonner"
+import { EllipsisVerticalIcon, PowerIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { StatusDot } from "@/components/data-table/status-dot"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ApiError,
+  apiErrorMessage,
   getDevice,
   getDeviceModel,
+  powerOffDevice,
+  rebootDevice,
   type Device,
   type DeviceModel,
   type DeviceStatus,
 } from "@/lib/api"
 import { DeviceModelDialog } from "./-components/device-model-dialog"
+import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
 import {
   getDeviceModelResponseSchema,
@@ -93,6 +104,17 @@ function DeviceLayout() {
   const [notFound, setNotFound] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false)
+  const [powerOffDialogOpen, setPowerOffDialogOpen] = useState(false)
+
+  // Commands are published non-retained, so an offline device would never
+  // receive them — the backend rejects those with a 409. Gate the controls here
+  // too, so the UI never offers an action that cannot land.
+  const canCommand = device?.status === "online"
+  const commandHint = !device
+    ? undefined
+    : canCommand
+      ? undefined
+      : `Device is ${device.status}. It must be online to accept commands.`
 
   useEffect(() => {
     let cancelled = false
@@ -210,15 +232,42 @@ function DeviceLayout() {
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!device}
-              onClick={() => setRebootDialogOpen(true)}
-              className="self-start"
+            {/* `title` sits on the wrapper, not the buttons: a disabled button
+                fires no pointer events, so a tooltip on it never shows. */}
+            <div
+              className="flex items-center gap-2 self-start"
+              title={commandHint}
             >
-              Reboot Device
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canCommand}
+                onClick={() => setRebootDialogOpen(true)}
+              >
+                Reboot Device
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={!canCommand}
+                    aria-label="More device actions"
+                  >
+                    <EllipsisVerticalIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setPowerOffDialogOpen(true)}
+                  >
+                    <PowerIcon />
+                    Power off
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {/* Commenting this out for now, will need to improve later */}
@@ -291,19 +340,45 @@ function DeviceLayout() {
         />
       ) : null}
 
+      {/* Both commands are fire-and-forget: a 202 means the command reached the
+          broker, not that the device acted on it. The device dropping offline
+          (and, for reboot, returning) is the real feedback, and it arrives via
+          the status badge on its own. On failure the dialog stays open so the
+          error is readable and the action is retryable. */}
       {device ? (
         <RebootDeviceDialog
           open={rebootDialogOpen}
           onOpenChange={setRebootDialogOpen}
           deviceName={device.name ?? device.serial}
           onConfirm={async () => {
-            // Dummy reboot: no device command is issued yet. Simulate the
-            // round-trip so the button shows its pending state, then confirm.
-            await new Promise((resolve) => setTimeout(resolve, 600))
-            toast.success(
-              `Reboot command sent to ${device.name ?? device.serial}`
-            )
-            setRebootDialogOpen(false)
+            try {
+              await rebootDevice(id)
+              toast.success(
+                `Reboot command sent to ${device.name ?? device.serial}`
+              )
+              setRebootDialogOpen(false)
+            } catch (err) {
+              toast.error(apiErrorMessage(err))
+            }
+          }}
+        />
+      ) : null}
+
+      {device ? (
+        <PowerOffDeviceDialog
+          open={powerOffDialogOpen}
+          onOpenChange={setPowerOffDialogOpen}
+          deviceName={device.name ?? device.serial}
+          onConfirm={async () => {
+            try {
+              await powerOffDevice(id)
+              toast.success(
+                `Power off command sent to ${device.name ?? device.serial}`
+              )
+              setPowerOffDialogOpen(false)
+            } catch (err) {
+              toast.error(apiErrorMessage(err))
+            }
           }}
         />
       ) : null}

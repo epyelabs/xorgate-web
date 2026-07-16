@@ -17,7 +17,11 @@ import {
 import type { IoCapabilities } from "@/lib/api"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
 import { gpsMetrics } from "@/lib/capability-metrics"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 
 // Metric key → icon. Keeps the strip label-free so it stays narrow enough to
 // float over the map; the full label surfaces in the tooltip.

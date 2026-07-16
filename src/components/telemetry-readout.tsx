@@ -2,7 +2,11 @@ import { Fragment } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 
 // A single key/value row. Renders "—" until the first reading arrives, keeping
 // the layout stable while the telemetry connection is still warming up.

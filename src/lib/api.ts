@@ -31,6 +31,21 @@ export class ApiError extends Error {
   }
 }
 
+// ApiError carries the raw response body, which for a backend error is the
+// `{error:{code,message}}` envelope — dumping that into a toast shows the user
+// JSON. Unwrap it back to the human message, falling back to the raw text for
+// non-envelope bodies (gateway HTML, network failures).
+export function apiErrorMessage(err: unknown): string {
+  const raw = (err as Error)?.message ?? String(err)
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: unknown } }
+    if (typeof parsed?.error?.message === "string") return parsed.error.message
+  } catch {
+    /* not an error envelope — use the raw text */
+  }
+  return raw
+}
+
 export async function apiRequest<T>(
   path: string,
   init: RequestInit = {}
@@ -290,6 +305,25 @@ export async function updateDevice(
 // Permanently delete a device. Backend returns 204 (no content).
 export async function deleteDevice(id: string): Promise<void> {
   await apiRequest(`/devices/${id}`, { method: "DELETE" })
+}
+
+export interface DeviceCommandAccepted {
+  requestId: string
+  command: "reboot" | "power_off"
+  /** Epoch ms after which the device refuses the command. */
+  expiresAt: number
+}
+
+// One-shot device commands (owner/admin only; the device must be online, else
+// the backend returns 409). Both return 202 as soon as the command reaches the
+// MQTT broker — that is NOT confirmation the device acted on it. The real
+// signal is the device's status going offline and (for reboot) back online.
+export async function rebootDevice(id: string): Promise<DeviceCommandAccepted> {
+  return apiRequest(`/devices/${id}/reboot`, { method: "POST" })
+}
+
+export async function powerOffDevice(id: string): Promise<DeviceCommandAccepted> {
+  return apiRequest(`/devices/${id}/power-off`, { method: "POST" })
 }
 
 export interface IoCapabilities {

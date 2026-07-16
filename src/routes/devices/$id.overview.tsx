@@ -9,7 +9,11 @@ import { TelemetryTable } from "@/components/telemetry-table"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 import {
   ApiError,
   getDevice,

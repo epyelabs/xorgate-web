@@ -2,7 +2,11 @@ import { useEffect, useRef } from "react"
 import * as THREE from "three"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
 import { useIsDark } from "@/hooks/use-is-dark"
-import { formatMetricValue, formatUnit, metricLabel } from "@/lib/telemetry-meta"
+import {
+  formatMetricValue,
+  formatUnit,
+  metricLabel,
+} from "@/lib/telemetry-meta"
 
 // Device body dimensions in millimetres, which double as world units here (the
 // scene has no other scale to reconcile with). The BNO085 sits in the board

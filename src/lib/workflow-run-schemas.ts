@@ -82,6 +82,11 @@ export const workflowRunDetailSchema = workflowRunSummarySchema.extend({
   artifacts: runArtifactsSchema.nullable(),
   error: z.string().nullable(),
   failedNodeId: z.string().nullable(),
+  // ADDITIVE (M6): live-progress subscription hint for v2 runs — the M3
+  // topic/payload contract under wf/run/<org>/<id> (production) or
+  // wf/sim/<org>/<id> (simulation). Null on PoC-era rows; optional so the
+  // schema also parses pre-M6 backend responses.
+  progress: z.object({ topicPrefix: z.string() }).nullable().optional(),
 })
 
 export const listWorkflowRunsResponseSchema = z.object({

@@ -26,6 +26,7 @@ import { useWorkspaceStore } from "@/store/workspace"
 import type { Workspace } from "@/lib/api"
 import { EditWorkspaceDialog } from "./-components/edit-workspace-dialog"
 import { DeleteWorkspaceDialog } from "./-components/delete-workspace-dialog"
+import { CredentialsCard } from "./-components/credentials-card"
 
 export const Route = createFileRoute("/settings/")({
   beforeLoad: () => {
@@ -153,6 +154,8 @@ function OrganizationSettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <CredentialsCard />
 
         <Card>
           <CardHeader>

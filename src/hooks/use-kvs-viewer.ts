@@ -26,6 +26,26 @@ const DISCONNECT_GRACE_MS = 2500
 // "waiting" forever. Deadline the whole connect attempt instead, and re-offer on
 // a fresh session so we pick the master up shortly after it comes back.
 const CONNECT_TIMEOUT_MS = 15_000
+// On a flaky network the pre-signaling AWS calls (creds, endpoints, ICE config)
+// can hang without rejecting, which would park open() forever with no retry
+// scheduled. Deadline each step so a hang becomes a thrown error -> reconnect.
+const SETUP_STEP_TIMEOUT_MS = 10_000
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${what} timed out`)), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(t)
+        reject(e)
+      }
+    )
+  })
+}
 
 export type KvsStatus =
   | "connecting"
@@ -68,6 +88,9 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     let disconnectTimer: ReturnType<typeof setTimeout> | null = null
     let connectTimer: ReturnType<typeof setTimeout> | null = null
     let backoff = 1000
+    // Generation counter: each open() invalidates prior in-flight runs, so a
+    // stalled attempt resuming after an await can't cross-wire a newer session.
+    let openSeq = 0
 
     if (!channel) return
     if (!IDENTITY_POOL_ID) {
@@ -133,25 +156,34 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
 
     async function open() {
       if (cancelled || !channel) return
+      const seq = ++openSeq
       teardown() // drop any prior connection before re-opening
       try {
         setStatus("connecting")
-        const creds = await freshCreds()
-        if (cancelled) return
+        const creds = await withTimeout(
+          freshCreds(),
+          SETUP_STEP_TIMEOUT_MS,
+          "credentials"
+        )
+        if (cancelled || seq !== openSeq) return
 
         // Backend already returns the channel ARN, so we skip DescribeSignalingChannel
         // and go straight to resolving the VIEWER endpoints.
         const kvClient = new KinesisVideoClient({ region, credentials: creds })
-        const endpointRes = await kvClient.send(
-          new GetSignalingChannelEndpointCommand({
-            ChannelARN: channel.channelArn,
-            SingleMasterChannelEndpointConfiguration: {
-              Protocols: ["WSS", "HTTPS"],
-              Role: Role.VIEWER,
-            },
-          })
+        const endpointRes = await withTimeout(
+          kvClient.send(
+            new GetSignalingChannelEndpointCommand({
+              ChannelARN: channel.channelArn,
+              SingleMasterChannelEndpointConfiguration: {
+                Protocols: ["WSS", "HTTPS"],
+                Role: Role.VIEWER,
+              },
+            })
+          ),
+          SETUP_STEP_TIMEOUT_MS,
+          "signaling endpoints"
         )
-        if (cancelled) return
+        if (cancelled || seq !== openSeq) return
         const endpoints: Record<string, string> = {}
         for (const e of endpointRes.ResourceEndpointList ?? []) {
           if (e.Protocol && e.ResourceEndpoint) {
@@ -168,10 +200,14 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
           endpoint: endpoints.HTTPS,
           credentials: creds,
         })
-        const iceRes = await signalingChannelsClient.send(
-          new GetIceServerConfigCommand({ ChannelARN: channel.channelArn })
+        const iceRes = await withTimeout(
+          signalingChannelsClient.send(
+            new GetIceServerConfigCommand({ ChannelARN: channel.channelArn })
+          ),
+          SETUP_STEP_TIMEOUT_MS,
+          "ICE server config"
         )
-        if (cancelled) return
+        if (cancelled || seq !== openSeq) return
         const iceServers: RTCIceServer[] = [
           { urls: `stun:stun.kinesisvideo.${region}.amazonaws.com:443` },
         ]
@@ -213,6 +249,10 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
             if (cancelled) return
             setStatus("error")
             setError((err as Error).message)
+            // Without a reschedule this was a dead end (stuck on "error" until
+            // a page refresh); recover like every other failure path.
+            teardown()
+            scheduleReconnect()
           }
         })
 
@@ -318,7 +358,9 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         if (refreshTimer) clearTimeout(refreshTimer)
         refreshTimer = setTimeout(() => void open(), REFRESH_MS)
       } catch (err) {
-        if (cancelled) return
+        // A stale run erroring out (e.g. its step timeout firing after a newer
+        // open() took over) must not disturb the current attempt.
+        if (cancelled || seq !== openSeq) return
         setStatus("error")
         setError((err as Error).message)
         scheduleReconnect()
@@ -327,8 +369,31 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
 
     void open()
 
+    // Mobile browsers freeze background tabs: timers are suspended, network
+    // events are dropped, and the peer connection is often dead by the time the
+    // user returns. When the page becomes visible again (or the network comes
+    // back), don't trust whatever state survived: if we aren't connected,
+    // start a fresh attempt immediately instead of waiting out a stale backoff.
+    const nudge = () => {
+      if (cancelled) return
+      if (document.visibilityState !== "visible") return
+      if (pc && pc.connectionState === "connected") return
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      backoff = 1000
+      void open()
+    }
+    window.addEventListener("online", nudge)
+    window.addEventListener("pageshow", nudge)
+    document.addEventListener("visibilitychange", nudge)
+
     return () => {
       cancelled = true
+      window.removeEventListener("online", nudge)
+      window.removeEventListener("pageshow", nudge)
+      document.removeEventListener("visibilitychange", nudge)
       if (reconnectTimer) clearTimeout(reconnectTimer)
       if (refreshTimer) clearTimeout(refreshTimer)
       teardown()

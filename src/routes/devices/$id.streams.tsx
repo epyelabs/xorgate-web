@@ -32,7 +32,9 @@ import {
 } from "@/components/telemetry-readout"
 import { LiveVideoGrid } from "@/components/live-video-grid"
 import { LiveLocationMap } from "@/components/live-location-map"
-import { TelemetryStrip } from "@/components/telemetry-strip"
+import { TelemetryPanel } from "@/components/telemetry-panel"
+import { ImuPanel } from "@/components/imu-panel"
+import { GpsStrip } from "@/components/gps-strip"
 import { Button } from "@/components/ui/button"
 import { LocateFixedIcon } from "lucide-react"
 
@@ -127,57 +129,72 @@ function DeviceStreamsPage() {
   ].filter((g) => g.metrics.length > 0)
   const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
 
-  // Map View: a full-height location-first layout. The map fills the tab, the
-  // telemetry rides as an icon strip up top, and the live media floats bottom-
-  // right. `h-full` fills the tab's scroll wrapper so nothing overflows the page.
+  // Map View: a split location-first layout. The map holds the left half; the
+  // right half stacks the telemetry sections, the live 3D orientation of the
+  // device, and the media tiles. `h-full` + `min-h-0` fill the tab's scroll
+  // wrapper and let the right column scroll on its own rather than pushing the
+  // page. Below `lg` the two halves stack instead of splitting.
   if (viewType === "map") {
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-lg border">
-        <LiveLocationMap
-          position={position}
-          track={track}
-          following={following}
-          onInteract={() => setFollowing(false)}
-        />
+      <div className="flex h-full min-h-0 w-full flex-col gap-3 lg:flex-row">
+        <div className="relative min-h-64 flex-1 overflow-hidden rounded-lg border">
+          <LiveLocationMap
+            position={position}
+            track={track}
+            following={following}
+            onInteract={() => setFollowing(false)}
+          />
 
-        {!position ? (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
-            Waiting for GPS fix…
-          </div>
-        ) : null}
+          {!position ? (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
+              Waiting for GPS fix…
+            </div>
+          ) : null}
 
-        {/* Telemetry strip centered up top; the Recenter control floats at the
-            right so it never steals width from (or scrolls) the strip. */}
-        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-          <div className="pointer-events-auto max-w-full">
-            <TelemetryStrip caps={caps} latest={latest} />
+          {!following && position ? (
+            <div className="absolute top-3 right-3">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setFollowing(true)}
+                title="Recenter map on device"
+                aria-label="Recenter map on device"
+                className="size-8 rounded-full border bg-background/85 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
+              >
+                <LocateFixedIcon className="size-4" />
+              </Button>
+            </div>
+          ) : null}
+
+          {/* GPS rides over the map rather than in the side column: it describes
+              the position the map is already showing. Bottom-centred clears the
+              Mapbox wordmark in the corner. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-3">
+            <div className="pointer-events-auto max-w-full">
+              <GpsStrip caps={caps} latest={latest} />
+            </div>
           </div>
         </div>
 
-        {!following && position ? (
-          <div className="pointer-events-auto absolute top-3 right-3">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setFollowing(true)}
-              title="Recenter map on device"
-              aria-label="Recenter map on device"
-              className="size-8 rounded-full border bg-background/85 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
-            >
-              <LocateFixedIcon className="size-4" />
-            </Button>
-          </div>
-        ) : null}
+        {/* The system/signal card and the media hold their natural height; the
+            IMU card takes whatever is left (its 3D box absorbing the slack), so
+            the column fills the tab instead of trailing off into empty space. It
+            only scrolls if that leftover runs out. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+          <TelemetryPanel caps={caps} latest={latest} />
 
-        {videoCaps.length > 0 ? (
-          <div className="absolute right-3 bottom-3 w-[36rem] max-w-[70%]">
-            <LiveVideoGrid
-              deviceId={id}
-              videoCaps={videoCaps}
-              showRecordAll={false}
-            />
-          </div>
-        ) : null}
+          <ImuPanel caps={caps} latest={latest} />
+
+          {videoCaps.length > 0 ? (
+            <div className="shrink-0">
+              <LiveVideoGrid
+                deviceId={id}
+                videoCaps={videoCaps}
+                showRecordAll={false}
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
     )
   }

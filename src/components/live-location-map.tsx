@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import Map, { Layer, Marker, Source, type MapRef } from "react-map-gl/mapbox"
 import "mapbox-gl/dist/mapbox-gl.css"
+import { useIsDark } from "@/hooks/use-is-dark"
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
 
@@ -12,27 +13,6 @@ const LIGHT_STYLE = "mapbox://styles/mapbox/light-v11"
 // the first GPS fix and hold that zoom while following.
 const EARTH_ZOOM = 1.5
 const FOLLOW_ZOOM = 16
-
-// Track whether the app is currently in dark mode by watching the `dark` class
-// the ThemeProvider toggles on <html>. This reflects the resolved theme (so it
-// reacts to both explicit toggles and system changes) without reaching into the
-// provider internals — the same signal other components read for Monaco, etc.
-function useIsDark(): boolean {
-  const [isDark, setIsDark] = useState(() =>
-    typeof document !== "undefined"
-      ? document.documentElement.classList.contains("dark")
-      : false
-  )
-  useEffect(() => {
-    const root = document.documentElement
-    const update = () => setIsDark(root.classList.contains("dark"))
-    update()
-    const observer = new MutationObserver(update)
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] })
-    return () => observer.disconnect()
-  }, [])
-  return isDark
-}
 
 /**
  * Full-bleed live location map for the Active Streams "Map View". Renders the

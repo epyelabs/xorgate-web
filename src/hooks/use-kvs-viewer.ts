@@ -21,6 +21,11 @@ const REFRESH_MS = 50 * 60 * 1000 // re-open with fresh creds before the ~1 h ex
 // so a "disconnected" here won't self-heal — give it a short grace for a genuine
 // micro-blip, then force a fresh session rather than sit frozen on the last frame.
 const DISCONNECT_GRACE_MS = 2500
+// KVS does not queue SDP offers: if the master is offline when we send ours, no
+// answer (and no pc/signaling event) ever arrives, so a session can sit in
+// "waiting" forever. Deadline the whole connect attempt instead, and re-offer on
+// a fresh session so we pick the master up shortly after it comes back.
+const CONNECT_TIMEOUT_MS = 15_000
 
 export type KvsStatus =
   | "connecting"
@@ -61,6 +66,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
     let disconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let connectTimer: ReturnType<typeof setTimeout> | null = null
     let backoff = 1000
 
     if (!channel) return
@@ -93,6 +99,10 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
       if (disconnectTimer) {
         clearTimeout(disconnectTimer)
         disconnectTimer = null
+      }
+      if (connectTimer) {
+        clearTimeout(connectTimer)
+        connectTimer = null
       }
       if (signaling) {
         try {
@@ -259,10 +269,15 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
           if (cancelled || !pc) return
           const state = pc.connectionState
           if (state === "connected") {
-            // (Re)connected — cancel any pending disconnect-grace reconnect.
+            // (Re)connected — cancel any pending disconnect-grace reconnect
+            // and the connect-attempt deadline.
             if (disconnectTimer) {
               clearTimeout(disconnectTimer)
               disconnectTimer = null
+            }
+            if (connectTimer) {
+              clearTimeout(connectTimer)
+              connectTimer = null
             }
           } else if (state === "failed") {
             // Hard failure — reconnect immediately.
@@ -286,6 +301,18 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         })
 
         signaling.open()
+
+        // Connect-attempt deadline: if we aren't fully connected in time (offer
+        // unanswered because the master is offline, ICE stalled, socket half-open),
+        // tear down and retry with a fresh session + fresh offer.
+        if (connectTimer) clearTimeout(connectTimer)
+        connectTimer = setTimeout(() => {
+          connectTimer = null
+          if (cancelled || pc?.connectionState === "connected") return
+          setStatus("closed")
+          teardown()
+          scheduleReconnect()
+        }, CONNECT_TIMEOUT_MS)
 
         // Proactively cycle the connection with fresh creds before they expire.
         if (refreshTimer) clearTimeout(refreshTimer)

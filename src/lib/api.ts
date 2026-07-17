@@ -240,6 +240,22 @@ export type DeviceStatus =
 // layouts) come later; keep parsers forward-compatible.
 export type ActiveStreamsViewType = "card" | "map"
 
+// IMU mounting correction: how the sensor is physically rotated relative to
+// the vehicle (ZYX euler, degrees). When enabled, the device agent publishes
+// vehicle-frame euler angles; the raw quaternion stays sensor-frame.
+export interface ImuMount {
+  enabled: boolean
+  rollDeg: number
+  pitchDeg: number
+  yawDeg: number
+}
+
+// Camera direction for the 3D orientation view (degrees). null = default.
+export interface ImuView {
+  azimuthDeg: number
+  elevationDeg: number
+}
+
 export interface Device {
   id: string
   workspaceId: string
@@ -252,6 +268,8 @@ export interface Device {
   autoRecord: boolean
   gnssAntBias: boolean
   activeStreamsViewType: ActiveStreamsViewType
+  imuMount: ImuMount | null
+  imuView: ImuView | null
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -294,6 +312,8 @@ export async function updateDevice(
     autoRecord?: boolean
     gnssAntBias?: boolean
     activeStreamsViewType?: ActiveStreamsViewType
+    imuMount?: ImuMount | null
+    imuView?: ImuView | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {

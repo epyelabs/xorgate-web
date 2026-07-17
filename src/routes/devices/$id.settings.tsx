@@ -39,6 +39,8 @@ import {
   type Device,
   type DeviceIdentity,
   type DeviceStatus,
+  type ImuMount,
+  type ImuView,
   type KvsChannel,
 } from "@/lib/api"
 import {
@@ -94,6 +96,31 @@ const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
   },
 ]
 
+// Defaults shown when the device has no stored IMU settings yet. The camera
+// numbers mirror the orientation view's built-in 3/4 angle.
+const DEFAULT_IMU_MOUNT: ImuMount = {
+  enabled: false,
+  rollDeg: 0,
+  pitchDeg: 0,
+  yawDeg: 0,
+}
+const DEFAULT_IMU_VIEW: ImuView = { azimuthDeg: 45, elevationDeg: 24 }
+
+function parseAngle(s: string): number | null {
+  if (s.trim() === "") return null
+  const n = Number(s.trim())
+  return Number.isFinite(n) ? n : null
+}
+
+function imuMountEqual(a: ImuMount, b: ImuMount): boolean {
+  return (
+    a.enabled === b.enabled &&
+    a.rollDeg === b.rollDeg &&
+    a.pitchDeg === b.pitchDeg &&
+    a.yawDeg === b.yawDeg
+  )
+}
+
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -121,6 +148,16 @@ function DeviceSettingsPage() {
   const [autoRecord, setAutoRecord] = useState(false)
   const [gnssAntBias, setGnssAntBias] = useState(false)
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
+  // IMU inputs are kept as strings so partial numeric input ("-", "1.") never
+  // fights the user; they are parsed on commit and snapped back on bad input.
+  const [mountEnabled, setMountEnabled] = useState(false)
+  const [mountRoll, setMountRoll] = useState("0")
+  const [mountPitch, setMountPitch] = useState("0")
+  const [mountYaw, setMountYaw] = useState("0")
+  const [camAzimuth, setCamAzimuth] = useState(String(DEFAULT_IMU_VIEW.azimuthDeg))
+  const [camElevation, setCamElevation] = useState(
+    String(DEFAULT_IMU_VIEW.elevationDeg)
+  )
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
@@ -128,6 +165,8 @@ function DeviceSettingsPage() {
     autoRecord: boolean
     gnssAntBias: boolean
     activeStreamsViewType: ActiveStreamsViewType
+    imuMount: ImuMount
+    imuView: ImuView
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -157,6 +196,14 @@ function DeviceSettingsPage() {
         setAutoRecord(fetched.autoRecord)
         setGnssAntBias(fetched.gnssAntBias)
         setViewType(fetched.activeStreamsViewType)
+        const mount = fetched.imuMount ?? DEFAULT_IMU_MOUNT
+        setMountEnabled(mount.enabled)
+        setMountRoll(String(mount.rollDeg))
+        setMountPitch(String(mount.pitchDeg))
+        setMountYaw(String(mount.yawDeg))
+        const view = fetched.imuView ?? DEFAULT_IMU_VIEW
+        setCamAzimuth(String(view.azimuthDeg))
+        setCamElevation(String(view.elevationDeg))
         setBaseline({
           name: initialName,
           status: fetched.status,
@@ -164,6 +211,8 @@ function DeviceSettingsPage() {
           autoRecord: fetched.autoRecord,
           gnssAntBias: fetched.gnssAntBias,
           activeStreamsViewType: fetched.activeStreamsViewType,
+          imuMount: mount,
+          imuView: view,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -248,6 +297,8 @@ function DeviceSettingsPage() {
         autoRecord: updated.autoRecord,
         gnssAntBias: updated.gnssAntBias,
         activeStreamsViewType: updated.activeStreamsViewType,
+        imuMount: updated.imuMount ?? DEFAULT_IMU_MOUNT,
+        imuView: updated.imuView ?? DEFAULT_IMU_VIEW,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -351,6 +402,96 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setViewType(baseline.activeStreamsViewType)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // IMU mounting correction. Angle inputs commit on blur, the enable switch
+  // immediately; both funnel through here. The backend persists the object and
+  // delivers it to the device as a retained MQTT config message; the agent's
+  // IMU collector applies it live (published euler becomes vehicle-frame).
+  async function commitImuMount(enabled: boolean) {
+    if (saving || baseline === null) return
+    const rollDeg = parseAngle(mountRoll)
+    const pitchDeg = parseAngle(mountPitch)
+    const yawDeg = parseAngle(mountYaw)
+    if (rollDeg === null || pitchDeg === null || yawDeg === null) {
+      toast.error("Mounting offsets must be numbers (degrees)")
+      setMountEnabled(baseline.imuMount.enabled)
+      setMountRoll(String(baseline.imuMount.rollDeg))
+      setMountPitch(String(baseline.imuMount.pitchDeg))
+      setMountYaw(String(baseline.imuMount.yawDeg))
+      return
+    }
+    const next: ImuMount = { enabled, rollDeg, pitchDeg, yawDeg }
+    if (imuMountEqual(next, baseline.imuMount)) {
+      // Snap inputs back to canonical form (e.g. "090" -> "90").
+      setMountRoll(String(baseline.imuMount.rollDeg))
+      setMountPitch(String(baseline.imuMount.pitchDeg))
+      setMountYaw(String(baseline.imuMount.yawDeg))
+      return
+    }
+    setMountEnabled(enabled)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { imuMount: next })
+      const updated = res.device
+      const mount = updated.imuMount ?? DEFAULT_IMU_MOUNT
+      setDevice(updated)
+      setMountEnabled(mount.enabled)
+      setMountRoll(String(mount.rollDeg))
+      setMountPitch(String(mount.pitchDeg))
+      setMountYaw(String(mount.yawDeg))
+      setBaseline({ ...baseline, imuMount: mount })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setMountEnabled(baseline.imuMount.enabled)
+      setMountRoll(String(baseline.imuMount.rollDeg))
+      setMountPitch(String(baseline.imuMount.pitchDeg))
+      setMountYaw(String(baseline.imuMount.yawDeg))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 3D orientation view camera. Cloud-only (nothing is sent to the device);
+  // the Streams tab reads it on next mount.
+  async function commitImuView() {
+    if (saving || baseline === null) return
+    const azimuthDeg = parseAngle(camAzimuth)
+    const elevationDeg = parseAngle(camElevation)
+    if (azimuthDeg === null || elevationDeg === null) {
+      toast.error("Camera angles must be numbers (degrees)")
+      setCamAzimuth(String(baseline.imuView.azimuthDeg))
+      setCamElevation(String(baseline.imuView.elevationDeg))
+      return
+    }
+    const next: ImuView = { azimuthDeg, elevationDeg }
+    if (
+      next.azimuthDeg === baseline.imuView.azimuthDeg &&
+      next.elevationDeg === baseline.imuView.elevationDeg
+    ) {
+      setCamAzimuth(String(baseline.imuView.azimuthDeg))
+      setCamElevation(String(baseline.imuView.elevationDeg))
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { imuView: next })
+      const updated = res.device
+      const view = updated.imuView ?? DEFAULT_IMU_VIEW
+      setDevice(updated)
+      // The backend clamps elevation (±85°); reflect what it stored.
+      setCamAzimuth(String(view.azimuthDeg))
+      setCamElevation(String(view.elevationDeg))
+      setBaseline({ ...baseline, imuView: view })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setCamAzimuth(String(baseline.imuView.azimuthDeg))
+      setCamElevation(String(baseline.imuView.elevationDeg))
     } finally {
       setSaving(false)
     }
@@ -562,7 +703,161 @@ function DeviceSettingsPage() {
         </Card>
       </div>
 
-      {/* Row 2: IoT identity (left) + Media channels (right), equal height */}
+      {/* Row 2: IMU mounting correction (left) + 3D view camera (right) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>IMU mounting</CardTitle>
+            <CardDescription>
+              Correct roll, pitch and yaw for how the enclosure is physically
+              installed in the vehicle.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {device === null ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              <FieldGroup>
+                <Field orientation="horizontal">
+                  <FieldContent>
+                    <FieldLabel htmlFor="device-imu-mount-enabled">
+                      Correct for mounting orientation
+                    </FieldLabel>
+                    <FieldDescription>
+                      Off by default. When on, the device re-expresses roll,
+                      pitch and yaw in the vehicle&apos;s frame using the
+                      rotation below. The raw quaternion and the sensor&apos;s
+                      factory calibration are untouched; already-stored history
+                      is not rewritten.
+                    </FieldDescription>
+                  </FieldContent>
+                  <Switch
+                    id="device-imu-mount-enabled"
+                    checked={mountEnabled}
+                    disabled={saving}
+                    onCheckedChange={(next) => commitImuMount(next)}
+                  />
+                </Field>
+
+                <Field>
+                  <FieldLabel>Enclosure rotation (degrees)</FieldLabel>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Roll</span>
+                      <Input
+                        id="device-imu-mount-roll"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={mountRoll}
+                        disabled={saving}
+                        onChange={(e) => setMountRoll(e.target.value)}
+                        onBlur={() => commitImuMount(mountEnabled)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Pitch
+                      </span>
+                      <Input
+                        id="device-imu-mount-pitch"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={mountPitch}
+                        disabled={saving}
+                        onChange={(e) => setMountPitch(e.target.value)}
+                        onBlur={() => commitImuMount(mountEnabled)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Yaw</span>
+                      <Input
+                        id="device-imu-mount-yaw"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={mountYaw}
+                        disabled={saving}
+                        onChange={(e) => setMountYaw(e.target.value)}
+                        onBlur={() => commitImuMount(mountEnabled)}
+                      />
+                    </div>
+                  </div>
+                  <FieldDescription>
+                    How the box is rotated relative to the vehicle, applied as
+                    yaw, then pitch, then roll. Examples: mounted sideways
+                    (roll and pitch appear swapped) → yaw 90; facing backwards
+                    (yaw off by half a turn) → yaw 180; standing on its side →
+                    roll 90. Saved automatically; applies live within a couple
+                    of seconds.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Orientation view camera</CardTitle>
+            <CardDescription>
+              Where the camera sits in the 3D orientation view on the Streams
+              tab.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {device === null ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>Camera angle (degrees)</FieldLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Azimuth
+                      </span>
+                      <Input
+                        id="device-imu-view-azimuth"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={camAzimuth}
+                        disabled={saving}
+                        onChange={(e) => setCamAzimuth(e.target.value)}
+                        onBlur={() => commitImuView()}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        Elevation
+                      </span>
+                      <Input
+                        id="device-imu-view-elevation"
+                        type="number"
+                        step="any"
+                        inputMode="decimal"
+                        value={camElevation}
+                        disabled={saving}
+                        onChange={(e) => setCamElevation(e.target.value)}
+                        onBlur={() => commitImuView()}
+                      />
+                    </div>
+                  </div>
+                  <FieldDescription>
+                    Azimuth spins the camera around the vehicle (0 = behind, 90
+                    = right side); elevation raises it toward top-down (clamped
+                    to ±85). Default: 45 / 24. Saved automatically.
+                  </FieldDescription>
+                </Field>
+              </FieldGroup>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 3: IoT identity (left) + Media channels (right), equal height */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -640,7 +935,7 @@ function DeviceSettingsPage() {
         </Card>
       </div>
 
-      {/* Row 3: Danger zone */}
+      {/* Row 4: Danger zone */}
       <Card className="ring-destructive/30">
         <CardHeader>
           <CardTitle className="text-destructive">Danger zone</CardTitle>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import * as THREE from "three"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { ImuView } from "@/lib/api"
 import { useIsDark } from "@/hooks/use-is-dark"
 import {
   formatMetricValue,
@@ -222,9 +223,25 @@ function panelGrid(
 }
 
 const FOV_DEG = 45
-// Fixed 3/4 view direction; the distance along it is derived from the aspect
-// ratio so the car stays fully framed in a tall or a wide panel.
-const VIEW_DIR = new THREE.Vector3(1, 0.62, 1).normalize()
+// Default 3/4 view angle (matches the pre-configurable (1, 0.62, 1) direction);
+// a per-device override comes in via the `view` prop. The distance along the
+// direction is derived from the aspect ratio so the car stays fully framed in
+// a tall or a wide panel.
+const DEFAULT_VIEW: ImuView = { azimuthDeg: 45, elevationDeg: 24 }
+
+// Azimuth spins the camera around the car (0 = behind, 90 = right side);
+// elevation raises it toward top-down. Both in degrees, three.js Y-up world.
+function viewDirFrom(view: ImuView): THREE.Vector3 {
+  const az = THREE.MathUtils.degToRad(view.azimuthDeg)
+  const el = THREE.MathUtils.degToRad(
+    Math.max(-85, Math.min(85, view.elevationDeg))
+  )
+  return new THREE.Vector3(
+    Math.sin(az) * Math.cos(el),
+    Math.sin(el),
+    Math.cos(az) * Math.cos(el)
+  )
+}
 
 // Scene palette per theme. A canvas cannot be styled by Tailwind's `dark:`
 // variant, so these are applied imperatively once the theme resolves (see the
@@ -452,16 +469,24 @@ function buildCar(
 export function ImuOrientationView({
   latest,
   eulerMetrics,
+  view,
 }: {
   latest: Record<string, LatestReading>
   // The euler metric keys this device model actually produces, in display order.
   eulerMetrics: string[]
+  // Per-device camera angle (device settings); null/undefined = default 3/4 view.
+  view?: ImuView | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // The scene is built once and driven by refs: telemetry updates arrive ~4x/s
   // (the hook's flush interval), which would tear down and rebuild the renderer
   // if the orientation were an effect dependency.
   const targetQuatRef = useRef(new THREE.Quaternion())
+  // Camera direction + a handle to re-run the fit, so a settings change (or the
+  // device row arriving after mount) moves the camera without rebuilding the
+  // scene — same reason the orientation flows through a ref above.
+  const viewDirRef = useRef(viewDirFrom(view ?? DEFAULT_VIEW))
+  const refitRef = useRef<(() => void) | null>(null)
   // Held so a theme change can recolour the existing scene in place. Rebuilding
   // it instead would drop the WebGL context and reset the car's smoothed
   // orientation, making it lurch back to level on every toggle.
@@ -554,7 +579,7 @@ export function ImuOrientationView({
         radius / Math.sin(vFov / 2),
         radius / Math.sin(hFov / 2)
       )
-      camera.position.copy(VIEW_DIR).multiplyScalar(distance)
+      camera.position.copy(viewDirRef.current).multiplyScalar(distance)
       camera.lookAt(0, 0, 0)
     }
 
@@ -568,6 +593,7 @@ export function ImuOrientationView({
       fit(aspect)
     }
     resize()
+    refitRef.current = resize
 
     // The panel resizes with the column (and the app sidebar collapsing), which
     // fires no window resize event.
@@ -591,6 +617,7 @@ export function ImuOrientationView({
     return () => {
       cancelAnimationFrame(frameId)
       observer.disconnect()
+      refitRef.current = null
       car.traverse((obj) => {
         const geom = (obj as Partial<THREE.Mesh>).geometry
         if (geom) geom.dispose()
@@ -604,6 +631,13 @@ export function ImuOrientationView({
       edgeMaterialRef.current = null
     }
   }, [])
+
+  // Re-aim the camera when the per-device view setting changes (or first
+  // arrives — the device row usually lands after the scene has mounted).
+  useEffect(() => {
+    viewDirRef.current = viewDirFrom(view ?? DEFAULT_VIEW)
+    refitRef.current?.()
+  }, [view])
 
   // Recolour on theme change. Declared after the setup effect so the refs are
   // populated by the time this first runs on mount; the render loop is already

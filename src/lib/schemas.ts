@@ -98,6 +98,21 @@ export const deviceStatusSchema = z.enum([
   "decommissioned",
 ])
 
+// IMU mounting correction: how the sensor is physically rotated relative to
+// the vehicle (ZYX euler, degrees). Mirrors the backend's devices.imu_mount.
+export const imuMountSchema = z.object({
+  enabled: z.boolean(),
+  rollDeg: z.number(),
+  pitchDeg: z.number(),
+  yawDeg: z.number(),
+})
+
+// Camera direction for the 3D orientation view (degrees).
+export const imuViewSchema = z.object({
+  azimuthDeg: z.number(),
+  elevationDeg: z.number(),
+})
+
 export const deviceSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -112,6 +127,9 @@ export const deviceSchema = z.object({
   gnssAntBias: z.boolean().catch(false),
   // .catch keeps an older client forward-compatible when new view types ship.
   activeStreamsViewType: z.enum(["card", "map"]).catch("card"),
+  // .catch(null) tolerates an older backend without the columns.
+  imuMount: imuMountSchema.nullable().catch(null),
+  imuView: imuViewSchema.nullable().catch(null),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

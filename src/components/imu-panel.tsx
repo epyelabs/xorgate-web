@@ -1,4 +1,4 @@
-import type { IoCapabilities } from "@/lib/api"
+import type { ImuView, IoCapabilities } from "@/lib/api"
 import type { LatestReading } from "@/hooks/use-iot-telemetry"
 import {
   imuAccelMetrics,
@@ -23,9 +23,12 @@ import { ImuOrientationView } from "@/components/imu-orientation-view"
 export function ImuPanel({
   caps,
   latest,
+  view,
 }: {
   caps: IoCapabilities | null
   latest: Record<string, LatestReading>
+  // Per-device camera angle for the 3D view (device settings).
+  view?: ImuView | null
 }) {
   const metrics = [...imuQuaternionMetrics(caps), ...imuAccelMetrics(caps)]
   const eulerMetrics = imuEulerMetrics(caps)
@@ -50,7 +53,11 @@ export function ImuPanel({
       ) : null}
 
       {eulerMetrics.length > 0 ? (
-        <ImuOrientationView latest={latest} eulerMetrics={eulerMetrics} />
+        <ImuOrientationView
+          latest={latest}
+          eulerMetrics={eulerMetrics}
+          view={view}
+        />
       ) : null}
     </div>
   )

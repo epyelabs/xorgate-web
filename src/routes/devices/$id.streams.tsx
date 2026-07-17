@@ -6,6 +6,7 @@ import {
   getDevice,
   getDeviceModel,
   type ActiveStreamsViewType,
+  type ImuView,
   type IoCapabilities,
 } from "@/lib/api"
 import {
@@ -52,6 +53,7 @@ function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
+  const [imuView, setImuView] = useState<ImuView | null>(null)
   const [metaLoading, setMetaLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   // Map View camera follow: auto-centres on new fixes until the operator pans or
@@ -76,6 +78,7 @@ function DeviceStreamsPage() {
             parsedDevice.data.device.name ?? parsedDevice.data.device.serial
           )
         setViewType(parsedDevice.data.device.activeStreamsViewType)
+        setImuView(parsedDevice.data.device.imuView)
 
         const rawModel = await getDeviceModel(
           parsedDevice.data.device.deviceModelId
@@ -188,7 +191,7 @@ function DeviceStreamsPage() {
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <TelemetryPanel caps={caps} latest={latest} />
 
-          <ImuPanel caps={caps} latest={latest} />
+          <ImuPanel caps={caps} latest={latest} view={imuView} />
 
           {videoCaps.length > 0 ? (
             <div className="shrink-0">

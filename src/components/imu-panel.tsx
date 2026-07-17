@@ -11,13 +11,13 @@ import { ImuOrientationView } from "@/components/imu-orientation-view"
 
 /**
  * Everything the IMU produces, in one card: the orientation quaternion and the
- * linear acceleration as numbers, above the 3D box that the euler angles drive.
+ * linear acceleration as numbers, above the 3D car that the euler angles drive.
  * They share a sensor, so they share a card.
  *
- * The euler angles themselves are not in the grid — the box *is* their readout,
+ * The euler angles themselves are not in the grid — the car *is* their readout,
  * and it carries them as numbers in its own corner overlay.
  *
- * Grows to fill the column: the box takes whatever height the numbers and the
+ * Grows to fill the column: the car takes whatever height the numbers and the
  * card's siblings leave over.
  */
 export function ImuPanel({

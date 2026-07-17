@@ -15,8 +15,9 @@ import {
 // cross-sections along the length — curved fenders, a raked windshield, a
 // falling roofline and flared wheel arches — and it is drawn as the loft's own
 // quad grid (section rings + lengthwise stringers), the classic dense-mesh
-// "wireframe render" look, rather than only its sharp edges. Spoked wheels,
-// door mirrors, a shark-fin antenna and a grille finish the read. The BNO085
+// "wireframe render" look, rather than only its sharp edges. Spoked wheels
+// (which roll at the GPS ground speed — see the tick loop), door mirrors, a
+// shark-fin antenna and a grille finish the read. The BNO085
 // defines the frame; the car is just a friendlier stand-in for a bare slab when
 // reading orientation at a glance.
 
@@ -281,6 +282,14 @@ const THEME_COLORS = {
 // ±180° yaw wrap instead of spinning the long way round.
 const SMOOTHING_LAMBDA = 6
 
+// Wheel spin from GPS speed. The model has no intrinsic scale, so pin the
+// 100-unit body to a ~4.7 m SUV and derive the tyre's rolling radius from
+// that; gps.speed arrives in km/h at the same ~1 Hz cadence as the euler
+// angles, so the render loop eases toward it with the same lambda and
+// integrates the spin angle per frame.
+const CAR_LENGTH_M = 4.7
+const WHEEL_RADIUS_M = WHEEL_RADIUS * (CAR_LENGTH_M / (NOSE_X - TAIL_X))
+
 function readAngle(latest: Record<string, LatestReading>, key: string): number {
   const v = latest[key]?.value
   return typeof v === "number" ? v : 0
@@ -311,11 +320,15 @@ function extrudeProfile(shape: THREE.Shape, width: number): THREE.ExtrudeGeometr
  *
  * The whole car is recentred on its own centroid so the device rotation spins it
  * in place rather than swinging it about the profile's origin.
+ *
+ * The wheels come back as their own groups, built about their axle centres and
+ * positioned at the hubs, so the render loop can spin them about body Y (the
+ * axle axis) to match the GPS ground speed.
  */
 function buildCar(
   faceMaterial: THREE.Material,
   edgeMaterial: THREE.Material
-): { group: THREE.Group; radius: number } {
+): { group: THREE.Group; radius: number; wheels: THREE.Group[] } {
   const faceGeoms: THREE.BufferGeometry[] = []
   const lineGeoms: THREE.BufferGeometry[] = []
   // A face geometry whose wireframe comes from its own edges.
@@ -330,37 +343,51 @@ function buildCar(
 
   // Wheels: a tyre barrel (threshold below the 360/28 ≈ 13° between facets, so
   // every tread line draws), a rim barrel, and radial spokes plus a hub on the
-  // outboard face for the turbine-rim look.
+  // outboard face for the turbine-rim look. Each wheel's parts are built about
+  // the wheel's own centre and parented to a group positioned at the hub, so
+  // rotating the group about its local Y (the cylinder/axle axis) spins the
+  // wheel in place.
+  const wheels: THREE.Group[] = []
   for (const sx of [AXLE_X, -AXLE_X]) {
     for (const sy of [AXLE_Y, -AXLE_Y]) {
       const out = Math.sign(sy)
+      const wheel = new THREE.Group()
+      wheel.position.set(sx, sy, AXLE_Z)
+      const wheelPart = (geom: THREE.BufferGeometry, thresholdDeg: number) => {
+        wheel.add(new THREE.Mesh(geom, faceMaterial))
+        wheel.add(
+          new THREE.LineSegments(
+            new THREE.EdgesGeometry(geom, thresholdDeg),
+            edgeMaterial
+          )
+        )
+      }
       const tyre = new THREE.CylinderGeometry(
         WHEEL_RADIUS,
         WHEEL_RADIUS,
         WHEEL_THICKNESS,
         WHEEL_SEGMENTS
       )
-      tyre.translate(sx, sy, AXLE_Z)
-      detail(tyre, 10)
+      wheelPart(tyre, 10)
       const rim = new THREE.CylinderGeometry(
         RIM_RADIUS,
         RIM_RADIUS,
         WHEEL_THICKNESS + 0.5,
         14
       )
-      rim.translate(sx, sy, AXLE_Z)
-      detail(rim, 10)
-      const faceY = sy + out * (WHEEL_THICKNESS / 2 + 0.5)
+      wheelPart(rim, 10)
+      const faceY = out * (WHEEL_THICKNESS / 2 + 0.5)
       for (let k = 0; k < SPOKE_COUNT; k++) {
         const spoke = new THREE.BoxGeometry(5.4, 1.0, 1.7)
         spoke.translate(4.4, 0, 0)
         spoke.rotateY((k * 2 * Math.PI) / SPOKE_COUNT + (out > 0 ? 0.3 : 0))
-        spoke.translate(sx, faceY, AXLE_Z)
-        detail(spoke, 25)
+        spoke.translate(0, faceY, 0)
+        wheelPart(spoke, 25)
       }
       const hub = new THREE.CylinderGeometry(2, 2, 1.4, 12)
-      hub.translate(sx, faceY, AXLE_Z)
-      detail(hub, 25)
+      hub.translate(0, faceY, 0)
+      wheelPart(hub, 25)
+      wheels.push(wheel)
     }
   }
 
@@ -441,19 +468,25 @@ function buildCar(
     g.computeBoundingBox()
     if (g.boundingBox) box.union(g.boundingBox)
   }
+  // The wheels hang below the hull's floor, so the box must include them —
+  // setFromObject folds each wheel group's hub position into its parts' bounds.
+  for (const w of wheels) box.union(new THREE.Box3().setFromObject(w))
   const center = box.getCenter(new THREE.Vector3())
   for (const g of faceGeoms) g.translate(-center.x, -center.y, -center.z)
   for (const g of lineGeoms) g.translate(-center.x, -center.y, -center.z)
+  // The wheels recentre by moving their pivots, keeping spin about the axle.
+  for (const w of wheels) w.position.sub(center)
 
   const group = new THREE.Group()
   for (const g of faceGeoms) group.add(new THREE.Mesh(g, faceMaterial))
   for (const g of lineGeoms) group.add(new THREE.LineSegments(g, edgeMaterial))
+  for (const w of wheels) group.add(w)
 
   // Half the bounding-box diagonal, plus a little headroom. Framing against this
   // sphere (rather than the current pose's silhouette) keeps the car the same
   // size as it turns and guarantees it never crops at any orientation.
   const radius = 0.5 * box.getSize(new THREE.Vector3()).length() * 1.08
-  return { group, radius }
+  return { group, radius, wheels }
 }
 
 /**
@@ -482,6 +515,9 @@ export function ImuOrientationView({
   // (the hook's flush interval), which would tear down and rebuild the renderer
   // if the orientation were an effect dependency.
   const targetQuatRef = useRef(new THREE.Quaternion())
+  // Ground speed in m/s for the wheel spin, fed the same way as the quaternion:
+  // the render loop eases toward it so the ~1 Hz samples don't step.
+  const targetSpeedRef = useRef(0)
   // Camera direction + a handle to re-run the fit, so a settings change (or the
   // device row arriving after mount) moves the camera without rebuilding the
   // scene — same reason the orientation flows through a ref above.
@@ -500,6 +536,11 @@ export function ImuOrientationView({
   const yaw = readAngle(latest, "imu.euler_yaw")
   const hasFix = eulerMetrics.some((m) => latest[m] !== undefined)
 
+  // GPS ground speed, published in km/h (the collector converts RMC knots).
+  // Absent on devices without GPS — the wheels just stay still.
+  const speedValue = latest["gps.speed"]?.value
+  const speedKmh = typeof speedValue === "number" ? Math.max(0, speedValue) : 0
+
   useEffect(() => {
     // three.js euler order "ZYX" composes as Rz(yaw)·Ry(pitch)·Rx(roll), which is
     // exactly the agent's convention (see lib/orientation.ts on the device).
@@ -512,6 +553,10 @@ export function ImuOrientationView({
       )
     )
   }, [roll, pitch, yaw])
+
+  useEffect(() => {
+    targetSpeedRef.current = speedKmh / 3.6
+  }, [speedKmh])
 
   useEffect(() => {
     const container = containerRef.current
@@ -562,7 +607,7 @@ export function ImuOrientationView({
     faceMaterialRef.current = faceMaterial
     edgeMaterialRef.current = edgeMaterial
 
-    const { group: car, radius } = buildCar(faceMaterial, edgeMaterial)
+    const { group: car, radius, wheels } = buildCar(faceMaterial, edgeMaterial)
 
     // The car spins about its own centroid; this outer group carries the device
     // orientation quaternion, which the render loop slerps toward each frame.
@@ -602,13 +647,17 @@ export function ImuOrientationView({
 
     let frameId = 0
     let prev = performance.now()
+    let wheelSpeed = 0 // smoothed ground speed, m/s
     const tick = (now: number) => {
       const dt = Math.min((now - prev) / 1000, 0.1) // clamp after a hidden tab
       prev = now
-      body.quaternion.slerp(
-        targetQuatRef.current,
-        1 - Math.exp(-SMOOTHING_LAMBDA * dt)
-      )
+      const ease = 1 - Math.exp(-SMOOTHING_LAMBDA * dt)
+      body.quaternion.slerp(targetQuatRef.current, ease)
+      // Roll the wheels at the ground speed: ω = v / r about body +Y, which by
+      // the right-hand rule carries the tyre's top toward the nose (+X).
+      wheelSpeed += (targetSpeedRef.current - wheelSpeed) * ease
+      const spin = (wheelSpeed / WHEEL_RADIUS_M) * dt
+      for (const wheel of wheels) wheel.rotation.y += spin
       renderer.render(scene, camera)
       frameId = requestAnimationFrame(tick)
     }

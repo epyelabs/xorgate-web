@@ -14,6 +14,7 @@ export const METRIC_LABELS: Record<string, string> = {
   "gps.lon": "Longitude",
   "gps.alt": "Altitude",
   "gps.speed": "Speed",
+  "gps.course": "Course",
   "gps.satellites": "Satellites",
   "gps.fix_quality": "Fix Quality",
   "gps.satellites_in_view": "Sats in View",

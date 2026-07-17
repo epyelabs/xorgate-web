@@ -24,11 +24,15 @@ const FOLLOW_ZOOM = 16
 export function LiveLocationMap({
   position,
   track,
+  course,
   following,
   onInteract,
 }: {
   position: [number, number] | null
   track: [number, number][]
+  // Course over ground in degrees true (0-360, clockwise from north), or null
+  // when unknown (stationary / no lock). Drives the marker direction cone.
+  course: number | null
   // Follow state is owned by the parent so the Recenter control can live in the
   // telemetry strip; `onInteract` fires on a user pan/zoom to pause following.
   following: boolean
@@ -134,6 +138,42 @@ export function LiveLocationMap({
             anchor="center"
           >
             <span className="relative flex h-3.5 w-3.5">
+              {course !== null ? (
+                // Direction-of-travel cone, fading outward from the dot. The map
+                // never rotates (bearing 0), so screen-up is north and rotating
+                // by `course` degrees clockwise points it the right way. Sits
+                // behind the pulse/dot (rendered first).
+                <span
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                  style={{ transform: `rotate(${course}deg)` }}
+                >
+                  <svg
+                    width={64}
+                    height={64}
+                    viewBox="-32 -32 64 64"
+                    className="overflow-visible"
+                    aria-hidden
+                  >
+                    <defs>
+                      <radialGradient
+                        id="course-cone"
+                        gradientUnits="userSpaceOnUse"
+                        cx={0}
+                        cy={0}
+                        r={30}
+                      >
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.55} />
+                        <stop offset="55%" stopColor="#3b82f6" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                      </radialGradient>
+                    </defs>
+                    <path
+                      d="M0 0 L-15.9 -25.4 A30 30 0 0 1 15.9 -25.4 Z"
+                      fill="url(#course-cone)"
+                    />
+                  </svg>
+                </span>
+              ) : null}
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
               <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 shadow" />
             </span>

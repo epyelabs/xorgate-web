@@ -1,5 +1,6 @@
 import {
   CircleDotIcon,
+  CompassIcon,
   CrosshairIcon,
   GaugeIcon,
   LocateFixedIcon,
@@ -28,6 +29,7 @@ import {
 const METRIC_ICONS: Record<string, LucideIcon> = {
   "gps.alt": MountainIcon,
   "gps.speed": GaugeIcon,
+  "gps.course": CompassIcon,
   "gps.satellites": SatelliteIcon,
   "gps.satellites_in_view": SatelliteDishIcon,
   "gps.fix_quality": LocateFixedIcon,

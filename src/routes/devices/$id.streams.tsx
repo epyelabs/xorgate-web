@@ -108,6 +108,10 @@ function DeviceStreamsPage() {
   const lon = latest["gps.lon"]?.value
   const position: [number, number] | null =
     typeof lat === "number" && typeof lon === "number" ? [lon, lat] : null
+  // Course over ground (deg true) — drives the marker's direction indicator.
+  // Absent when the device is stationary or has no lock, so it stays null then.
+  const courseVal = latest["gps.course"]?.value
+  const course = typeof courseVal === "number" ? courseVal : null
   const track: [number, number][] = []
   for (const p of history) {
     const pLat = p["gps.lat"]
@@ -141,6 +145,7 @@ function DeviceStreamsPage() {
           <LiveLocationMap
             position={position}
             track={track}
+            course={course}
             following={following}
             onInteract={() => setFollowing(false)}
           />

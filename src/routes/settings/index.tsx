@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
@@ -132,79 +133,93 @@ function OrganizationSettingsPage() {
         </header>
       </StickyHeader>
 
-      <div className="flex flex-col gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>General</CardTitle>
-            <CardDescription>
-              Your organization's name and identity.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="grid gap-2 sm:max-w-sm">
-              <Label htmlFor="org-name">Organization name</Label>
-              <Input
-                id="org-name"
-                defaultValue={orgName}
-                placeholder="Acme Inc."
-              />
-            </div>
-            <div>
-              <Button disabled>Save changes</Button>
-            </div>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="general" className="gap-6">
+        <div className="border-b border-border">
+          <TabsList variant="line">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="credentials">Credentials</TabsTrigger>
+            <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <CredentialsCard />
+        <TabsContent value="general">
+          <Card>
+            <CardHeader>
+              <CardTitle>General</CardTitle>
+              <CardDescription>
+                Your organization's name and identity.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-2 sm:max-w-sm">
+                <Label htmlFor="org-name">Organization name</Label>
+                <Input
+                  id="org-name"
+                  defaultValue={orgName}
+                  placeholder="Acme Inc."
+                />
+              </div>
+              <div>
+                <Button disabled>Save changes</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Workspaces</CardTitle>
-            <CardDescription>
-              Workspaces group related resources inside this organization.
-            </CardDescription>
-            <CardAction>
-              <Button
-                size="sm"
-                onClick={() => setCreateOpen(true)}
-                disabled={!currentOrganizationId}
-              >
-                <PlusIcon />
-                New workspace
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              card={false}
-              columns={workspaceColumns}
-              rows={workspaces}
-              getRowKey={(workspace) => workspace.id}
-              loading={isLoadingWorkspaces}
-              skeletonRows={3}
-              empty={
-                <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium">No workspaces yet</p>
-                    <p className="text-xs text-muted-foreground">
-                      Create a workspace to start grouping devices and
-                      workflows.
-                    </p>
+        <TabsContent value="credentials">
+          <CredentialsCard />
+        </TabsContent>
+
+        <TabsContent value="workspaces">
+          <Card>
+            <CardHeader>
+              <CardTitle>Workspaces</CardTitle>
+              <CardDescription>
+                Workspaces group related resources inside this organization.
+              </CardDescription>
+              <CardAction>
+                <Button
+                  size="sm"
+                  onClick={() => setCreateOpen(true)}
+                  disabled={!currentOrganizationId}
+                >
+                  <PlusIcon />
+                  New workspace
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                card={false}
+                columns={workspaceColumns}
+                rows={workspaces}
+                getRowKey={(workspace) => workspace.id}
+                loading={isLoadingWorkspaces}
+                skeletonRows={3}
+                empty={
+                  <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-sm font-medium">No workspaces yet</p>
+                      <p className="text-xs text-muted-foreground">
+                        Create a workspace to start grouping devices and
+                        workflows.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setCreateOpen(true)}
+                      disabled={!currentOrganizationId}
+                    >
+                      <PlusIcon />
+                      New workspace
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setCreateOpen(true)}
-                    disabled={!currentOrganizationId}
-                  >
-                    <PlusIcon />
-                    New workspace
-                  </Button>
-                </div>
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
+                }
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <CreateWorkspaceDialog open={createOpen} onOpenChange={setCreateOpen} />
       <EditWorkspaceDialog

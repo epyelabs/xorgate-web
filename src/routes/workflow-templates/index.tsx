@@ -288,7 +288,7 @@ function WorkflowTemplatesListPage() {
   )
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 pt-0">
+    <div className="flex h-[calc(100svh-4rem)] min-h-0 min-w-0 flex-col gap-6 p-4 pt-0 group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
       <StickyHeader className="border-b border-border pb-4">
         <header className="flex flex-wrap items-start gap-4">
           <div className="flex flex-col gap-1">
@@ -317,6 +317,8 @@ function WorkflowTemplatesListPage() {
         <p className="text-sm text-destructive">{error}</p>
       ) : (
         <DataTable
+          fillHeight
+          className="min-h-0 flex-1"
           columns={columns}
           rows={visible}
           getRowKey={(template) => template.id}

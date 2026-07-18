@@ -29,6 +29,7 @@ import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
+import { CodeFunctionEditorHost } from "./-components/code-function/code-function-editor"
 import { JsonEditor } from "./-components/json-editor"
 import { NodePalette } from "./-components/node-palette"
 import { SettingsSheet } from "./-components/settings-sheet"
@@ -417,6 +418,10 @@ function WorkflowTemplateDetailPage() {
           ) : null}
         </div>
       </div>
+
+      {/* Full-screen Lambda-style editor for Code Function nodes; opened from
+          the node popover, driven by the workflow-editor store. */}
+      <CodeFunctionEditorHost />
 
       <VersionsSheet
         open={versionsOpen}

@@ -23,6 +23,7 @@ export const NODE_GROUPS = [
   "telemetry",
   "model",
   "logic",
+  "function",
   "output",
   "custom",
 ] as const
@@ -58,7 +59,7 @@ export const catalogNodeSchema = z.object({
   description: z.string(),
   ui: z.object({
     icon: z.string(),
-    editor: z.enum(["prompt", "geofence", "expression"]).optional(),
+    editor: z.enum(["prompt", "geofence", "expression", "code"]).optional(),
   }),
   inputs: z.array(catalogPortSchema),
   outputs: z.array(catalogPortSchema),

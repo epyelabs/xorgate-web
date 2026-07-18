@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { apiRequest } from "@/lib/api"
+import { mergeMockFunctionNodes } from "@/lib/code-function-mock"
 import {
   type CatalogNode,
   type WorkflowCatalog,
@@ -39,9 +40,13 @@ export const useWorkflowCatalog = create<WorkflowCatalogState>((set, get) => ({
       if (!parsed.success) {
         throw new Error("Unexpected /workflow-catalog response shape")
       }
+      // UI/UX mockup: the "Code Function" category is injected client-side
+      // until the backend serves function.* node types (skipped per-type once
+      // it does — see code-function-mock.ts).
+      const catalog = mergeMockFunctionNodes(parsed.data)
       set({
-        catalog: parsed.data,
-        byType: Object.fromEntries(parsed.data.nodes.map((n) => [n.type, n])),
+        catalog,
+        byType: Object.fromEntries(catalog.nodes.map((n) => [n.type, n])),
         status: "ready",
       })
     } catch (err) {

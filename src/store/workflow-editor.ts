@@ -31,6 +31,11 @@ interface WorkflowEditorState {
   nodes: WfNode[]
   edges: Edge[]
   selectedNodeId: string | null
+  // Node whose full-screen Code Function editor dialog is open (rendered once
+  // at the template page level, outside the per-node popover), or null.
+  functionEditorNodeId: string | null
+  openFunctionEditor: (id: string) => void
+  closeFunctionEditor: () => void
   // True when the graph diverges from the last loaded/saved definition.
   dirty: boolean
   // Server-side publish validation issues from the last failed publish, mapped
@@ -101,18 +106,36 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
+  functionEditorNodeId: null,
   dirty: false,
   publishIssues: [],
 
   setPublishIssues: (issues) => set({ publishIssues: issues }),
 
+  openFunctionEditor: (id) => set({ functionEditorNodeId: id }),
+  closeFunctionEditor: () => set({ functionEditorNodeId: null }),
+
   loadDefinition: (definition) => {
     const { nodes, edges } = definitionToFlow(definition)
-    set({ nodes, edges, selectedNodeId: null, dirty: false, publishIssues: [] })
+    set({
+      nodes,
+      edges,
+      selectedNodeId: null,
+      functionEditorNodeId: null,
+      dirty: false,
+      publishIssues: [],
+    })
   },
 
   reset: () =>
-    set({ nodes: [], edges: [], selectedNodeId: null, dirty: false, publishIssues: [] }),
+    set({
+      nodes: [],
+      edges: [],
+      selectedNodeId: null,
+      functionEditorNodeId: null,
+      dirty: false,
+      publishIssues: [],
+    }),
 
   markSaved: () => set({ dirty: false }),
 
@@ -193,6 +216,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       nodes: s.nodes.filter((n) => n.id !== id),
       edges: s.edges.filter((e) => e.source !== id && e.target !== id),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+      functionEditorNodeId: s.functionEditorNodeId === id ? null : s.functionEditorNodeId,
       dirty: true,
     })),
 

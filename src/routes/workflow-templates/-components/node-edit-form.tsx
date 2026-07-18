@@ -1,4 +1,5 @@
-import { Trash2Icon } from "lucide-react"
+import { SquareFunctionIcon, Trash2Icon } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-mock"
+import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
@@ -207,6 +210,49 @@ function ConfigField({
   )
 }
 
+// Compact summary + entry point for Code Function nodes: the code itself is
+// edited/tested/monitored/versioned in the full-screen function editor, not
+// in this popover. Opening it also deselects the node so the popover closes.
+function CodeFunctionSummary({
+  nodeId,
+  catalogType,
+}: {
+  nodeId: string
+  catalogType: string
+}) {
+  const node = useWorkflowEditor((s) => s.nodes.find((n) => n.id === nodeId))
+  const openFunctionEditor = useWorkflowEditor((s) => s.openFunctionEditor)
+  const selectNode = useWorkflowEditor((s) => s.selectNode)
+  const runtime = FUNCTION_NODE_RUNTIMES[catalogType]
+  if (!node || !runtime) return null
+
+  const fn = readFunctionConfig(catalogType, node.data.config)
+  const lines = fn.code.split("\n").length
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline">{runtime.runtimeLabel}</Badge>
+        <Badge variant="secondary">
+          {fn.deployedVersion !== null ? `Live: v${fn.deployedVersion}` : "Not deployed"}
+        </Badge>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {runtime.fileName} · {lines} lines · handler <code>{fn.handler}</code>
+      </p>
+      <Button
+        size="sm"
+        onClick={() => {
+          openFunctionEditor(nodeId)
+          selectNode(null)
+        }}
+      >
+        <SquareFunctionIcon />
+        Open function editor
+      </Button>
+    </div>
+  )
+}
+
 export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const node = useWorkflowEditor((s) => s.nodes.find((n) => n.id === nodeId))
   const edges = useWorkflowEditor((s) => s.edges)
@@ -266,7 +312,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
           </p>
         )}
 
-        {entry?.ui.editor ? (
+        {entry?.ui.editor === "code" ? (
+          <CodeFunctionSummary nodeId={node.id} catalogType={node.data.catalogType} />
+        ) : entry?.ui.editor ? (
           <p className="rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
             This node gets a rich {entry.ui.editor} editor in a later milestone;
             plain fields below for now.

@@ -6,6 +6,7 @@ import {
   Puzzle,
   Radio,
   ScanEye,
+  SquareFunction,
   Waves,
   Zap,
 } from "lucide-react"
@@ -32,6 +33,12 @@ export const GROUP_META: Record<
   telemetry: { label: "Telemetry", dot: "bg-teal-500", ring: "ring-teal-500/30", icon: Waves },
   model: { label: "Models", dot: "bg-fuchsia-500", ring: "ring-fuchsia-500/30", icon: ScanEye },
   logic: { label: "Logic", dot: "bg-amber-500", ring: "ring-amber-500/30", icon: GitBranch },
+  function: {
+    label: "Code Functions",
+    dot: "bg-indigo-500",
+    ring: "ring-indigo-500/30",
+    icon: SquareFunction,
+  },
   output: { label: "Outputs", dot: "bg-emerald-500", ring: "ring-emerald-500/30", icon: Zap },
   custom: { label: "Custom", dot: "bg-zinc-500", ring: "ring-zinc-500/30", icon: Puzzle },
 }
@@ -42,6 +49,7 @@ export const GROUP_ORDER: NodeGroup[] = [
   "telemetry",
   "model",
   "logic",
+  "function",
   "output",
   "custom",
 ]

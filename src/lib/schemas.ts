@@ -243,6 +243,22 @@ export const telemetryPayloadSchema = z.object({
     // Never let a media-shape change drop the whole telemetry payload: if `media`
     // fails to validate, treat it as absent and still surface metrics.
     .catch(undefined),
+  // On-device recording status (offline recording plan, Phase 2). Mirrors the
+  // device RecordingStatus and backend src/schemas/telemetry.ts — change all
+  // three together. Same defensive posture as `media`: a shape change must
+  // never drop the whole payload.
+  recording: z
+    .object({
+      enabled: z.boolean(),
+      sessionId: z.string().nullable(),
+      backlogBytes: z.number(),
+      backlogSegments: z.number(),
+      droppedSegments: z.number(),
+      uploading: z.boolean(),
+      lastUploadAt: z.number().nullable(),
+    })
+    .optional()
+    .catch(undefined),
 })
 
 // --- Live video (P3): KVS signaling channels from GET /devices/{id}/kvs-channels ---

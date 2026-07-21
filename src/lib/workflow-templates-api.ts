@@ -59,6 +59,12 @@ export async function updateWorkflowTemplate(
   })
 }
 
+// Permanently deletes a template (versions + run history cascade server-side).
+// The backend answers 409 while the template is still attached to any device.
+export async function deleteWorkflowTemplate(id: string): Promise<void> {
+  await apiRequest(`/workflow-templates/${id}`, { method: "DELETE" })
+}
+
 // Saves the editor's working copy. The server updates the open draft in place, or
 // opens a fresh draft above the published one (see workflow-templates.ts).
 export async function saveDraftVersion(

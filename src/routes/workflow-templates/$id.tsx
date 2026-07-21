@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import {
   BracesIcon,
@@ -14,6 +14,7 @@ import { ApiError } from "@/lib/api"
 import { parsePublishIssues } from "@/lib/workflow-catalog-schemas"
 import { cn } from "@/lib/utils"
 import {
+  deleteWorkflowTemplate,
   getWorkflowTemplate,
   publishVersion,
   restoreVersion,
@@ -66,6 +67,7 @@ function pickInitialVersion(
 
 function WorkflowTemplateDetailPage() {
   const { id } = Route.useParams()
+  const navigate = useNavigate()
   const [template, setTemplate] = useState<WorkflowTemplateDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -251,6 +253,23 @@ function WorkflowTemplateDetailPage() {
       if (fresh) loadVersionIntoEditor(fresh)
       setVersionsOpen(false)
       toast.success(`Restored v${version.version} into a new draft`)
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The panel's delete button is disabled while `usage` is non-empty, and the
+  // backend 409s as the backstop, so a success here means the template (plus
+  // versions/run history) is gone — leave the page.
+  const handleDelete = async () => {
+    setBusy(true)
+    try {
+      await deleteWorkflowTemplate(id)
+      toast.success("Template deleted")
+      setSettingsOpen(false)
+      void navigate({ to: "/workflow-templates" })
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -446,6 +465,11 @@ function WorkflowTemplateDetailPage() {
         template={template}
         busy={busy}
         onSave={(updates) => persistMeta(updates)}
+        onDelete={handleDelete}
+        onShowUsage={() => {
+          setSettingsOpen(false)
+          setUsageOpen(true)
+        }}
       />
     </div>
   )

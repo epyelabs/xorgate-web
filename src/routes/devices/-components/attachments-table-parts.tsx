@@ -1,6 +1,7 @@
 import {
   ClockIcon,
   GaugeIcon,
+  HardDriveDownloadIcon,
   VideoIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -12,6 +13,7 @@ const TRIGGER_META: Record<
   { label: string; icon: LucideIcon }
 > = {
   recording_saved: { label: "On recording", icon: VideoIcon },
+  session_completed: { label: "On device session", icon: HardDriveDownloadIcon },
   schedule: { label: "Scheduled", icon: ClockIcon },
   telemetry_condition: { label: "On condition", icon: GaugeIcon },
 }

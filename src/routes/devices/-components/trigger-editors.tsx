@@ -2,6 +2,7 @@ import {
   CheckIcon,
   ClockIcon,
   GaugeIcon,
+  HardDriveDownloadIcon,
   PlusIcon,
   Trash2Icon,
   VideoIcon,
@@ -35,6 +36,7 @@ import {
 
 // Narrow each discriminated-union member so the field editors stay type-safe.
 type RecordingTrigger = Extract<AttachmentTrigger, { type: "recording_saved" }>
+type SessionTrigger = Extract<AttachmentTrigger, { type: "session_completed" }>
 type ScheduleTrigger = Extract<AttachmentTrigger, { type: "schedule" }>
 type ConditionTrigger = Extract<
   AttachmentTrigger,
@@ -43,6 +45,7 @@ type ConditionTrigger = Extract<
 
 const TRIGGER_ICON: Record<AttachmentTriggerType, LucideIcon> = {
   recording_saved: VideoIcon,
+  session_completed: HardDriveDownloadIcon,
   schedule: ClockIcon,
   telemetry_condition: GaugeIcon,
 }
@@ -58,6 +61,7 @@ const OPERATOR_OPTIONS: { value: ConditionOperator; label: string }[] = [
 
 const TRIGGER_ORDER: AttachmentTriggerType[] = [
   "recording_saved",
+  "session_completed",
   "schedule",
   "telemetry_condition",
 ]
@@ -70,6 +74,7 @@ function makeDefaultTrigger(
 ): AttachmentTrigger {
   switch (type) {
     case "recording_saved":
+    case "session_completed":
       return { type, streamKeys: [] }
     case "schedule":
       return {
@@ -129,13 +134,15 @@ export function Segmented<T extends string>({
   )
 }
 
-function RecordingFields({
+// Shared by recording_saved and session_completed — both are just a
+// stream-key subset picker.
+function RecordingFields<T extends RecordingTrigger | SessionTrigger>({
   value,
   onChange,
   streamKeys,
 }: {
-  value: RecordingTrigger
-  onChange: (value: RecordingTrigger) => void
+  value: T
+  onChange: (value: T) => void
   streamKeys: string[]
 }) {
   const toggle = (key: string) => {
@@ -209,7 +216,9 @@ function RecordingFields({
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        Runs after each recording finishes on the selected streams.
+        {value.type === "session_completed"
+          ? "Runs once an on-device recording session finishes uploading (may run again if late segments arrive)."
+          : "Runs after each recording finishes on the selected streams."}
       </p>
     </div>
   )
@@ -532,7 +541,7 @@ export function TriggersEditor({
                 <Trash2Icon />
               </Button>
             </div>
-            {t.type === "recording_saved" ? (
+            {t.type === "recording_saved" || t.type === "session_completed" ? (
               <RecordingFields
                 value={t}
                 onChange={(n) => update(i, n)}

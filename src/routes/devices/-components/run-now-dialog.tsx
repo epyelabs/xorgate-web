@@ -48,7 +48,12 @@ export function RunNowDialog({
   onOpenChange: (open: boolean) => void
   onRan: (attachment: DeviceWorkflowAttachment) => void
 }) {
-  const triggers = attachment?.triggers ?? []
+  // session_completed has no manual-run context (its runs are driven by the
+  // cloud's session close; there is no "pick a session" backend path yet), so
+  // it is not offered as a run-as choice here.
+  const triggers = (attachment?.triggers ?? []).filter(
+    (t) => t.type !== "session_completed",
+  )
   const [triggerIdx, setTriggerIdx] = useState(0)
   const trigger = triggers[triggerIdx] ?? triggers[0] ?? null
 
@@ -181,6 +186,13 @@ export function RunNowDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {triggers.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              This workflow only runs when an on-device recording session
+              completes — there is no manual-run context to choose. It will run
+              automatically as sessions finish uploading.
+            </p>
+          ) : null}
           {triggers.length > 1 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium">Run as trigger</span>

@@ -15,6 +15,7 @@ import { metricLabel } from "./telemetry-meta"
 // manual survives only as the ad-hoc "Run now" action, not a configured trigger.
 export const attachmentTriggerTypeSchema = z.enum([
   "recording_saved", // auto after a recording finishes on one or more streams
+  "session_completed", // auto after a device-recorded session finishes uploading
   "schedule", // recurring (cron) over a chosen telemetry / media context window
   "telemetry_condition", // when persisted telemetry crosses configured thresholds
 ])
@@ -48,6 +49,7 @@ export const TRIGGER_TYPE_LABELS: Record<
   string
 > = {
   recording_saved: "After a recording is saved",
+  session_completed: "After an on-device session completes",
   schedule: "On a schedule",
   telemetry_condition: "On telemetry condition",
 }
@@ -81,6 +83,13 @@ export const contextWindowSchema = z.discriminatedUnion("mode", [
 export const attachmentTriggerSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("recording_saved"),
+    streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
+  }),
+  // Fires when the cloud closes a device-recorded media session (~10 min after
+  // its last segment arrives). AT-LEAST-ONCE: a straggler segment reopens the
+  // session and it fires again on re-close.
+  z.object({
+    type: z.literal("session_completed"),
     streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
   }),
   z.object({
@@ -155,6 +164,7 @@ export type ManualRunContext =
 export function triggerSummary(trigger: AttachmentTrigger): string {
   switch (trigger.type) {
     case "recording_saved":
+    case "session_completed":
       return `stream: ${trigger.streamKeys.join(", ")}`
     case "schedule":
       return `cron ${trigger.cron}`

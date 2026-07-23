@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import mqtt from "mqtt"
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
 import { getIdToken } from "@/lib/cognito"
@@ -49,54 +49,107 @@ export interface UseIotTelemetry {
 const decoder = new TextDecoder()
 
 /**
- * Subscribe to a device's live telemetry over AWS IoT MQTT-over-WSS using
- * Cognito Identity-Pool credentials. Returns the latest value per metric and a
- * bounded ring buffer for live charts. Handles creds/URL refresh, reconnect
- * with backoff, and cleanup on unmount / deviceId change.
+ * One shared MQTT-over-WSS connection per device (offline recording plan,
+ * Phase 6.8). After Phase 5 the device layout (alert center) AND whichever tab
+ * is active each consumed live telemetry — with a naive per-hook connection
+ * that was 2+ concurrent WSS connections per device page, growing with every
+ * new consumer. This module-level ref-counted store owns ONE connection +
+ * buffer set per deviceId; `useIotTelemetry` acquires it on mount and releases
+ * on unmount, and the connection closes when the last consumer leaves. The
+ * hook's public API is unchanged.
  */
-export function useIotTelemetry(deviceId: string): UseIotTelemetry {
-  const [status, setStatus] = useState<ConnStatus>("connecting")
-  const [error, setError] = useState<string | null>(null)
-  const [latest, setLatest] = useState<Record<string, LatestReading>>({})
-  const [history, setHistory] = useState<HistoryPoint[]>([])
-  const [recording, setRecording] = useState<DeviceRecordingStatus | null>(null)
-  const [media, setMedia] = useState<DeviceMediaStatus | null>(null)
+class TelemetryFeed {
+  refs = 0
 
-  const latestRef = useRef<Record<string, LatestReading>>({})
-  const historyRef = useRef<HistoryPoint[]>([])
-  const recordingRef = useRef<DeviceRecordingStatus | null>(null)
-  const mediaRef = useRef<DeviceMediaStatus | null>(null)
-  const dirtyRef = useRef(false)
+  private readonly deviceId: string
+  private readonly subscribers = new Set<() => void>()
 
-  useEffect(() => {
-    let cancelled = false
-    let client: mqtt.MqttClient | null = null
-    let flushTimer: ReturnType<typeof setInterval> | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null
-    let backoff = 1000
+  private latest: Record<string, LatestReading> = {}
+  private history: HistoryPoint[] = []
+  private recording: DeviceRecordingStatus | null = null
+  private media: DeviceMediaStatus | null = null
+  private status: ConnStatus = "connecting"
+  private error: string | null = null
 
-    // reset buffers for the new device
-    latestRef.current = {}
-    historyRef.current = []
-    recordingRef.current = null
-    mediaRef.current = null
-    setLatest({})
-    setHistory([])
-    setRecording(null)
-    setMedia(null)
+  private stopped = false
+  private dirty = false
+  private client: mqtt.MqttClient | null = null
+  private flushTimer: ReturnType<typeof setInterval> | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null
+  private backoff = 1000
 
+  constructor(deviceId: string) {
+    this.deviceId = deviceId
+  }
+
+  snapshot(): UseIotTelemetry {
+    return {
+      latest: { ...this.latest },
+      history: this.history.slice(),
+      recording: this.recording,
+      media: this.media,
+      status: this.status,
+      error: this.error,
+    }
+  }
+
+  subscribe(cb: () => void): () => void {
+    this.subscribers.add(cb)
+    return () => this.subscribers.delete(cb)
+  }
+
+  start(): void {
     if (!IOT_ENDPOINT || !IDENTITY_POOL_ID) {
-      setStatus("error")
-      setError(
+      this.status = "error"
+      this.error =
         "Live telemetry is not configured (set VITE_IOT_ENDPOINT + VITE_COGNITO_IDENTITY_POOL_ID)."
-      )
       return
     }
+    this.flushTimer = setInterval(() => {
+      if (!this.dirty) return
+      this.dirty = false
+      this.notify()
+    }, FLUSH_MS)
+    void this.open()
+  }
 
-    const topic = `xorgate/devices/${deviceId}/telemetry`
+  stop(): void {
+    this.stopped = true
+    if (this.flushTimer) clearInterval(this.flushTimer)
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this.refreshTimer) clearTimeout(this.refreshTimer)
+    this.client?.end(true)
+  }
 
-    async function freshCreds() {
+  private notify(): void {
+    for (const cb of this.subscribers) cb()
+  }
+
+  private setStatus(status: ConnStatus, error: string | null = this.error): void {
+    this.status = status
+    this.error = error
+    this.notify()
+  }
+
+  private scheduleReconnect(): void {
+    if (this.stopped || this.reconnectTimer) return
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      void this.open()
+    }, this.backoff)
+    this.backoff = Math.min(this.backoff * 2, 30_000)
+  }
+
+  private async open(): Promise<void> {
+    if (this.stopped) return
+    const topic = `xorgate/devices/${this.deviceId}/telemetry`
+    try {
+      this.setStatus("connecting")
+      // AWS IoT authorizes Cognito identities via an attached IoT policy, not
+      // the IAM role — ensure it's attached before connecting (idempotent).
+      await attachIotPolicy()
+      if (this.stopped) return
       const idToken = await getIdToken()
       if (!idToken) throw new Error("Not authenticated")
       const provider = fromCognitoIdentityPool({
@@ -106,126 +159,131 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
         },
         clientConfig: { region: REGION },
       })
-      return provider()
-    }
+      const creds = await provider()
+      if (this.stopped) return
+      const url = await presignIotWssUrl(IOT_ENDPOINT, REGION, creds)
+      if (this.stopped) return
 
-    function scheduleReconnect() {
-      if (cancelled || reconnectTimer) return
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null
-        void open()
-      }, backoff)
-      backoff = Math.min(backoff * 2, 30_000)
-    }
+      const next = mqtt.connect(url, {
+        protocolVersion: 5,
+        reconnectPeriod: 0, // we reconnect manually (presigned URL is single-use-ish)
+        clientId: `web-${crypto.randomUUID()}`,
+        // mqtt.js rebuilds the ws URL from host/path only and DROPS the query
+        // string — which would strip the SigV4 params and get us a 403 from IoT.
+        // transformWsUrl forces the full presigned URL onto the WebSocket.
+        transformWsUrl: () => url,
+      })
+      this.client = next
 
-    async function open() {
-      if (cancelled) return
-      try {
-        setStatus("connecting")
-        // AWS IoT authorizes Cognito identities via an attached IoT policy, not
-        // the IAM role — ensure it's attached before connecting (idempotent).
-        await attachIotPolicy()
-        if (cancelled) return
-        const creds = await freshCreds()
-        if (cancelled) return
-        const url = await presignIotWssUrl(IOT_ENDPOINT, REGION, creds)
-        if (cancelled) return
+      next.on("connect", () => {
+        if (this.stopped) return
+        this.backoff = 1000
+        this.setStatus("connected", null)
+        next.subscribe(topic, { qos: 0 })
+      })
 
-        const next = mqtt.connect(url, {
-          protocolVersion: 5,
-          reconnectPeriod: 0, // we reconnect manually (presigned URL is single-use-ish)
-          clientId: `web-${crypto.randomUUID()}`,
-          // mqtt.js rebuilds the ws URL from host/path only and DROPS the query
-          // string — which would strip the SigV4 params and get us a 403 from IoT.
-          // transformWsUrl forces the full presigned URL onto the WebSocket.
-          transformWsUrl: () => url,
-        })
-        client = next
-
-        next.on("connect", () => {
-          if (cancelled) return
-          backoff = 1000
-          setStatus("connected")
-          setError(null)
-          next.subscribe(topic, { qos: 0 })
-        })
-
-        next.on("message", (_t, payload) => {
-          let json: unknown
-          try {
-            json = JSON.parse(decoder.decode(payload as Uint8Array))
-          } catch {
-            return
+      next.on("message", (_t, payload) => {
+        let json: unknown
+        try {
+          json = JSON.parse(decoder.decode(payload as Uint8Array))
+        } catch {
+          return
+        }
+        const parsed = telemetryPayloadSchema.safeParse(json)
+        if (!parsed.success) return
+        const p = parsed.data
+        const point: HistoryPoint = { ts: p.ts }
+        for (const [group, fields] of Object.entries(p.metrics)) {
+          for (const [field, leaf] of Object.entries(fields)) {
+            const metric = `${group}.${field}`
+            this.latest[metric] = { value: leaf.value, unit: leaf.unit, ts: p.ts }
+            point[metric] = leaf.value
           }
-          const parsed = telemetryPayloadSchema.safeParse(json)
-          if (!parsed.success) return
-          const p = parsed.data
-          const point: HistoryPoint = { ts: p.ts }
-          for (const [group, fields] of Object.entries(p.metrics)) {
-            for (const [field, leaf] of Object.entries(fields)) {
-              const metric = `${group}.${field}`
-              latestRef.current[metric] = {
-                value: leaf.value,
-                unit: leaf.unit,
-                ts: p.ts,
-              }
-              point[metric] = leaf.value
-            }
-          }
-          historyRef.current.push(point)
-          if (historyRef.current.length > HISTORY_CAP) {
-            historyRef.current.splice(0, historyRef.current.length - HISTORY_CAP)
-          }
-          // Keep the last seen blocks (don't null out on a payload that omits
-          // them — e.g. a validation .catch downgrade should not flicker the UI).
-          if (p.recording) recordingRef.current = p.recording
-          if (p.media) mediaRef.current = p.media
-          dirtyRef.current = true
-        })
+        }
+        this.history.push(point)
+        if (this.history.length > HISTORY_CAP) {
+          this.history.splice(0, this.history.length - HISTORY_CAP)
+        }
+        // Keep the last seen blocks (don't null out on a payload that omits
+        // them — e.g. a validation .catch downgrade should not flicker the UI).
+        if (p.recording) this.recording = p.recording
+        if (p.media) this.media = p.media
+        this.dirty = true
+      })
 
-        next.on("error", (err) => {
-          if (cancelled) return
-          setStatus("error")
-          setError((err as Error)?.message ?? "mqtt error")
-          next.end(true)
-        })
+      next.on("error", (err) => {
+        if (this.stopped) return
+        this.setStatus("error", (err as Error)?.message ?? "mqtt error")
+        next.end(true)
+      })
 
-        next.on("close", () => {
-          if (cancelled) return
-          setStatus("closed")
-          scheduleReconnect()
-        })
+      next.on("close", () => {
+        if (this.stopped) return
+        this.setStatus("closed")
+        this.scheduleReconnect()
+      })
 
-        // proactively cycle the connection before the presigned URL expires
-        if (refreshTimer) clearTimeout(refreshTimer)
-        refreshTimer = setTimeout(() => next.end(true), REFRESH_MS)
-      } catch (err) {
-        if (cancelled) return
-        setStatus("error")
-        setError((err as Error).message)
-        scheduleReconnect()
-      }
+      // proactively cycle the connection before the presigned URL expires
+      if (this.refreshTimer) clearTimeout(this.refreshTimer)
+      this.refreshTimer = setTimeout(() => next.end(true), REFRESH_MS)
+    } catch (err) {
+      if (this.stopped) return
+      this.setStatus("error", (err as Error).message)
+      this.scheduleReconnect()
     }
+  }
+}
 
-    flushTimer = setInterval(() => {
-      if (!dirtyRef.current) return
-      dirtyRef.current = false
-      setLatest({ ...latestRef.current })
-      setHistory(historyRef.current.slice())
-      setRecording(recordingRef.current)
-      setMedia(mediaRef.current)
-    }, FLUSH_MS)
+const feeds = new Map<string, TelemetryFeed>()
 
-    void open()
+function acquireFeed(deviceId: string): TelemetryFeed {
+  let feed = feeds.get(deviceId)
+  if (!feed) {
+    feed = new TelemetryFeed(deviceId)
+    feeds.set(deviceId, feed)
+    feed.start()
+  }
+  feed.refs++
+  return feed
+}
 
+function releaseFeed(deviceId: string, feed: TelemetryFeed): void {
+  feed.refs--
+  if (feed.refs > 0) return
+  // Last consumer gone — close the connection. The device layout keeps one
+  // consumer mounted for the whole page visit, so tab switches never bounce
+  // the socket; this only fires when leaving the device page entirely.
+  feeds.delete(deviceId)
+  feed.stop()
+}
+
+/**
+ * Subscribe to a device's live telemetry over AWS IoT MQTT-over-WSS using
+ * Cognito Identity-Pool credentials. Returns the latest value per metric and a
+ * bounded ring buffer for live charts. All simultaneous consumers of the same
+ * device share ONE underlying connection (see TelemetryFeed above).
+ */
+export function useIotTelemetry(deviceId: string): UseIotTelemetry {
+  const [snap, setSnap] = useState<UseIotTelemetry>({
+    latest: {},
+    history: [],
+    recording: null,
+    media: null,
+    status: "connecting",
+    error: null,
+  })
+
+  useEffect(() => {
+    const feed = acquireFeed(deviceId)
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSnap(feed.snapshot())
+    /* eslint-enable react-hooks/set-state-in-effect */
+    const unsubscribe = feed.subscribe(() => setSnap(feed.snapshot()))
     return () => {
-      cancelled = true
-      if (flushTimer) clearInterval(flushTimer)
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (refreshTimer) clearTimeout(refreshTimer)
-      client?.end(true)
+      unsubscribe()
+      releaseFeed(deviceId, feed)
     }
   }, [deviceId])
 
-  return { latest, history, recording, media, status, error }
+  return snap
 }

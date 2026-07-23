@@ -795,6 +795,18 @@ export async function getSessionSegments(
   return apiRequest(`/devices/${deviceId}/sessions/${sessionId}/segments`)
 }
 
+// Deletes the session's segment objects from storage and its index rows
+// (owner/admin only — device-recorded sessions are not re-creatable). A
+// straggler segment still uploading from the device recreates the session.
+export async function deleteDeviceSession(
+  deviceId: string,
+  sessionId: string
+): Promise<void> {
+  await apiRequest(`/devices/${deviceId}/sessions/${sessionId}`, {
+    method: "DELETE",
+  })
+}
+
 // Presigned GET URL for one segment (1 h TTL; fetch fresh when opening).
 export async function getSegmentPlaybackUrl(
   deviceId: string,

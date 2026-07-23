@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -32,6 +33,7 @@ import {
   formatDuration,
 } from "@/components/data-table"
 import {
+  deleteDeviceSession,
   getDeviceSessions,
   getSessionSegments,
   getSegmentPlaybackUrl,
@@ -80,6 +82,9 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
     segment: MediaSegment
   } | null>(null)
   const [playUrl, setPlayUrl] = useState<string | null>(null)
+
+  const [deleting, setDeleting] = useState<MediaSession | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   const refreshSegments = useCallback(
     async (sessionId: string) => {
@@ -143,6 +148,22 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
     }
   }
 
+  async function confirmDelete() {
+    if (!deleting) return
+    setDeleteBusy(true)
+    try {
+      await deleteDeviceSession(deviceId, deleting.id)
+      toast.success("Session deleted")
+      if (expandedId === deleting.id) setExpandedId(null)
+      setDeleting(null)
+      await refresh()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   async function openPlayer(session: MediaSession, segment: MediaSegment) {
     setPlaying({ session, segment })
     setPlayUrl(null)
@@ -198,6 +219,7 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
                 <TableHead className={`${HEAD} text-right`}>Segments</TableHead>
                 <TableHead className={HEAD}>Quality</TableHead>
                 <TableHead className={HEAD}>Status</TableHead>
+                <TableHead className={`${HEAD} text-right pr-4`}>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -259,10 +281,22 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
                         <Badge variant="outline">Complete</Badge>
                       )}
                     </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeleting(s)
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
                   </TableRow>,
                   expanded ? (
                     <TableRow key={`${s.id}-segments`} className="hover:bg-transparent">
-                      <TableCell colSpan={8} className="bg-muted/30 p-0">
+                      <TableCell colSpan={9} className="bg-muted/30 p-0">
                         {segmentsLoading && !segments ? (
                           <div className="flex flex-col gap-2 px-10 py-4">
                             <Skeleton className="h-5 w-full" />
@@ -390,6 +424,47 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
               className="aspect-video w-full rounded bg-black"
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog — same pattern as recordings-table.tsx. */}
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleting(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete session?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the on-device recording session
+              {deleting
+                ? ` from ${deleting.streamKey} (${formatTimestamp(deleting.startedAt)}, ${deleting.segmentCount} segments, ${formatBytes(deleting.totalBytes)})`
+                : ""}
+              {" "}— every segment file in storage and its index. This cannot
+              be undone.
+              {deleting?.status === "open"
+                ? " This session may still be receiving segments; anything the device uploads afterwards will reappear here."
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleteBusy}
+              onClick={() => setDeleting(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteBusy}
+              onClick={() => void confirmDelete()}
+            >
+              {deleteBusy ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

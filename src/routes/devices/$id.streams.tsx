@@ -32,6 +32,7 @@ import {
   TelemetryReadout,
 } from "@/components/telemetry-readout"
 import { LiveVideoGrid } from "@/components/live-video-grid"
+import { DeviceRecordingIndicator } from "@/components/device-recording-indicator"
 import { LiveLocationMap } from "@/components/live-location-map"
 import { TelemetryPanel } from "@/components/telemetry-panel"
 import { ImuPanel } from "@/components/imu-panel"
@@ -60,7 +61,14 @@ function DeviceStreamsPage() {
   // zooms, then pauses (Recenter resumes). Owned here so the Recenter control can
   // sit inline with the telemetry strip.
   const [following, setFollowing] = useState(true)
-  const { latest, history, status, error: connError } = useIotTelemetry(id)
+  const {
+    latest,
+    history,
+    recording,
+    media,
+    status,
+    error: connError,
+  } = useIotTelemetry(id)
 
   useEffect(() => {
     let cancelled = false
@@ -189,6 +197,8 @@ function DeviceStreamsPage() {
             the column fills the tab instead of trailing off into empty space. It
             only scrolls if that leftover runs out. */}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+          <DeviceRecordingIndicator recording={recording} media={media} />
+
           <TelemetryPanel caps={caps} latest={latest} />
 
           <ImuPanel caps={caps} latest={latest} view={imuView} />
@@ -220,6 +230,10 @@ function DeviceStreamsPage() {
         <StreamsSkeleton />
       ) : (
         <>
+          {/* On-device recording / upload-backlog status (renders nothing when
+              idle with no backlog). */}
+          <DeviceRecordingIndicator recording={recording} media={media} />
+
           {videoCaps.length > 0 ? (
             <section>
               <LiveVideoGrid

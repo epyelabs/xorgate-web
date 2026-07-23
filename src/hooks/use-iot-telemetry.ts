@@ -4,7 +4,7 @@ import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-id
 import { getIdToken } from "@/lib/cognito"
 import { attachIotPolicy } from "@/lib/api"
 import { presignIotWssUrl } from "@/lib/iot-wss"
-import { telemetryPayloadSchema } from "@/lib/schemas"
+import { telemetryPayloadSchema, type TelemetryPayload } from "@/lib/schemas"
 
 const REGION = import.meta.env.VITE_AWS_REGION as string
 const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string
@@ -28,9 +28,20 @@ export interface HistoryPoint {
   [metric: string]: number
 }
 
+// The payload's on-device recording status block (offline recording plan) —
+// null until the first payload carrying it arrives.
+export type DeviceRecordingStatus = NonNullable<TelemetryPayload["recording"]>
+// The payload's media block (KVS + on-device video recording flags).
+export type DeviceMediaStatus = NonNullable<TelemetryPayload["media"]>
+
 export interface UseIotTelemetry {
   latest: Record<string, LatestReading>
   history: HistoryPoint[]
+  // Latest recording/media status blocks from the live payload (1 Hz). The
+  // recording block drives the backlog indicator and the settings page's
+  // reported-state hint; media.recording.value = video recording active.
+  recording: DeviceRecordingStatus | null
+  media: DeviceMediaStatus | null
   status: ConnStatus
   error: string | null
 }
@@ -48,9 +59,13 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
   const [error, setError] = useState<string | null>(null)
   const [latest, setLatest] = useState<Record<string, LatestReading>>({})
   const [history, setHistory] = useState<HistoryPoint[]>([])
+  const [recording, setRecording] = useState<DeviceRecordingStatus | null>(null)
+  const [media, setMedia] = useState<DeviceMediaStatus | null>(null)
 
   const latestRef = useRef<Record<string, LatestReading>>({})
   const historyRef = useRef<HistoryPoint[]>([])
+  const recordingRef = useRef<DeviceRecordingStatus | null>(null)
+  const mediaRef = useRef<DeviceMediaStatus | null>(null)
   const dirtyRef = useRef(false)
 
   useEffect(() => {
@@ -64,8 +79,12 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
     // reset buffers for the new device
     latestRef.current = {}
     historyRef.current = []
+    recordingRef.current = null
+    mediaRef.current = null
     setLatest({})
     setHistory([])
+    setRecording(null)
+    setMedia(null)
 
     if (!IOT_ENDPOINT || !IDENTITY_POOL_ID) {
       setStatus("error")
@@ -157,6 +176,10 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
           if (historyRef.current.length > HISTORY_CAP) {
             historyRef.current.splice(0, historyRef.current.length - HISTORY_CAP)
           }
+          // Keep the last seen blocks (don't null out on a payload that omits
+          // them — e.g. a validation .catch downgrade should not flicker the UI).
+          if (p.recording) recordingRef.current = p.recording
+          if (p.media) mediaRef.current = p.media
           dirtyRef.current = true
         })
 
@@ -189,6 +212,8 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
       dirtyRef.current = false
       setLatest({ ...latestRef.current })
       setHistory(historyRef.current.slice())
+      setRecording(recordingRef.current)
+      setMedia(mediaRef.current)
     }, FLUSH_MS)
 
     void open()
@@ -202,5 +227,5 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
     }
   }, [deviceId])
 
-  return { latest, history, status, error }
+  return { latest, history, recording, media, status, error }
 }

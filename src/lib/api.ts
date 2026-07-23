@@ -256,6 +256,23 @@ export interface ImuView {
   elevationDeg: number
 }
 
+// On-device recording config (offline recording plan, D7). Mirrors backend
+// devices.recording_config; validated server-side against a closed preset
+// table and delivered to the device as retained MQTT config. All fields
+// optional (the device merges over its defaults); null on Device = never
+// configured from the cloud.
+export type VideoPresetName =
+  | "1080p30-4mbps"
+  | "1080p15-2mbps"
+  | "720p30-2mbps"
+
+export interface RecordingConfig {
+  telemetry?: { enabled?: boolean; rateHz?: number }
+  video?: { enabled?: boolean; preset?: VideoPresetName; segmentSeconds?: number }
+  upload?: { mode?: "auto" | "off" }
+  retention?: { maxBytes?: number; minFreeBytes?: number }
+}
+
 export interface Device {
   id: string
   workspaceId: string
@@ -270,6 +287,7 @@ export interface Device {
   activeStreamsViewType: ActiveStreamsViewType
   imuMount: ImuMount | null
   imuView: ImuView | null
+  recordingConfig: RecordingConfig | null
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -314,6 +332,7 @@ export async function updateDevice(
     activeStreamsViewType?: ActiveStreamsViewType
     imuMount?: ImuMount | null
     imuView?: ImuView | null
+    recordingConfig?: RecordingConfig | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {
@@ -692,4 +711,97 @@ export async function deleteRecording(
   await apiRequest(`/devices/${deviceId}/recordings/${recordingId}`, {
     method: "DELETE",
   })
+}
+
+// --- Device-recorded media sessions (offline recording plan, Phase 4/5) ---
+// Recorded ON the device and uploaded segment-by-segment — distinct from the
+// cloud /recordings above. `status` is advisory: a session closes ~10 min
+// after segments stop arriving and reopens if a straggler lands.
+export type MediaSessionStatus = "open" | "closed"
+
+export interface MediaSession {
+  id: string
+  deviceId: string
+  streamKey: string
+  startedAt: string
+  endedAt: string | null
+  codec: string | null
+  width: number | null
+  height: number | null
+  fps: number | null
+  bitrateKbps: number | null
+  source: string | null
+  status: MediaSessionStatus
+  // Device clock quality at session start (ntp | rtc | unsynced); "unsynced"
+  // timestamps may be wrong wall-clock.
+  timeSource: string | null
+  lastSegmentAt: string | null
+  createdAt: string
+  // Rollups (list endpoint only; computed per page).
+  segmentCount: number
+  totalBytes: number
+  totalDurationMs: number
+}
+
+export interface MediaSegment {
+  id: string
+  deviceId: string
+  sessionId: string
+  streamKey: string
+  s3Key: string
+  seq: number
+  startTs: string
+  durationMs: number
+  sizeBytes: number | null
+  // false = crash-cut partial (playable up to the cut).
+  finalized: boolean
+  uploadedAt: string
+}
+
+export interface MediaSessionsListParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  sort?: "startedAt" | "createdAt"
+  status?: MediaSessionStatus
+  streamKey?: string
+  // Matches sessions OVERLAPPING [from, to), not just those started inside it.
+  from?: string
+  to?: string
+}
+
+export async function getDeviceSessions(
+  deviceId: string,
+  params: MediaSessionsListParams = {}
+): Promise<{ sessions: MediaSession[]; page?: Page }> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set("limit", String(params.limit))
+  if (params.offset !== undefined) qs.set("offset", String(params.offset))
+  if (params.order) qs.set("order", params.order)
+  if (params.sort) qs.set("sort", params.sort)
+  if (params.status) qs.set("status", params.status)
+  if (params.streamKey) qs.set("streamKey", params.streamKey)
+  if (params.from) qs.set("from", params.from)
+  if (params.to) qs.set("to", params.to)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ""
+  return apiRequest(`/devices/${deviceId}/sessions${suffix}`)
+}
+
+// The whole ordered segment index in one response (seq asc = chronological).
+export async function getSessionSegments(
+  deviceId: string,
+  sessionId: string
+): Promise<{ session: MediaSession; segments: MediaSegment[] }> {
+  return apiRequest(`/devices/${deviceId}/sessions/${sessionId}/segments`)
+}
+
+// Presigned GET URL for one segment (1 h TTL; fetch fresh when opening).
+export async function getSegmentPlaybackUrl(
+  deviceId: string,
+  sessionId: string,
+  seq: number
+): Promise<{ url: string; expiresIn: number; segment: MediaSegment }> {
+  return apiRequest(
+    `/devices/${deviceId}/sessions/${sessionId}/segments/${seq}/playback`
+  )
 }

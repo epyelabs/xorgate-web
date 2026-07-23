@@ -42,7 +42,11 @@ import {
   type ImuMount,
   type ImuView,
   type KvsChannel,
+  type RecordingConfig,
+  type VideoPresetName,
 } from "@/lib/api"
+import { formatBytes } from "@/components/data-table"
+import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import {
   getDeviceIdentityResponseSchema,
   getDeviceResponseSchema,
@@ -95,6 +99,70 @@ const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
     cell: (channel) => channel.region,
   },
 ]
+
+// On-device recording (offline recording plan, Phase 5). Display defaults
+// mirror the device agent's RECORDING_DEFAULTS (device src/recording/config.ts)
+// so a device with recordingConfig null renders exactly what it is doing.
+const VIDEO_PRESET_OPTIONS: { value: VideoPresetName; label: string }[] = [
+  { value: "1080p30-4mbps", label: "1080p 30 fps · 4 Mbps (best, highest CPU)" },
+  { value: "1080p15-2mbps", label: "1080p 15 fps · 2 Mbps (default)" },
+  { value: "720p30-2mbps", label: "720p 30 fps · 2 Mbps (smoother motion)" },
+]
+const RATE_HZ_OPTIONS = [1, 2, 5, 10, 20]
+const SEGMENT_SECONDS_OPTIONS = [30, 60, 120, 300]
+const RETENTION_GIB_OPTIONS = [2, 5, 10, 20, 50]
+const GIB = 1024 ** 3
+
+interface ResolvedRecording {
+  telemetryEnabled: boolean
+  rateHz: number
+  videoEnabled: boolean
+  preset: VideoPresetName
+  segmentSeconds: number
+  uploadMode: "auto" | "off"
+  maxBytes: number
+  minFreeBytes: number | undefined
+}
+
+function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
+  return {
+    telemetryEnabled: cfg?.telemetry?.enabled ?? false,
+    rateHz: cfg?.telemetry?.rateHz ?? 10,
+    videoEnabled: cfg?.video?.enabled ?? false,
+    preset: cfg?.video?.preset ?? "1080p15-2mbps",
+    segmentSeconds: cfg?.video?.segmentSeconds ?? 60,
+    uploadMode: cfg?.upload?.mode ?? "auto",
+    maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
+    minFreeBytes: cfg?.retention?.minFreeBytes,
+  }
+}
+
+// The PUT always sends the complete namespace so the stored config (and the
+// retained copy the device converges on) is self-contained after first touch.
+function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
+  return {
+    telemetry: { enabled: r.telemetryEnabled, rateHz: r.rateHz },
+    video: {
+      enabled: r.videoEnabled,
+      preset: r.preset,
+      segmentSeconds: r.segmentSeconds,
+    },
+    upload: { mode: r.uploadMode },
+    retention: {
+      maxBytes: r.maxBytes,
+      // Preserve a minFreeBytes someone set out-of-band; the card doesn't edit it.
+      ...(r.minFreeBytes !== undefined ? { minFreeBytes: r.minFreeBytes } : {}),
+    },
+  }
+}
+
+// Select options including a stored value that isn't in the preset list (e.g.
+// set via the API) so the select never displays a value it doesn't contain.
+function withCurrent(options: number[], current: number): number[] {
+  return options.includes(current)
+    ? options
+    : [...options, current].sort((a, b) => a - b)
+}
 
 // Defaults shown when the device has no stored IMU settings yet. The camera
 // numbers mirror the orientation view's built-in 3/4 angle.
@@ -158,6 +226,9 @@ function DeviceSettingsPage() {
   const [camElevation, setCamElevation] = useState(
     String(DEFAULT_IMU_VIEW.elevationDeg)
   )
+  // On-device recording config, optimistic (null = never configured — the
+  // controls then show the device defaults).
+  const [recConfig, setRecConfig] = useState<RecordingConfig | null>(null)
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
@@ -167,8 +238,14 @@ function DeviceSettingsPage() {
     activeStreamsViewType: ActiveStreamsViewType
     imuMount: ImuMount
     imuView: ImuView
+    recordingConfig: RecordingConfig | null
   } | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Live payload feed for the reported-state hint (what the device is actually
+  // doing, vs. what we asked for).
+  const { recording: reportedRecording, media: reportedMedia } =
+    useIotTelemetry(id)
 
   // Read-only sections, fetched independently so a failure here never blocks the form.
   const [identity, setIdentity] = useState<DeviceIdentity | null>(null)
@@ -204,6 +281,7 @@ function DeviceSettingsPage() {
         const view = fetched.imuView ?? DEFAULT_IMU_VIEW
         setCamAzimuth(String(view.azimuthDeg))
         setCamElevation(String(view.elevationDeg))
+        setRecConfig(fetched.recordingConfig)
         setBaseline({
           name: initialName,
           status: fetched.status,
@@ -213,6 +291,7 @@ function DeviceSettingsPage() {
           activeStreamsViewType: fetched.activeStreamsViewType,
           imuMount: mount,
           imuView: view,
+          recordingConfig: fetched.recordingConfig,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -290,6 +369,7 @@ function DeviceSettingsPage() {
       setName(nextName)
       setStatus(updated.status)
       setViewType(updated.activeStreamsViewType)
+      setRecConfig(updated.recordingConfig)
       setBaseline({
         name: nextName,
         status: updated.status,
@@ -299,6 +379,7 @@ function DeviceSettingsPage() {
         activeStreamsViewType: updated.activeStreamsViewType,
         imuMount: updated.imuMount ?? DEFAULT_IMU_MOUNT,
         imuView: updated.imuView ?? DEFAULT_IMU_VIEW,
+        recordingConfig: updated.recordingConfig,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -497,6 +578,41 @@ function DeviceSettingsPage() {
     }
   }
 
+  // On-device recording. Every control commits the COMPLETE `recording`
+  // namespace (see buildRecordingConfig) with the one field changed — same
+  // optimistic-flip + rollback-on-error pattern as the toggles above. The
+  // backend validates (closed preset table, bounded numbers), persists, and
+  // delivers it to the device as retained MQTT config; the agent applies it
+  // live within ~5 s.
+  async function commitRecording(mutate: (r: ResolvedRecording) => void) {
+    if (saving || baseline === null) return
+    const next = resolveRecording(recConfig)
+    mutate(next)
+    const nextCfg = buildRecordingConfig(next)
+    if (
+      JSON.stringify(nextCfg) ===
+      JSON.stringify(buildRecordingConfig(resolveRecording(recConfig)))
+    ) {
+      // Nothing actually changed (and the stored config is already complete).
+      if (recConfig !== null) return
+    }
+    setRecConfig(nextCfg)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { recordingConfig: nextCfg })
+      const updated = res.device
+      setDevice(updated)
+      setRecConfig(updated.recordingConfig)
+      setBaseline({ ...baseline, recordingConfig: updated.recordingConfig })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setRecConfig(baseline.recordingConfig)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleDelete() {
     try {
       await deleteDevice(id)
@@ -512,6 +628,16 @@ function DeviceSettingsPage() {
   if (notFound) {
     return <p className="text-sm text-muted-foreground">Device not found.</p>
   }
+
+  const rec = resolveRecording(recConfig)
+  const reportedVideo = reportedMedia?.recording?.value === true
+  // Reported-vs-configured mismatch: only meaningful once we've heard from the
+  // device AND the cloud actually manages the config (recConfig non-null).
+  const reportedMismatch =
+    reportedRecording !== null &&
+    recConfig !== null &&
+    (reportedRecording.enabled !== rec.telemetryEnabled ||
+      reportedVideo !== rec.videoEnabled)
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -857,7 +983,258 @@ function DeviceSettingsPage() {
         </Card>
       </div>
 
-      {/* Row 3: IoT identity (left) + Media channels (right), equal height */}
+      {/* Row 3: on-device recording (offline recording plan, Phase 5) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Record on device</CardTitle>
+          <CardDescription>
+            Capture telemetry and video on the device itself — recording
+            continues while offline and uploads to the cloud whenever the
+            device is connected. This is separate from &quot;Auto-record
+            streams&quot; above, which records in the cloud and only works
+            while the device is streaming live.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {device === null ? (
+            <Skeleton className="h-32 w-full" />
+          ) : (
+            <FieldGroup>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="device-rec-telemetry">
+                    Record telemetry on device
+                  </FieldLabel>
+                  <FieldDescription>
+                    Off by default. Samples sensors up to the rate below
+                    (higher than the 1&nbsp;Hz live feed) and becomes the
+                    authoritative telemetry history once uploaded.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="device-rec-telemetry"
+                  checked={rec.telemetryEnabled}
+                  disabled={saving}
+                  onCheckedChange={(next) =>
+                    commitRecording((r) => {
+                      r.telemetryEnabled = next
+                    })
+                  }
+                />
+              </Field>
+
+              {rec.telemetryEnabled ? (
+                <Field>
+                  <FieldLabel htmlFor="device-rec-rate">Sample rate</FieldLabel>
+                  <Select
+                    value={String(rec.rateHz)}
+                    disabled={saving}
+                    onValueChange={(v) =>
+                      commitRecording((r) => {
+                        r.rateHz = Number(v)
+                      })
+                    }
+                  >
+                    <SelectTrigger id="device-rec-rate">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {withCurrent(RATE_HZ_OPTIONS, rec.rateHz).map((hz) => (
+                        <SelectItem key={hz} value={String(hz)}>
+                          {hz} Hz
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Motion (IMU) records at this rate; GPS and system metrics
+                    record at their natural once-per-second pace.
+                  </FieldDescription>
+                </Field>
+              ) : null}
+
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="device-rec-video">
+                    Record video on device
+                  </FieldLabel>
+                  <FieldDescription>
+                    Off by default. Records every camera continuously in short
+                    segments. Note: turning this on or off (or changing the
+                    quality) briefly restarts the live stream — an open live
+                    view pauses for a few seconds and reconnects on its own.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="device-rec-video"
+                  checked={rec.videoEnabled}
+                  disabled={saving}
+                  onCheckedChange={(next) =>
+                    commitRecording((r) => {
+                      r.videoEnabled = next
+                    })
+                  }
+                />
+              </Field>
+
+              {rec.videoEnabled ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-preset">Quality</FieldLabel>
+                    <Select
+                      value={rec.preset}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.preset = v as VideoPresetName
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-preset">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VIDEO_PRESET_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-segment">
+                      Segment length
+                    </FieldLabel>
+                    <Select
+                      value={String(rec.segmentSeconds)}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.segmentSeconds = Number(v)
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-segment">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {withCurrent(
+                          SEGMENT_SECONDS_OPTIONS,
+                          rec.segmentSeconds
+                        ).map((s) => (
+                          <SelectItem key={s} value={String(s)}>
+                            {s < 60 ? `${s} seconds` : `${s / 60} minute${s > 60 ? "s" : ""}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              ) : null}
+
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="device-rec-upload">
+                    Upload automatically
+                  </FieldLabel>
+                  <FieldDescription>
+                    Send recordings to the cloud whenever the device is online
+                    (oldest first; local copies are removed once safely
+                    uploaded). Turn off to keep recordings on the device only.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="device-rec-upload"
+                  checked={rec.uploadMode === "auto"}
+                  disabled={saving}
+                  onCheckedChange={(next) =>
+                    commitRecording((r) => {
+                      r.uploadMode = next ? "auto" : "off"
+                    })
+                  }
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="device-rec-retention">
+                  Storage limit
+                </FieldLabel>
+                <Select
+                  value={String(rec.maxBytes)}
+                  disabled={saving}
+                  onValueChange={(v) =>
+                    commitRecording((r) => {
+                      r.maxBytes = Number(v)
+                    })
+                  }
+                >
+                  <SelectTrigger id="device-rec-retention">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {withCurrent(
+                      RETENTION_GIB_OPTIONS.map((g) => g * GIB),
+                      rec.maxBytes
+                    ).map((b) => (
+                      <SelectItem key={b} value={String(b)}>
+                        {formatBytes(b)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Cap on recordings kept on the device. When full, the oldest
+                  not-yet-uploaded segments are deleted first — the sessions
+                  list will flag any dropped data.
+                </FieldDescription>
+              </Field>
+
+              {/* Reported state from the live 1 Hz payload: shows whether the
+                  device has actually applied what was asked (poor man's
+                  desired-vs-reported until the config-shadow plan lands). */}
+              <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {reportedRecording === null ? (
+                  "Waiting for a live status report from the device… (the device may be offline; settings saved here are delivered when it reconnects)"
+                ) : (
+                  <>
+                    Device reports: telemetry recording{" "}
+                    <span className="font-medium">
+                      {reportedRecording.enabled ? "on" : "off"}
+                    </span>
+                    {" · "}video recording{" "}
+                    <span className="font-medium">
+                      {reportedVideo ? "on" : "off"}
+                    </span>
+                    {reportedRecording.backlogSegments > 0 ? (
+                      <>
+                        {" · "}
+                        {formatBytes(reportedRecording.backlogBytes)} awaiting
+                        upload ({reportedRecording.backlogSegments} segments
+                        {reportedRecording.uploading ? ", uploading" : ""})
+                      </>
+                    ) : null}
+                    {reportedRecording.droppedSegments > 0 ? (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {" · "}
+                        {reportedRecording.droppedSegments} segments deleted
+                        before upload (disk full)
+                      </span>
+                    ) : null}
+                    {reportedMismatch ? (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {" — the device has not applied the saved settings yet"}
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </FieldGroup>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Row 4: IoT identity (left) + Media channels (right), equal height */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -935,7 +1312,7 @@ function DeviceSettingsPage() {
         </Card>
       </div>
 
-      {/* Row 4: Danger zone */}
+      {/* Row 5: Danger zone */}
       <Card className="ring-destructive/30">
         <CardHeader>
           <CardTitle className="text-destructive">Danger zone</CardTitle>

@@ -33,6 +33,11 @@ import { DeviceModelDialog } from "./-components/device-model-dialog"
 import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
 import {
+  DeviceAlertsButton,
+  type DeviceAlert,
+} from "./-components/device-alerts"
+import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import {
   getDeviceModelResponseSchema,
   getDeviceResponseSchema,
 } from "@/lib/schemas"
@@ -105,6 +110,31 @@ function DeviceLayout() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false)
   const [powerOffDialogOpen, setPowerOffDialogOpen] = useState(false)
+
+  // Live payload feed for the header alert button. Alerts are derived, not
+  // stored: each source contributes zero or more DeviceAlerts per render;
+  // dismissal/acknowledgment state lives inside DeviceAlertsButton.
+  // (This adds a second MQTT connection on tabs that mount their own feed —
+  // acceptable for now; a shared per-device feed is a future refactor.)
+  const { recording } = useIotTelemetry(id)
+  const alerts: DeviceAlert[] = []
+  if (recording && recording.droppedSegments > 0) {
+    alerts.push({
+      id: "recording-dropped-segments",
+      severity: "warning",
+      title: `${recording.droppedSegments} recorded segment${
+        recording.droppedSegments === 1 ? "" : "s"
+      } deleted before upload`,
+      description:
+        "The device hit its recording storage limit and deleted the oldest " +
+        "not-yet-uploaded segments to make room. That footage is gone. " +
+        "Consider raising the storage limit in Settings or checking why " +
+        "uploads are not keeping up. The count is cumulative for this device.",
+      // Cumulative counter as the watermark: dismissing hides the alert at
+      // the current count; it re-fires only when MORE segments get dropped.
+      watermark: recording.droppedSegments,
+    })
+  }
 
   // Commands are published non-retained, so an offline device would never
   // receive them — the backend rejects those with a 409. Gate the controls here
@@ -233,11 +263,15 @@ function DeviceLayout() {
             </div>
 
             {/* `title` sits on the wrapper, not the buttons: a disabled button
-                fires no pointer events, so a tooltip on it never shows. */}
-            <div
-              className="flex items-center gap-2 self-start"
-              title={commandHint}
-            >
+                fires no pointer events, so a tooltip on it never shows. The
+                alerts button sits outside that wrapper — it must stay active
+                (and un-tooltipped) even when the device can't take commands. */}
+            <div className="flex items-center gap-2 self-start">
+              <DeviceAlertsButton deviceId={id} alerts={alerts} />
+              <div
+                className="flex items-center gap-2"
+                title={commandHint}
+              >
               <Button
                 variant="outline"
                 size="sm"
@@ -267,6 +301,7 @@ function DeviceLayout() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </div>
             </div>
           </div>
 

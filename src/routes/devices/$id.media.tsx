@@ -21,6 +21,7 @@ import {
 import { getDeviceRecordingsResponseSchema } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
 import { RecordingsTable } from "./-components/recordings-table"
+import { DeviceSessionsCard } from "./-components/device-sessions-card"
 
 type Order = "asc" | "desc"
 type SortKey = "startedAt" | "durationMs" | "sizeBytes"
@@ -273,6 +274,10 @@ function DeviceMediaPage() {
           }}
         />
       )}
+
+      {/* Device-recorded sessions (offline recording plan) — a separate source
+          from the cloud recordings above, so it gets its own card. */}
+      <DeviceSessionsCard deviceId={id} />
     </div>
   )
 }

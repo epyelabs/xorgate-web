@@ -113,6 +113,37 @@ export const imuViewSchema = z.object({
   elevationDeg: z.number(),
 })
 
+// On-device recording config (offline recording plan, D7). Mirrors backend
+// devices.recording_config / device settings.json `recording`. Preset names
+// are a closed table (backend src/schemas/recording-config.ts + device
+// src/recording/video-presets.ts — change all together); .catch on the enum
+// keeps an older client rendering when new presets ship.
+export const videoPresetNameSchema = z.enum([
+  "1080p30-4mbps",
+  "1080p15-2mbps",
+  "720p30-2mbps",
+])
+
+export const recordingConfigSchema = z.object({
+  telemetry: z
+    .object({ enabled: z.boolean().optional(), rateHz: z.number().optional() })
+    .optional(),
+  video: z
+    .object({
+      enabled: z.boolean().optional(),
+      preset: videoPresetNameSchema.optional().catch(undefined),
+      segmentSeconds: z.number().optional(),
+    })
+    .optional(),
+  upload: z.object({ mode: z.enum(["auto", "off"]).optional() }).optional(),
+  retention: z
+    .object({
+      maxBytes: z.number().optional(),
+      minFreeBytes: z.number().optional(),
+    })
+    .optional(),
+})
+
 export const deviceSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -130,6 +161,7 @@ export const deviceSchema = z.object({
   // .catch(null) tolerates an older backend without the columns.
   imuMount: imuMountSchema.nullable().catch(null),
   imuView: imuViewSchema.nullable().catch(null),
+  recordingConfig: recordingConfigSchema.nullable().catch(null),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -299,6 +331,55 @@ export const getDeviceRecordingsResponseSchema = z.object({
   // Optional: present on the standardized list endpoint; absent on the compact
   // (unparameterized) fetches used by the Overview.
   page: pageSchema.optional(),
+})
+
+// --- Device-recorded media sessions: GET /devices/{id}/sessions (Phase 4/5) ---
+export const mediaSessionSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  streamKey: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  codec: z.string().nullable(),
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  fps: z.number().nullable(),
+  bitrateKbps: z.number().nullable(),
+  source: z.string().nullable(),
+  // Advisory (a closed session reopens if a straggler segment lands).
+  status: z.enum(["open", "closed"]).catch("open"),
+  timeSource: z.string().nullable(),
+  lastSegmentAt: z.string().nullable(),
+  createdAt: z.string(),
+  // Rollups, present on the list endpoint; default 0 on the segments
+  // endpoint's embedded session.
+  segmentCount: z.number().default(0),
+  totalBytes: z.number().default(0),
+  totalDurationMs: z.number().default(0),
+})
+
+export const mediaSegmentSchema = z.object({
+  id: z.string(),
+  deviceId: z.string(),
+  sessionId: z.string(),
+  streamKey: z.string(),
+  s3Key: z.string(),
+  seq: z.number(),
+  startTs: z.string(),
+  durationMs: z.number(),
+  sizeBytes: z.number().nullable(),
+  finalized: z.boolean().catch(true),
+  uploadedAt: z.string(),
+})
+
+export const getDeviceSessionsResponseSchema = z.object({
+  sessions: z.array(mediaSessionSchema),
+  page: pageSchema.optional(),
+})
+
+export const getSessionSegmentsResponseSchema = z.object({
+  session: mediaSessionSchema,
+  segments: z.array(mediaSegmentSchema),
 })
 
 // --- Telemetry history (P4): GET /devices/{id}/telemetry(+/latest) ---

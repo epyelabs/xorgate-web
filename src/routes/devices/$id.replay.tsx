@@ -30,6 +30,7 @@ import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
 import { buildTimeline } from "@/lib/replay/timeline"
 import { useReplayClock } from "@/hooks/use-replay-clock"
+import { useReplayTelemetry } from "@/hooks/use-replay-telemetry"
 
 interface ReplaySearch {
   session?: string
@@ -48,10 +49,11 @@ export const Route = createFileRoute("/devices/$id/replay")({
   component: DeviceReplayPage,
 })
 
-// Session replay page (composite replays plan, Phase 3): the same StreamsView
-// the live tab renders, fed from the replay clock instead of the live feed.
-// Telemetry props are stubbed until Phase 4 (readouts show "—"); the video
-// slot holds the MSE tile; the timeline/transport bar is page chrome (R8).
+// Session replay page (composite replays plan, Phase 3+4): the same
+// StreamsView the live tab renders, fed from the replay clock instead of the
+// live feed — readouts/IMU/map resolve recorded telemetry at the playhead via
+// useReplayTelemetry; the video slot holds the MSE tile; the
+// timeline/transport bar is page chrome (R8).
 // The per-session entry is interim by design — Phase 5 replaces it with
 // run-grouped, time-anchored composite links (R9).
 function DeviceReplayPage() {
@@ -181,6 +183,7 @@ function DeviceReplayPage() {
     [manifest, session]
   )
   const clock = useReplayClock(timeline)
+  const telemetry = useReplayTelemetry(id, timeline, clock, caps)
 
   if (!sessionId) {
     return (
@@ -326,8 +329,13 @@ function DeviceReplayPage() {
       {videoExpired ? (
         <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           This session&apos;s video has expired — recordings are kept for 90
-          days. Recorded telemetry is kept forever and will appear here once
-          telemetry replay lands.
+          days. Recorded telemetry is kept forever and still replays below.
+        </p>
+      ) : null}
+      {telemetry.error ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          Recorded telemetry failed to load ({telemetry.error}) — video still
+          plays; reload the page to retry.
         </p>
       ) : null}
 
@@ -335,14 +343,25 @@ function DeviceReplayPage() {
         <StreamsView
           viewType={viewType}
           caps={caps}
-          latest={{}}
+          latest={telemetry.latest}
           imuView={imuView}
-          position={null}
+          position={telemetry.position}
           track={[]}
-          course={null}
+          course={telemetry.course}
           following={following}
           onFollowingChange={setFollowing}
           videoSlot={videoSlot}
+          replayTrace={{
+            route: telemetry.routeLines,
+            traveled: telemetry.traveledLines,
+          }}
+          gpsEmptyLabel={
+            telemetry.loading
+              ? "Loading recorded telemetry…"
+              : telemetry.hasGps
+                ? "No GPS at this point in the recording"
+                : "No GPS recorded in this session"
+          }
         />
       </div>
 

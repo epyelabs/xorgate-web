@@ -9,6 +9,12 @@ import path from "node:path"
 export default defineConfig({
   root: __dirname,
   plugins: [react()],
+  // Phase 4: the telemetry hook's import graph reaches @/lib/api →
+  // amazon-cognito-identity-js, which needs the same `global` shim the main
+  // app config defines.
+  define: {
+    global: "globalThis",
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "../src"),

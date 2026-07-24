@@ -21,12 +21,20 @@ const FOLLOW_ZOOM = 16
  * new fixes arrive. `position` and each `track` point are [lon, lat] pairs
  * (Mapbox coordinate order); `position` is null until the first GPS fix.
  */
+export interface ReplayTrace {
+  // Full recorded route (dim underlay) and the already-played portion
+  // (highlight), as polylines split at recording holes. [lon, lat] order.
+  route: [number, number][][]
+  traveled: [number, number][][]
+}
+
 export function LiveLocationMap({
   position,
   track,
   course,
   following,
   onInteract,
+  replayTrace,
 }: {
   position: [number, number] | null
   track: [number, number][]
@@ -37,6 +45,9 @@ export function LiveLocationMap({
   // telemetry strip; `onInteract` fires on a user pan/zoom to pause following.
   following: boolean
   onInteract: () => void
+  // Replay mode (composite replays plan, Phase 4): render a recorded route
+  // underlay + traveled highlight instead of the live breadcrumb `track`.
+  replayTrace?: ReplayTrace
 }) {
   const mapRef = useRef<MapRef>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,13 +99,19 @@ export function LiveLocationMap({
   }
 
   const trackGeojson =
-    track.length >= 2
+    !replayTrace && track.length >= 2
       ? {
           type: "Feature" as const,
           properties: {},
           geometry: { type: "LineString" as const, coordinates: track },
         }
       : null
+
+  const multiLine = (lines: [number, number][][]) => ({
+    type: "Feature" as const,
+    properties: {},
+    geometry: { type: "MultiLineString" as const, coordinates: lines },
+  })
 
   return (
     <div ref={containerRef} className="h-full w-full">
@@ -116,6 +133,44 @@ export function LiveLocationMap({
           if ("originalEvent" in e && e.originalEvent) onInteract()
         }}
       >
+        {replayTrace && replayTrace.route.length > 0 ? (
+          <Source
+            id="replay-route"
+            type="geojson"
+            data={multiLine(replayTrace.route)}
+          >
+            <Layer
+              id="replay-route-line"
+              type="line"
+              layout={{ "line-cap": "round", "line-join": "round" }}
+              paint={{
+                "line-color": "#3b82f6",
+                "line-width": 3,
+                "line-opacity": 0.25,
+              }}
+            />
+          </Source>
+        ) : null}
+
+        {replayTrace && replayTrace.traveled.length > 0 ? (
+          <Source
+            id="replay-traveled"
+            type="geojson"
+            data={multiLine(replayTrace.traveled)}
+          >
+            <Layer
+              id="replay-traveled-line"
+              type="line"
+              layout={{ "line-cap": "round", "line-join": "round" }}
+              paint={{
+                "line-color": "#3b82f6",
+                "line-width": 3,
+                "line-opacity": 0.85,
+              }}
+            />
+          </Source>
+        ) : null}
+
         {trackGeojson ? (
           <Source id="gps-trail" type="geojson" data={trackGeojson}>
             <Layer

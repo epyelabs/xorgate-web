@@ -17,7 +17,10 @@ import {
   GroupedTelemetryReadout,
   TelemetryReadout,
 } from "@/components/telemetry-readout"
-import { LiveLocationMap } from "@/components/live-location-map"
+import {
+  LiveLocationMap,
+  type ReplayTrace,
+} from "@/components/live-location-map"
 import { TelemetryPanel } from "@/components/telemetry-panel"
 import { ImuPanel } from "@/components/imu-panel"
 import { GpsStrip } from "@/components/gps-strip"
@@ -44,6 +47,12 @@ export interface StreamsViewProps {
   // The section wrapper only renders when non-null, mirroring the live page's
   // videoCaps.length gate.
   videoSlot?: ReactNode
+  // Replay-only: recorded route underlay + traveled highlight for the map
+  // (live pages omit it and keep the breadcrumb `track`).
+  replayTrace?: ReplayTrace
+  // Copy for the map's no-position overlay; the live default reads as
+  // "waiting", replay passes recording-truth wording instead.
+  gpsEmptyLabel?: string
 }
 
 /**
@@ -65,6 +74,8 @@ export function StreamsView({
   onFollowingChange,
   indicatorSlot,
   videoSlot,
+  replayTrace,
+  gpsEmptyLabel = "Waiting for GPS fix…",
 }: StreamsViewProps) {
   const imuGroups = [
     { label: "Orientation", metrics: imuQuaternionMetrics(caps) },
@@ -93,11 +104,12 @@ export function StreamsView({
             course={course}
             following={following}
             onInteract={() => onFollowingChange(false)}
+            replayTrace={replayTrace}
           />
 
           {!position ? (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
-              Waiting for GPS fix…
+              {gpsEmptyLabel}
             </div>
           ) : null}
 

@@ -48,9 +48,19 @@ export function imuMetrics(caps: IoCapabilities | null): string[] {
   ]
 }
 
+// Chartable system fields: continuous quantities only — the throttle bitmask
+// and the boot-static psu_max_current are meaningless as line charts.
+const SYSTEM_CHART_FIELDS = [
+  "cpu_usage",
+  "ram_usage",
+  "cpu_temp",
+  "disk_usage",
+  "rail_5v",
+]
+
 export function systemChartMetrics(caps: IoCapabilities | null): string[] {
   return (caps?.system?.fields ?? [])
-    .filter((f) => f === "cpu_usage" || f === "ram_usage" || f === "cpu_temp" || f === "disk_usage")
+    .filter((f) => SYSTEM_CHART_FIELDS.includes(f))
     .map((f) => `system.${f}`)
 }
 

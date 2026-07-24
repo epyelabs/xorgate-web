@@ -21,14 +21,32 @@ export const METRIC_LABELS: Record<string, string> = {
   "gps.hdop": "HDOP",
   "lte.rssi": "LTE RSSI",
   "lte.quality": "LTE Quality",
+  "lte.modem_temp": "Modem Temp",
   "system.cpu_usage": "CPU Usage",
   "system.cpu_temp": "CPU Temp",
   "system.ram_usage": "RAM Usage",
   "system.disk_usage": "Disk Usage",
+  "system.throttled": "Throttle",
+  "system.rail_5v": "5V Rail",
+  "system.psu_max_current": "PSU Max",
 }
 
 export function metricLabel(metric: string): string {
   return METRIC_LABELS[metric] ?? metric
+}
+
+// Bits 0–3 of the Pi firmware throttle mask (system.throttled carries the
+// current nibble; system.throttled_sticky the since-boot nibble, same legend).
+const THROTTLE_BITS: Array<[number, string]> = [
+  [0x1, "undervoltage"],
+  [0x2, "freq capped"],
+  [0x4, "throttled"],
+  [0x8, "soft temp limit"],
+]
+
+/** Human-readable names of the set bits in a throttle bitmask. */
+export function decodeThrottleBits(mask: number): string[] {
+  return THROTTLE_BITS.filter(([bit]) => mask & bit).map(([, label]) => label)
 }
 
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
@@ -76,6 +94,8 @@ export function orderMetrics(keys: string[]): string[] {
 export function formatMetricValue(value: number, metric?: string): string {
   // Coordinates need full precision — the default rounding mangles lat/lon.
   if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)
+  // The 5V rail moves in millivolts (5.134 vs 5.089 is signal, not noise).
+  if (metric === "system.rail_5v") return value.toFixed(3)
   // Quaternions are normalized (|q| = 1), so show 4 dp; euler angles 1 dp.
   if (metric?.startsWith("imu.quat_")) return value.toFixed(4)
   if (metric?.startsWith("imu.euler_")) return value.toFixed(1)

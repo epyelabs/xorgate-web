@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type CSSProperties } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { ArrowRightIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -188,7 +188,15 @@ function DeviceOverviewPage() {
       ) : healthMetrics.length > 0 ? (
         <Card size="sm">
           <CardContent>
-            <div className="grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-4 lg:grid-cols-6">
+            {/* One column per metric at lg+ so the whole health snapshot sits on
+                a single row (the card is full-width, unlike the Map View's
+                side-column panel); wraps below lg where there isn't room. */}
+            <div
+              className="grid grid-cols-3 gap-x-4 gap-y-3 sm:grid-cols-4 lg:[grid-template-columns:repeat(var(--metric-cols),minmax(0,1fr))]"
+              style={
+                { "--metric-cols": healthMetrics.length } as CSSProperties
+              }
+            >
               {healthMetrics.map((m) => {
                 const r = latest[m]
                 return (

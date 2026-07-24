@@ -9,11 +9,14 @@ import {
   MemoryStickIcon,
   MountainIcon,
   Move3dIcon,
+  PlugZapIcon,
   RadioIcon,
   Rotate3dIcon,
   SatelliteIcon,
   SignalHighIcon,
   ThermometerIcon,
+  TriangleAlertIcon,
+  ZapIcon,
   type LucideIcon,
 } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
@@ -50,9 +53,21 @@ const METRIC_ICONS: Record<string, LucideIcon> = {
   "system.cpu_temp": ThermometerIcon,
   "system.ram_usage": MemoryStickIcon,
   "system.disk_usage": HardDriveIcon,
+  "system.throttled": TriangleAlertIcon,
+  "system.rail_5v": ZapIcon,
+  "system.psu_max_current": PlugZapIcon,
   "lte.rssi": SignalHighIcon,
   "lte.quality": RadioIcon,
+  "lte.modem_temp": ThermometerIcon,
 }
+
+// The strip is space-constrained: the throttle bitmask (surfaced as the header
+// status indicator + metric card) and the boot-static PSU limit stay in the
+// side panel and history views.
+const STRIP_HIDDEN_SYSTEM = new Set([
+  "system.throttled",
+  "system.psu_max_current",
+])
 
 // Widest value each metric can display, in characters (digits + sign + dot).
 // tabular-nums makes every digit exactly 1ch, so reserving this many `ch` gives
@@ -70,10 +85,14 @@ function reserveCh(metric: string): number {
       return 2 // 0–31
     case "lte.rssi":
       return 4 // -105
+    case "lte.modem_temp":
+      return 3 // -10–99
     case "gps.alt":
       return 6 // 1256.3
+    case "system.rail_5v":
+      return 5 // 5.134
     default:
-      return 5 // percentages / speed: 100.0
+      return 5 // percentages / speed / power: 100.0
   }
 }
 
@@ -179,7 +198,10 @@ export function TelemetryStrip({
         (m) => m !== "gps.lat" && m !== "gps.lon"
       ),
     },
-    { key: "system", metrics: systemMetrics(caps) },
+    {
+      key: "system",
+      metrics: systemMetrics(caps).filter((m) => !STRIP_HIDDEN_SYSTEM.has(m)),
+    },
     { key: "signal", metrics: signalMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
 

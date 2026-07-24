@@ -7,7 +7,7 @@ import {
   useLocation,
 } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { EllipsisVerticalIcon, PowerIcon } from "lucide-react"
+import { EllipsisVerticalIcon, PowerIcon, ZapIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -36,7 +36,11 @@ import {
   DeviceAlertsButton,
   type DeviceAlert,
 } from "./-components/device-alerts"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import {
+  useIotTelemetry,
+  type LatestReading,
+} from "@/hooks/use-iot-telemetry"
+import { decodeThrottleBits } from "@/lib/telemetry-meta"
 import {
   getDeviceModelResponseSchema,
   getDeviceResponseSchema,
@@ -87,6 +91,40 @@ function deviceInitials(device: Device): string {
   return source.slice(0, 2).toUpperCase()
 }
 
+// Throttle-cause colors, most severe first — the icon takes the color of the
+// worst active bit. Undervoltage is the brownout precursor (red); "currently
+// throttled" means the firmware is already intervening (orange); a frequency
+// cap or soft temperature limit degrades performance but isn't power-critical
+// (amber / yellow).
+const THROTTLE_SEVERITY: Array<[number, string]> = [
+  [0x1, "text-red-500"], // undervoltage
+  [0x4, "text-orange-500"], // currently throttled
+  [0x2, "text-amber-500"], // ARM frequency capped
+  [0x8, "text-yellow-500"], // soft temp limit
+]
+
+// Lightning bolt beside the online/offline status while the live throttle
+// bitmask (system.throttled) is non-zero. Hidden entirely at 0 — power trouble
+// is the exception, not a state worth advertising when absent.
+function ThrottleIndicator({
+  latest,
+}: {
+  latest: Record<string, LatestReading>
+}) {
+  const mask = latest["system.throttled"]?.value
+  if (typeof mask !== "number" || mask <= 0) return null
+  const color =
+    THROTTLE_SEVERITY.find(([bit]) => mask & bit)?.[1] ?? "text-amber-500"
+  return (
+    <ZapIcon
+      className={`size-3.5 shrink-0 ${color}`}
+      aria-label={`Power throttling: ${decodeThrottleBits(mask).join(", ")}`}
+    >
+      <title>{`Power throttling: ${decodeThrottleBits(mask).join(", ")}`}</title>
+    </ZapIcon>
+  )
+}
+
 const TAB_VALUES = [
   "overview",
   "streams",
@@ -116,7 +154,7 @@ function DeviceLayout() {
   // dismissal/acknowledgment state lives inside DeviceAlertsButton.
   // (This adds a second MQTT connection on tabs that mount their own feed —
   // acceptable for now; a shared per-device feed is a future refactor.)
-  const { recording } = useIotTelemetry(id)
+  const { recording, latest } = useIotTelemetry(id)
   const alerts: DeviceAlert[] = []
   if (recording && recording.droppedSegments > 0) {
     alerts.push({
@@ -255,6 +293,7 @@ function DeviceLayout() {
                       label={deviceStatusLabel(device)}
                       pulse={device.status === "online"}
                     />
+                    <ThrottleIndicator latest={latest} />
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground">{id}</span>

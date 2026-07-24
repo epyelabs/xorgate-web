@@ -133,6 +133,9 @@ const TAB_VALUES = [
   "workflows",
   "benchmark",
   "settings",
+  // No trigger of its own (entered from the Media tab) — listed so the tab
+  // bar doesn't fall back to highlighting Overview while replaying.
+  "replay",
 ] as const
 
 function DeviceLayout() {

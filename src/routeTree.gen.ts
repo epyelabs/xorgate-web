@@ -27,6 +27,7 @@ import { Route as DevicesIdWorkflowsRouteImport } from './routes/devices/$id.wor
 import { Route as DevicesIdTelemetryRouteImport } from './routes/devices/$id.telemetry'
 import { Route as DevicesIdStreamsRouteImport } from './routes/devices/$id.streams'
 import { Route as DevicesIdSettingsRouteImport } from './routes/devices/$id.settings'
+import { Route as DevicesIdReplayRouteImport } from './routes/devices/$id.replay'
 import { Route as DevicesIdOverviewRouteImport } from './routes/devices/$id.overview'
 import { Route as DevicesIdMediaRouteImport } from './routes/devices/$id.media'
 import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.benchmark'
@@ -121,6 +122,11 @@ const DevicesIdSettingsRoute = DevicesIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DevicesIdRoute,
 } as any)
+const DevicesIdReplayRoute = DevicesIdReplayRouteImport.update({
+  id: '/replay',
+  path: '/replay',
+  getParentRoute: () => DevicesIdRoute,
+} as any)
 const DevicesIdOverviewRoute = DevicesIdOverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/overview': typeof DevicesIdOverviewRoute
+  '/devices/$id/replay': typeof DevicesIdReplayRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/overview': typeof DevicesIdOverviewRoute
+  '/devices/$id/replay': typeof DevicesIdReplayRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
   '/devices/$id/media': typeof DevicesIdMediaRoute
   '/devices/$id/overview': typeof DevicesIdOverviewRoute
+  '/devices/$id/replay': typeof DevicesIdReplayRoute
   '/devices/$id/settings': typeof DevicesIdSettingsRoute
   '/devices/$id/streams': typeof DevicesIdStreamsRoute
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/overview'
+    | '/devices/$id/replay'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
     | '/devices/$id/telemetry'
@@ -247,6 +257,7 @@ export interface FileRouteTypes {
     | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/overview'
+    | '/devices/$id/replay'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
     | '/devices/$id/telemetry'
@@ -270,6 +281,7 @@ export interface FileRouteTypes {
     | '/devices/$id/benchmark'
     | '/devices/$id/media'
     | '/devices/$id/overview'
+    | '/devices/$id/replay'
     | '/devices/$id/settings'
     | '/devices/$id/streams'
     | '/devices/$id/telemetry'
@@ -421,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdSettingsRouteImport
       parentRoute: typeof DevicesIdRoute
     }
+    '/devices/$id/replay': {
+      id: '/devices/$id/replay'
+      path: '/replay'
+      fullPath: '/devices/$id/replay'
+      preLoaderRoute: typeof DevicesIdReplayRouteImport
+      parentRoute: typeof DevicesIdRoute
+    }
     '/devices/$id/overview': {
       id: '/devices/$id/overview'
       path: '/overview'
@@ -449,6 +468,7 @@ interface DevicesIdRouteChildren {
   DevicesIdBenchmarkRoute: typeof DevicesIdBenchmarkRoute
   DevicesIdMediaRoute: typeof DevicesIdMediaRoute
   DevicesIdOverviewRoute: typeof DevicesIdOverviewRoute
+  DevicesIdReplayRoute: typeof DevicesIdReplayRoute
   DevicesIdSettingsRoute: typeof DevicesIdSettingsRoute
   DevicesIdStreamsRoute: typeof DevicesIdStreamsRoute
   DevicesIdTelemetryRoute: typeof DevicesIdTelemetryRoute
@@ -460,6 +480,7 @@ const DevicesIdRouteChildren: DevicesIdRouteChildren = {
   DevicesIdBenchmarkRoute: DevicesIdBenchmarkRoute,
   DevicesIdMediaRoute: DevicesIdMediaRoute,
   DevicesIdOverviewRoute: DevicesIdOverviewRoute,
+  DevicesIdReplayRoute: DevicesIdReplayRoute,
   DevicesIdSettingsRoute: DevicesIdSettingsRoute,
   DevicesIdStreamsRoute: DevicesIdStreamsRoute,
   DevicesIdTelemetryRoute: DevicesIdTelemetryRoute,

@@ -15,30 +15,13 @@ import {
 } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
-import {
-  gpsMetrics,
-  imuAccelMetrics,
-  imuEulerMetrics,
-  imuQuaternionMetrics,
-  signalMetrics,
-  systemMetrics,
-} from "@/lib/capability-metrics"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
-  GroupedTelemetryReadout,
-  TelemetryReadout,
-} from "@/components/telemetry-readout"
+  StreamsSkeleton,
+  StreamsView,
+} from "@/components/streams-view/streams-view"
 import { LiveVideoGrid } from "@/components/live-video-grid"
 import { DeviceRecordingIndicator } from "@/components/device-recording-indicator"
-import { LiveLocationMap } from "@/components/live-location-map"
-import { TelemetryPanel } from "@/components/telemetry-panel"
-import { ImuPanel } from "@/components/imu-panel"
-import { GpsStrip } from "@/components/gps-strip"
-import { Button } from "@/components/ui/button"
-import { LocateFixedIcon } from "lucide-react"
 
 export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: () => {
@@ -50,6 +33,9 @@ export const Route = createFileRoute("/devices/$id/streams")({
   component: DeviceStreamsPage,
 })
 
+// Live page for the shared StreamsView (R8): owns the device/model fetch, the
+// live telemetry feed, and the live-only slots (recording indicator, KVS video
+// grid); the Card/Map layouts themselves live in components/streams-view.
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
@@ -58,8 +44,8 @@ function DeviceStreamsPage() {
   const [metaLoading, setMetaLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   // Map View camera follow: auto-centres on new fixes until the operator pans or
-  // zooms, then pauses (Recenter resumes). Owned here so the Recenter control can
-  // sit inline with the telemetry strip.
+  // zooms, then pauses (Recenter resumes). Owned here so it survives view
+  // switches; the view reports interactions through onFollowingChange.
   const [following, setFollowing] = useState(true)
   const {
     latest,
@@ -132,88 +118,35 @@ function DeviceStreamsPage() {
     }
   }
 
-  const imuGroups = [
-    { label: "Orientation", metrics: imuQuaternionMetrics(caps) },
-    { label: "Euler", metrics: imuEulerMetrics(caps) },
-    { label: "Acceleration", metrics: imuAccelMetrics(caps) },
-  ].filter((g) => g.metrics.length > 0)
-  const telemetryGroups = [
-    { title: "System", metrics: systemMetrics(caps) },
-    { title: "Signal", metrics: signalMetrics(caps) },
-    { title: "GPS / Location", metrics: gpsMetrics(caps) },
-  ].filter((g) => g.metrics.length > 0)
-  const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
+  const indicatorSlot = (
+    <DeviceRecordingIndicator recording={recording} media={media} />
+  )
+  // The section wrapper around the grid comes from StreamsView; the null here
+  // (no video capabilities) suppresses it, matching the old inline gate.
+  const videoSlot =
+    videoCaps.length > 0 ? (
+      viewType === "map" ? (
+        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} showRecordAll={false} />
+      ) : (
+        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
+      )
+    ) : null
 
-  // Map View: a split location-first layout. The map holds the left half; the
-  // right half stacks the telemetry sections, the live 3D orientation of the
-  // device, and the media tiles. `h-full` + `min-h-0` fill the tab's scroll
-  // wrapper and let the right column scroll on its own rather than pushing the
-  // page. Below `lg` the two halves stack instead of splitting.
   if (viewType === "map") {
     return (
-      <div className="flex h-full min-h-0 w-full flex-col gap-3 lg:flex-row">
-        <div className="relative min-h-64 flex-1 overflow-hidden rounded-lg border">
-          <LiveLocationMap
-            position={position}
-            track={track}
-            course={course}
-            following={following}
-            onInteract={() => setFollowing(false)}
-          />
-
-          {!position ? (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-background/85 px-3 py-1 text-xs text-muted-foreground shadow backdrop-blur-sm">
-              Waiting for GPS fix…
-            </div>
-          ) : null}
-
-          {!following && position ? (
-            <div className="absolute top-3 right-3">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setFollowing(true)}
-                title="Recenter map on device"
-                aria-label="Recenter map on device"
-                className="size-8 rounded-full border bg-background/85 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
-              >
-                <LocateFixedIcon className="size-4" />
-              </Button>
-            </div>
-          ) : null}
-
-          {/* GPS rides over the map rather than in the side column: it describes
-              the position the map is already showing. Bottom-centred clears the
-              Mapbox wordmark in the corner. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-3">
-            <div className="pointer-events-auto max-w-full">
-              <GpsStrip caps={caps} latest={latest} />
-            </div>
-          </div>
-        </div>
-
-        {/* The system/signal card and the media hold their natural height; the
-            IMU card takes whatever is left (its 3D box absorbing the slack), so
-            the column fills the tab instead of trailing off into empty space. It
-            only scrolls if that leftover runs out. */}
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          <DeviceRecordingIndicator recording={recording} media={media} />
-
-          <TelemetryPanel caps={caps} latest={latest} />
-
-          <ImuPanel caps={caps} latest={latest} view={imuView} />
-
-          {videoCaps.length > 0 ? (
-            <div className="shrink-0">
-              <LiveVideoGrid
-                deviceId={id}
-                videoCaps={videoCaps}
-                showRecordAll={false}
-              />
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <StreamsView
+        viewType="map"
+        caps={caps}
+        latest={latest}
+        imuView={imuView}
+        position={position}
+        track={track}
+        course={course}
+        following={following}
+        onFollowingChange={setFollowing}
+        indicatorSlot={indicatorSlot}
+        videoSlot={videoSlot}
+      />
     )
   }
 
@@ -229,99 +162,20 @@ function DeviceStreamsPage() {
       {metaLoading ? (
         <StreamsSkeleton />
       ) : (
-        <>
-          {/* On-device recording / upload-backlog status (renders nothing when
-              idle with no backlog). */}
-          <DeviceRecordingIndicator recording={recording} media={media} />
-
-          {videoCaps.length > 0 ? (
-            <section>
-              <LiveVideoGrid
-                deviceId={id}
-                videoCaps={videoCaps}
-                title="Media"
-              />
-            </section>
-          ) : null}
-
-          {hasTelemetry ? (
-            <>
-              <Separator />
-              <section className="flex flex-col gap-3">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Telemetry
-                </h2>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                  {imuGroups.length > 0 ? (
-                    <GroupedTelemetryReadout
-                      title="IMU"
-                      latest={latest}
-                      groups={imuGroups}
-                    />
-                  ) : null}
-                  {telemetryGroups.map((g) => (
-                    <TelemetryReadout
-                      key={g.title}
-                      title={g.title}
-                      latest={latest}
-                      metrics={g.metrics}
-                    />
-                  ))}
-                </div>
-              </section>
-            </>
-          ) : null}
-        </>
+        <StreamsView
+          viewType="card"
+          caps={caps}
+          latest={latest}
+          imuView={imuView}
+          position={position}
+          track={track}
+          course={course}
+          following={following}
+          onFollowingChange={setFollowing}
+          indicatorSlot={indicatorSlot}
+          videoSlot={videoSlot}
+        />
       )}
     </div>
-  )
-}
-
-// A single telemetry-card placeholder that mirrors TelemetryReadout's size="sm"
-// card: a short title with a few key/value rows.
-function TelemetryCardSkeleton() {
-  return (
-    <Card size="sm">
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-20" />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center justify-between">
-            <Skeleton className="h-3.5 w-24" />
-            <Skeleton className="h-3.5 w-12" />
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
-
-// Loading placeholder for the whole page while the device + model capabilities
-// are fetched. Mirrors the loaded layout (Media grid, then the Telemetry cards)
-// so nothing shifts once the real content arrives.
-function StreamsSkeleton() {
-  return (
-    <>
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-5 w-16" />
-          <Skeleton className="h-8 w-24" />
-        </div>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <Skeleton className="aspect-video max-h-[40vh] w-full" />
-          <Skeleton className="aspect-video max-h-[40vh] w-full" />
-        </div>
-      </section>
-      <Separator />
-      <section className="flex flex-col gap-3">
-        <Skeleton className="h-5 w-24" />
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <TelemetryCardSkeleton key={i} />
-          ))}
-        </div>
-      </section>
-    </>
   )
 }

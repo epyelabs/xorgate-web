@@ -382,6 +382,50 @@ export const getSessionSegmentsResponseSchema = z.object({
   segments: z.array(mediaSegmentSchema),
 })
 
+// --- Replay manifest: GET /devices/{id}/replay-manifest (composite replays
+// plan, Phase 2). All timestamps are epoch MILLISECONDS (the replay-clock
+// unit), unlike the ISO strings elsewhere.
+export const replaySegmentSchema = z.object({
+  seq: z.number(),
+  startTs: z.number(),
+  effectiveDurationMs: z.number(),
+  finalized: z.boolean().catch(true),
+  anchor: z.enum(["fstat", "computed", "boundary"]).nullable().catch(null),
+  sizeBytes: z.number().nullable(),
+  url: z.string(),
+})
+
+export const replayGapSchema = z.object({
+  fromTs: z.number(),
+  toTs: z.number(),
+  reason: z.enum(["missing-segments", "evicted-head"]),
+})
+
+export const replaySessionSchema = z.object({
+  id: z.string(),
+  streamKey: z.string(),
+  status: z.enum(["open", "closed"]).catch("open"),
+  timeSource: z.string().nullable(),
+  codec: z.string().nullable(),
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  fps: z.number().nullable(),
+  segments: z.array(replaySegmentSchema),
+  gaps: z.array(replayGapSchema),
+})
+
+export const replayManifestSchema = z.object({
+  deviceId: z.string(),
+  from: z.number(),
+  to: z.number(),
+  sessions: z.array(replaySessionSchema),
+  urlExpiresAt: z.number(),
+})
+
+export const getReplayManifestResponseSchema = z.object({
+  replay: replayManifestSchema,
+})
+
 // --- Telemetry history (P4): GET /devices/{id}/telemetry(+/latest) ---
 export const telemetryReadingSchema = z.object({
   ts: z.string(),

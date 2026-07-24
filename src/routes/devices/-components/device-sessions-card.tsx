@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { Link } from "@tanstack/react-router"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -282,16 +283,40 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
                       )}
                     </TableCell>
                     <TableCell className="pr-4 text-right">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDeleting(s)
-                        }}
-                      >
-                        Delete
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Interim entry point (composite replays plan, R9):
+                            Phase 5 replaces per-session rows with run-grouped
+                            rows whose Replay is time-anchored. */}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={s.segmentCount === 0}
+                          asChild={s.segmentCount > 0}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {s.segmentCount > 0 ? (
+                            <Link
+                              to="/devices/$id/replay"
+                              params={{ id: deviceId }}
+                              search={{ session: s.id }}
+                            >
+                              Replay
+                            </Link>
+                          ) : (
+                            <span>Replay</span>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleting(s)
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>,
                   expanded ? (

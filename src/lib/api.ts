@@ -817,3 +817,75 @@ export async function getSegmentPlaybackUrl(
     `/devices/${deviceId}/sessions/${sessionId}/segments/${seq}/playback`
   )
 }
+
+// --- Replay manifest (composite replays plan, Phase 2) ---
+// One response with everything a replay player needs: per-session gap-aware
+// timelines + a presigned GET URL per segment. Unlike the rest of this API,
+// all RESPONSE timestamps are epoch milliseconds (the replay-clock unit);
+// query from/to stay ISO-8601.
+
+export interface ReplaySegment {
+  seq: number
+  startTs: number
+  // Next-segment startTs delta when contiguous, else the recorded durationMs
+  // (deltas beat durations — R2). Segment covers [startTs, startTs + this).
+  effectiveDurationMs: number
+  // false = crash-cut partial; playable up to the cut.
+  finalized: boolean
+  // startTs provenance; "fstat" seq-0 rows include ~2 s of pipeline startup,
+  // so the first seam may hold a ~2 s buffered hole (player gap-jumps it).
+  anchor: "fstat" | "computed" | "boundary" | null
+  sizeBytes: number | null
+  url: string
+}
+
+export interface ReplayGap {
+  fromTs: number
+  toTs: number
+  reason: "missing-segments" | "evicted-head"
+}
+
+export interface ReplaySession {
+  id: string
+  streamKey: string
+  status: MediaSessionStatus
+  // "unsynced" = wall-clock correlation with telemetry is untrustworthy.
+  timeSource: string | null
+  codec: string | null
+  width: number | null
+  height: number | null
+  fps: number | null
+  // Ordered by startTs. Empty (with empty gaps) when the session's media
+  // expired via the 90 d lifecycle — telemetry-only replay, not an error.
+  segments: ReplaySegment[]
+  gaps: ReplayGap[]
+}
+
+export interface ReplayManifest {
+  deviceId: string
+  from: number
+  to: number
+  sessions: ReplaySession[]
+  // Epoch ms after which segment URLs may stop working (real TTL minus a
+  // safety margin) — refetch the manifest before this.
+  urlExpiresAt: number
+}
+
+export type ReplayManifestParams =
+  | { sessionId: string }
+  | { from: string; to: string; streamKey?: string }
+
+export async function getReplayManifest(
+  deviceId: string,
+  params: ReplayManifestParams
+): Promise<{ replay: ReplayManifest }> {
+  const qs = new URLSearchParams()
+  if ("sessionId" in params) {
+    qs.set("sessionId", params.sessionId)
+  } else {
+    qs.set("from", params.from)
+    qs.set("to", params.to)
+    if (params.streamKey) qs.set("streamKey", params.streamKey)
+  }
+  return apiRequest(`/devices/${deviceId}/replay-manifest?${qs.toString()}`)
+}

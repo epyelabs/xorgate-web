@@ -1,0 +1,322 @@
+{
+  "generatedAt": "2026-07-24T14:53:09.721Z",
+  "mode": "aws-presign",
+  "deviceId": "a73f7a36-2a9c-45c4-a66c-54d3b018a7f7",
+  "session": {
+    "id": "019f8fba-03e3-7387-b27e-bf24b843345d",
+    "streamKey": "cam1",
+    "timeSource": "ntp",
+    "status": "closed",
+    "width": 1920,
+    "height": 1080,
+    "fps": 15
+  },
+  "urlExpiresAtMs": 1784908389721,
+  "segments": [
+    {
+      "seq": 0,
+      "startTsMs": 1784822760704,
+      "durationMs": 61988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13581382,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00000.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00000.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=d79e3fd4c4e79b15d3de6b9713884ce0ccddbce28dfb295d1d07aec5c7c5ea09",
+      "effectiveDurationMs": 61988
+    },
+    {
+      "seq": 1,
+      "startTsMs": 1784822822692,
+      "durationMs": 59984,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13675199,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00001.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00001.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=d96fc40a4f90628cd82b4afe765a3c130aa76f8b95d3c1a12d7af42d8fffcc63",
+      "effectiveDurationMs": 59984
+    },
+    {
+      "seq": 2,
+      "startTsMs": 1784822882676,
+      "durationMs": 59987,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13717510,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00002.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00002.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=0aad33f9132ca16e3fc32a64ad0a1d4e985cc7d18c2ecbc4e20fac6c3fc6bf67",
+      "effectiveDurationMs": 59987
+    },
+    {
+      "seq": 3,
+      "startTsMs": 1784822942663,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13725093,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00003.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00003.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=956d6feeed91c260a8bbeab8c77194901397f52a3a2b18bfecf469e5f0d4cdee",
+      "effectiveDurationMs": 59988
+    },
+    {
+      "seq": 4,
+      "startTsMs": 1784823002651,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13751001,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00004.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00004.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=ceb2f335d500d843f9a31f83ed6fa1be52d2cf4ac922c061953e6d7e21444244",
+      "effectiveDurationMs": 59988
+    },
+    {
+      "seq": 5,
+      "startTsMs": 1784823062639,
+      "durationMs": 59987,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13712732,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00005.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00005.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=db699eb6921f6010fbb446eae3fcd062c829bd7786e7b750ff3165a0e46ca3ec",
+      "effectiveDurationMs": 59991
+    },
+    {
+      "seq": 6,
+      "startTsMs": 1784823122630,
+      "durationMs": 59980,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13722545,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00006.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00006.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=b027fb27db2494b086f3e6a6720df421790fc84b2e16a667ac39916ce7c2114f",
+      "effectiveDurationMs": 59980
+    },
+    {
+      "seq": 11,
+      "startTsMs": 1784823422559,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13712669,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00011.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00011.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=a9d1efd0651210730459557f5045d05567960d36e3bad545ba75980daf1a8656",
+      "effectiveDurationMs": 59988
+    },
+    {
+      "seq": 12,
+      "startTsMs": 1784823482547,
+      "durationMs": 59992,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13699885,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00012.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00012.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=d12178910b016e1e766b25b1bee98979bd73e65052d3ae3ed83facfc2393c9a1",
+      "effectiveDurationMs": 59992
+    },
+    {
+      "seq": 13,
+      "startTsMs": 1784823542539,
+      "durationMs": 59983,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13705836,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00013.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00013.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=349ede4ecf5a6d64db8007f93cb413f89cd76e3a4e87a1ee5442c3a8490f6a3a",
+      "effectiveDurationMs": 59983
+    },
+    {
+      "seq": 14,
+      "startTsMs": 1784823602522,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13696936,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00014.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00014.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=bfedd8f828abcfa88210c971ec791424b6d1ea9f376bd0fe6a08a541918e81a4",
+      "effectiveDurationMs": 59988
+    },
+    {
+      "seq": 15,
+      "startTsMs": 1784823662510,
+      "durationMs": 59995,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13736218,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00015.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00015.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=bdef37dab173e6a730ea623d89e9cac7cade76253da5e138db9258d5fc7dd300",
+      "effectiveDurationMs": 59999
+    },
+    {
+      "seq": 16,
+      "startTsMs": 1784823722509,
+      "durationMs": 59980,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13724803,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00016.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00016.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=809a78ccc78ad26bb30479e47af12d20f2ea73c6cf2e01e19f666e896dc7d5ec",
+      "effectiveDurationMs": 59980
+    },
+    {
+      "seq": 17,
+      "startTsMs": 1784823782489,
+      "durationMs": 59987,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13678376,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00017.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00017.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=d544110d0cc68f999e04bb20e173c8546f7d257bd4fb0b118f63f0f3a832b0f6",
+      "effectiveDurationMs": 59991
+    },
+    {
+      "seq": 18,
+      "startTsMs": 1784823842480,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13720447,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00018.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00018.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=a46d3702e790e7444169fe4010515c69e2f221da1e78c8c88099eef01eb9c1ae",
+      "effectiveDurationMs": 59988
+    },
+    {
+      "seq": 19,
+      "startTsMs": 1784823902468,
+      "durationMs": 59984,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13668923,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00019.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00019.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145308Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=13161a97477b2c6c1316b18914bfff42b275e27d8358b4c28e413ac1e37f6145",
+      "effectiveDurationMs": 59984
+    },
+    {
+      "seq": 20,
+      "startTsMs": 1784823962452,
+      "durationMs": 59987,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13669378,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00020.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00020.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=0d7cf4b79399ff4456983a1fd0a05632db7e56441bd2e4236cdefff18e940b50",
+      "effectiveDurationMs": 59987
+    },
+    {
+      "seq": 21,
+      "startTsMs": 1784824022439,
+      "durationMs": 59984,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13716198,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00021.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00021.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=cfcf96fda1fff01c211dad86ec2905a0aa0e54611f435b106808b82e1a7e1b2d",
+      "effectiveDurationMs": 59984
+    },
+    {
+      "seq": 22,
+      "startTsMs": 1784824082423,
+      "durationMs": 59987,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13723635,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00022.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00022.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=586b737e353fb97401801f8197f03520124773987b64748c9cbbbcd028779afe",
+      "effectiveDurationMs": 59987
+    },
+    {
+      "seq": 23,
+      "startTsMs": 1784824142410,
+      "durationMs": 59992,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13694042,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00023.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00023.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=018537b4ca4b80ff327ea0aab1bf8a3d28a25be7d9b7fe25e38fc782be271ae2",
+      "effectiveDurationMs": 59992
+    },
+    {
+      "seq": 24,
+      "startTsMs": 1784824202402,
+      "durationMs": 59988,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13739136,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00024.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00024.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=208cc360c276769b2c052e36ea8034f5d12efb36bca2c900a79011d98ede3571",
+      "effectiveDurationMs": 59996
+    },
+    {
+      "seq": 25,
+      "startTsMs": 1784824262398,
+      "durationMs": 59979,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13753450,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00025.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00025.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=d89ad777426a0941073ef6737e13cbccad68922222a131bb417d45de0aff2d22",
+      "effectiveDurationMs": 59983
+    },
+    {
+      "seq": 26,
+      "startTsMs": 1784824322381,
+      "durationMs": 59984,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13768530,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00026.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00026.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=1b0c60936d5c32e55ce4e026e370160c1ae6dfae455ab23e7a885f996140d0d5",
+      "effectiveDurationMs": 59984
+    },
+    {
+      "seq": 27,
+      "startTsMs": 1784824382365,
+      "durationMs": 59992,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13730715,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00027.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00027.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=1f61677c436a05d48e5b13238b8a0a6b51a62d7e6eaaa8940d0bf089379d3aca",
+      "effectiveDurationMs": 59992
+    },
+    {
+      "seq": 28,
+      "startTsMs": 1784824442357,
+      "durationMs": 59991,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13760271,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00028.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00028.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=37ebff407be2400c431a7d462df01ced727f1d6b275d2a0a1c9e546a5401e1ad",
+      "effectiveDurationMs": 59991
+    },
+    {
+      "seq": 29,
+      "startTsMs": 1784824502348,
+      "durationMs": 59980,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 13796946,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00029.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00029.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=e1f6b9d1bdfb9aeef2da4d9141c8b81ea3e561c70288adfea5ff425f67586ce9",
+      "effectiveDurationMs": 59984
+    },
+    {
+      "seq": 30,
+      "startTsMs": 1784824562332,
+      "durationMs": 18180,
+      "finalized": true,
+      "anchor": "fstat",
+      "sizeBytes": 4685376,
+      "s3Key": "media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00030.mp4",
+      "url": "https://xorgate-core-dev-111910761410-us-east-1.s3.us-east-1.amazonaws.com/media-sessions/v1/a73f7a36-2a9c-45c4-a66c-54d3b018a7f7/cam1/019f8fba-03e3-7387-b27e-bf24b843345d/00030.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIARUDTGWPBCLIANUSZ%2F20260724%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260724T145309Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=080e4170467d7a2063c7edcafdfb3221aa2b07a348ae7045c513b774510c7930",
+      "effectiveDurationMs": 18180
+    }
+  ],
+  "gaps": [
+    {
+      "fromTs": 1784823182610,
+      "toTs": 1784823422559,
+      "afterSeq": 6,
+      "reason": "missing-segments"
+    }
+  ]
+}

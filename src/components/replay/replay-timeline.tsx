@@ -67,10 +67,6 @@ export function ReplayTimelineBar({
 
   const span = timeline.to - timeline.from
   const runs = useMemo(() => coverageRuns(timeline), [timeline])
-  const partials = useMemo(
-    () => timeline.segments.filter((s) => !s.finalized),
-    [timeline]
-  )
 
   if (!state) return null
   const pct = (ts: number) => ((ts - timeline.from) / span) * 100
@@ -133,12 +129,12 @@ export function ReplayTimelineBar({
             />
           ))}
           {/* Crash-cut (partial) segment markers */}
-          {partials.map((s) => (
+          {timeline.partialEnds.map((ts) => (
             <div
-              key={s.seq}
+              key={ts}
               title="Recording was cut mid-segment (power loss or crash) — playable up to the cut."
               className="absolute inset-y-0 w-0.5 bg-amber-500"
-              style={{ left: `${pct(segmentEnd(s))}%` }}
+              style={{ left: `${pct(ts)}%` }}
             />
           ))}
         </div>

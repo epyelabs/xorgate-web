@@ -15,6 +15,10 @@ export interface ReplayTimeline {
   // Jump targets for the prev/next transport buttons: every segment start
   // plus every gap end (a gap's far side is where video resumes), sorted.
   boundaries: number[]
+  // Wall-clock ends of crash-cut (finalized=false) segments — the transport
+  // bar's amber ticks. Carried explicitly because a composite clock timeline
+  // (lib/replay/lanes.ts) holds merged synthetic coverage, not real segments.
+  partialEnds: number[]
 }
 
 export function buildTimeline(
@@ -30,7 +34,8 @@ export function buildTimeline(
   const boundaries = [...bounds]
     .filter((ts) => ts >= from && ts <= to)
     .sort((a, b) => a - b)
-  return { from, to, segments, gaps, boundaries }
+  const partialEnds = segments.filter((s) => !s.finalized).map(segmentEnd)
+  return { from, to, segments, gaps, boundaries, partialEnds }
 }
 
 export function segmentEnd(segment: ReplaySegment): number {

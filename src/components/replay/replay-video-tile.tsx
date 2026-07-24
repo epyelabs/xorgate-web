@@ -5,6 +5,7 @@ import type { ReplaySegment } from "@/lib/api"
 import type { ReplayClock } from "@/lib/replay/replay-clock"
 import { parseSegmentMediaInfo } from "@/lib/replay/mp4-box"
 import {
+  hasCoverageAt,
   nextSegmentAfter,
   segmentAt,
   segmentEnd,
@@ -17,6 +18,12 @@ const EVICT_KEEP_BEHIND_S = 120
 // Micro-gap jump ceiling: buffered holes at rotation seams are ≤ ~2 s (fstat
 // anchors); anything a jump can't reach within this is the clock's business.
 const MICRO_GAP_MAX_S = 5
+// A paused playhead sitting this close before the lane's next segment is not
+// "no video" — in composite the replay window starts at the EARLIEST camera,
+// so the other lanes begin a few ms later (and sub-2 s seam holes are never
+// manifest gaps either). Show the loading/poster state instead of the gap
+// overlay.
+const NEAR_COVERAGE_MS = 2_500
 const FETCH_RETRY_MS = 4000
 const SKIP_NOTICE_MS = 3000
 
@@ -39,6 +46,7 @@ class MseEngine {
   private readonly getUrl: (seg: ReplaySegment) => string
   private readonly onError: (message: string) => void
   private readonly onUpdate: () => void
+  private readonly onAuthError: (() => void) | undefined
 
   private ms: MediaSource | null = null
   private sb: SourceBuffer | null = null
@@ -47,6 +55,8 @@ class MseEngine {
   private destroyed = false
   private pendingOp: "append" | "remove" | null = null
   private readonly queue: AppendTask[] = []
+  // Keyed by segment startTs, not seq: a composite lane merges same-streamKey
+  // sessions, and seq restarts at 0 in each (startTs is unique within a lane).
   private readonly fetching = new Set<number>()
   private readonly lastAttempt = new Map<number, number>()
   private readonly abort = new AbortController()
@@ -57,12 +67,14 @@ class MseEngine {
     getUrl: (seg: ReplaySegment) => string
     onError: (message: string) => void
     onUpdate: () => void
+    onAuthError?: () => void
   }) {
     this.video = opts.video
     this.timeline = opts.timeline
     this.getUrl = opts.getUrl
     this.onError = opts.onError
     this.onUpdate = opts.onUpdate
+    this.onAuthError = opts.onAuthError
   }
 
   destroy(): void {
@@ -121,15 +133,20 @@ class MseEngine {
   }
 
   private fetchSegment(seg: ReplaySegment): void {
-    if (this.fetching.has(seg.seq)) return
-    const last = this.lastAttempt.get(seg.seq)
+    if (this.fetching.has(seg.startTs)) return
+    const last = this.lastAttempt.get(seg.startTs)
     if (last !== undefined && performance.now() - last < FETCH_RETRY_MS) return
-    this.lastAttempt.set(seg.seq, performance.now())
-    this.fetching.add(seg.seq)
+    this.lastAttempt.set(seg.startTs, performance.now())
+    this.fetching.add(seg.startTs)
     void (async () => {
       try {
         const res = await fetch(this.getUrl(seg), { signal: this.abort.signal })
-        if (!res.ok) throw new Error(`segment ${seg.seq}: HTTP ${res.status}`)
+        if (!res.ok) {
+          // Presigned URL expired/revoked: tell the page so it can refetch
+          // the manifest early (the backoff retry then uses the fresh URL).
+          if (res.status === 403) this.onAuthError?.()
+          throw new Error(`segment ${seg.seq}: HTTP ${res.status}`)
+        }
         const data = await res.arrayBuffer()
         if (this.destroyed) return
         const info = parseSegmentMediaInfo(data)
@@ -151,7 +168,7 @@ class MseEngine {
         // blip): ensureAt retries after the backoff window.
         console.warn("replay segment fetch failed", err)
       } finally {
-        this.fetching.delete(seg.seq)
+        this.fetching.delete(seg.startTs)
       }
     })()
   }
@@ -239,22 +256,34 @@ class MseEngine {
 }
 
 /**
- * Replay video tile: plays one recorded session's segments as a continuous
- * timeline via MSE (Phase 1 verdict), strictly as a FOLLOWER/PACER of the
- * replay clock — while the clock has video coverage the element paces it,
- * in gaps the tile pauses and shows the no-video state while the clock
- * free-runs (see lib/replay/replay-clock.ts).
+ * Replay video tile: plays one LANE's recorded segments as a continuous
+ * timeline via MSE (Phase 1 verdict), strictly as a follower/pacer-candidate
+ * of the replay clock. The clock elects one lane with coverage as pacer (its
+ * element drives the playhead); the other lanes chase the clock and re-seek
+ * when drift exceeds ~150 ms. When THIS lane has no video at the playhead
+ * the tile pauses and shows its no-video state — independently of the other
+ * lanes (see lib/replay/replay-clock.ts and lib/replay/lanes.ts).
  */
 export function ReplayVideoTile({
   clock,
+  timeline,
   label,
   getSegmentUrl,
+  onAuthError,
 }: {
   clock: ReplayClock
+  // This lane's timeline. Single-session replay passes the clock's own
+  // timeline; composite passes the per-streamKey lane timeline. Must share
+  // the clock timeline's from/to (lanes.ts guarantees it).
+  timeline: ReplayTimeline
+  // Unique per page — doubles as the pacer-election id.
   label: string
   // URL resolution is indirect so manifest TTL refreshes swap presigned URLs
   // without rebuilding the timeline (or resetting the clock).
   getSegmentUrl: (seg: ReplaySegment) => string
+  // Segment fetch got a 403 (URL expired despite the scheduled refresh) —
+  // the page refetches the manifest and swaps URLs.
+  onAuthError?: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<TileStatus>("loading")
@@ -266,11 +295,14 @@ export function ReplayVideoTile({
   useEffect(() => {
     getUrlRef.current = getSegmentUrl
   }, [getSegmentUrl])
+  const onAuthErrorRef = useRef(onAuthError)
+  useEffect(() => {
+    onAuthErrorRef.current = onAuthError
+  }, [onAuthError])
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    const timeline = clock.timeline
 
     let firstFrameSeen = false
     const engine = new MseEngine({
@@ -282,6 +314,7 @@ export function ReplayVideoTile({
         setStatus("error")
       },
       onUpdate: () => onClockChange(),
+      onAuthError: () => onAuthErrorRef.current?.(),
     })
 
     let lastSeekSeq = -1
@@ -304,7 +337,25 @@ export function ReplayVideoTile({
       }
 
       if (!cover) {
-        setInGap(true)
+        // Paused a hair before this lane's coverage (composite lanes start
+        // milliseconds apart; the window anchors on the earliest camera):
+        // "No video recorded" would be a lie — park the element on the
+        // upcoming first frame as a poster instead. While playing, honest
+        // gap state stands (any flash crossing a sliver lasts one notify).
+        const next = nextSegmentAfter(timeline, st.playheadTs)
+        if (
+          !st.playing &&
+          next !== null &&
+          next.startTs - st.playheadTs <= NEAR_COVERAGE_MS
+        ) {
+          setInGap(false)
+          const posterPos = (next.startTs - timeline.from) / 1000 + 0.05
+          if (Math.abs(video.currentTime - posterPos) > 0.05) {
+            video.currentTime = posterPos
+          }
+        } else {
+          setInGap(true)
+        }
         if (!video.paused) video.pause()
         // Keep the far side warm so resuming out of the gap is instant.
         engine.ensureAt(st.playheadTs)
@@ -316,7 +367,9 @@ export function ReplayVideoTile({
       setInGap(false)
       engine.ensureAt(st.playheadTs)
 
-      const pacing = st.playing // under coverage the video is the pacer
+      // Elected pacer drives the clock; everyone else (paused tiles, follower
+      // lanes) chases it and re-seeks past the drift ceiling.
+      const pacing = st.playing && clock.pacerId() === label
       const drift = Math.abs(video.currentTime - pos)
       if (st.seekSeq !== lastSeekSeq || pendingAlign || (!pacing && drift > 0.15)) {
         lastSeekSeq = st.seekSeq
@@ -331,11 +384,20 @@ export function ReplayVideoTile({
       } else if (!st.playing && !video.paused) {
         video.pause()
       }
+      // Established-stall probe (see recoverStall): a stalled pacer emits no
+      // clock notifies, so this effectively runs at the 500 ms pump rate.
+      if (pacing && !video.paused && video.readyState <= 2) {
+        recoverStall()
+      }
     }
 
-    // The element paces the clock only while it rules (coverage + playing);
-    // registration is unconditional, the clock decides (pacing contract).
-    clock.setPacer(() => timeline.from + video.currentTime * 1000)
+    // The element paces the clock only while elected (lane coverage +
+    // playing); registration is unconditional, the clock decides (pacing
+    // contract). `covers` is the LANE's coverage — per-lane gap independence.
+    const unregisterPacer = clock.registerPacer(label, {
+      read: () => timeline.from + video.currentTime * 1000,
+      covers: (ts) => hasCoverageAt(timeline, ts),
+    })
 
     const unsubscribe = clock.subscribe(onClockChange)
 
@@ -344,9 +406,13 @@ export function ReplayVideoTile({
     // past; a stall with nothing ahead inside claimed coverage means a
     // crash-cut landed short — hand the playhead back to the clock at the
     // segment boundary (boundary-reached, not an error).
-    const onWaiting = () => {
+    const recoverStall = () => {
       const st = clock.getState()
       if (!st.playing) return
+      // Followers never steer the clock or jump ahead of it: a follower
+      // stalled in a local buffered hole recovers by chasing the clock once
+      // the (pacer-driven) playhead moves past the hole.
+      if (clock.pacerId() !== label) return
       const t = video.currentTime
       let nextStart: number | null = null
       for (let i = 0; i < video.buffered.length; i++) {
@@ -378,6 +444,12 @@ export function ReplayVideoTile({
         }
       }
     }
+    // The `waiting` event only covers stalls that BEGIN while playing. A seek
+    // that lands inside a seam hole while paused fires its `waiting` before
+    // play() (ignored above), and no further event ever comes — so the pump
+    // path below also probes for an established stall (readyState says the
+    // element cannot advance) and runs the same recovery.
+    const onWaiting = () => recoverStall()
     video.addEventListener("waiting", onWaiting)
 
     const onLoadedData = () => {
@@ -398,14 +470,15 @@ export function ReplayVideoTile({
     return () => {
       clearInterval(pump)
       unsubscribe()
-      clock.setPacer(null)
+      unregisterPacer()
       video.removeEventListener("waiting", onWaiting)
       video.removeEventListener("loadeddata", onLoadedData)
       if (skipTimer) clearTimeout(skipTimer)
       engine.destroy()
     }
-    // getSegmentUrl intentionally via ref; clock identity defines a replay.
-  }, [clock])
+    // getSegmentUrl/onAuthError intentionally via refs; clock + lane timeline
+    // identity define a replay.
+  }, [clock, timeline, label])
 
   return (
     <Card className="overflow-hidden py-0">

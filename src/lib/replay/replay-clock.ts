@@ -1,29 +1,35 @@
-import {
-  clampTs,
-  gapAt,
-  hasCoverageAt,
-  type ReplayTimeline,
-} from "@/lib/replay/timeline"
+import { clampTs, gapAt, type ReplayTimeline } from "@/lib/replay/timeline"
 
 // The master replay clock (composite replays plan, R2 + the README pacing
 // contract): ONE wall-clock playhead (epoch ms) that everything on the page
-// follows. Nothing reads video.currentTime directly — the video tile
-// registers as the pacer and the clock decides when it rules:
+// follows. Nothing reads video.currentTime directly — video tiles register
+// as pacer candidates and the clock elects who rules:
 //
-// - Playing with video coverage at the playhead: the video element PACES the
-//   clock (pacer read wins), so A/V-vs-telemetry drift is structurally
-//   impossible. A stalled video (cold fetch) freezes the clock — correct,
-//   telemetry waits with it.
-// - Playing inside a gap / uncovered stretch: the clock free-runs at
+// - Playing with video coverage at the playhead: ONE elected lane's video
+//   element PACES the clock (pacer read wins), so A/V-vs-telemetry drift is
+//   structurally impossible. Election is sticky — the incumbent keeps pacing
+//   while its lane covers the playhead, then the first registered lane with
+//   coverage takes over (registration order = tile render order). Other
+//   lanes are followers: they chase the clock and re-seek when drift exceeds
+//   ~150 ms (tile side). A stalled pacer freezes the clock — correct,
+//   telemetry and the other lanes wait with it.
+// - Playing with no lane covering the playhead: the clock free-runs at
 //   rate × real time, or jumps manifest gaps when skipGaps is on.
 // - Seek/scrub: the user sets the clock; followers re-derive. Discontinuities
-//   bump seekSeq so the video tile knows to re-align (a pace tick never does).
+//   bump seekSeq so the video tiles know to re-align (a pace tick never does).
 //
 // Pure logic — the rAF driver lives in the React hook so this stays unit-
 // testable with synthetic ticks.
 
 export const REPLAY_RATES = [0.5, 1, 2, 4] as const
 export type ReplayRate = (typeof REPLAY_RATES)[number]
+
+export interface PacerCandidate {
+  // Wall-clock ts (epoch ms) the candidate's media element currently shows.
+  read: () => number
+  // Whether the candidate's lane has video coverage at ts.
+  covers: (ts: number) => boolean
+}
 
 export interface GapSkipEvent {
   fromTs: number
@@ -55,7 +61,9 @@ export class ReplayClock {
   private lastSkip: GapSkipEvent | null = null
   private skipCounter = 0
 
-  private pacerRead: (() => number) | null = null
+  // Pacer candidates in registration order (Map preserves insertion order).
+  private readonly pacers = new Map<string, PacerCandidate>()
+  private electedPacer: string | null = null
   private readonly subscribers = new Set<() => void>()
 
   constructor(timeline: ReplayTimeline, startTs?: number) {
@@ -123,17 +131,46 @@ export class ReplayClock {
 
   // --- driver inputs ---
 
-  // The video tile registers a reader returning the wall-clock ts its media
-  // element currently shows. Only consulted while playing WITH coverage.
-  setPacer(read: (() => number) | null): void {
-    this.pacerRead = read
+  // Each video tile registers as a pacer candidate: `read` returns the
+  // wall-clock ts its media element currently shows, `covers` whether its
+  // LANE has video at a given ts. Only the elected candidate is consulted,
+  // and only while playing with coverage.
+  registerPacer(id: string, candidate: PacerCandidate): () => void {
+    this.pacers.set(id, candidate)
+    return () => {
+      this.pacers.delete(id)
+      if (this.electedPacer === id) this.electedPacer = null
+    }
+  }
+
+  // The currently elected pacer lane (tiles compare against their own id to
+  // decide pace vs chase). Null while free-running or before the first
+  // playing tick with coverage.
+  pacerId(): string | null {
+    return this.electedPacer
+  }
+
+  private electPacer(): PacerCandidate | null {
+    const incumbent = this.electedPacer
+      ? this.pacers.get(this.electedPacer)
+      : undefined
+    if (incumbent?.covers(this.playheadTs)) return incumbent
+    for (const [id, candidate] of this.pacers) {
+      if (candidate.covers(this.playheadTs)) {
+        this.electedPacer = id
+        return candidate
+      }
+    }
+    this.electedPacer = null
+    return null
   }
 
   // One driver tick. dtMs = real elapsed ms since the previous tick.
   tick(dtMs: number): void {
     if (!this.playing) return
-    if (this.pacerRead && hasCoverageAt(this.timeline, this.playheadTs)) {
-      const paced = clampTs(this.timeline, this.pacerRead())
+    const pacer = this.electPacer()
+    if (pacer) {
+      const paced = clampTs(this.timeline, pacer.read())
       if (paced !== this.playheadTs) {
         this.playheadTs = paced
         this.endCheck()

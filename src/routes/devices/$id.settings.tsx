@@ -107,6 +107,11 @@ const VIDEO_PRESET_OPTIONS: { value: VideoPresetName; label: string }[] = [
   { value: "1080p30-4mbps", label: "1080p 30 fps · 4 Mbps (best, highest CPU)" },
   { value: "1080p15-2mbps", label: "1080p 15 fps · 2 Mbps (default)" },
   { value: "720p30-2mbps", label: "720p 30 fps · 2 Mbps (smoother motion)" },
+  { value: "720p15-2mbps", label: "720p 15 fps · 2 Mbps (lower CPU)" },
+  {
+    value: "720p15-1mbps",
+    label: "720p 15 fps · 1 Mbps (lowest CPU, smallest files)",
+  },
 ]
 const RATE_HZ_OPTIONS = [1, 2, 5, 10, 20]
 const SEGMENT_SECONDS_OPTIONS = [30, 60, 120, 300]

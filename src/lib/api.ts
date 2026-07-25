@@ -265,6 +265,8 @@ export type VideoPresetName =
   | "1080p30-4mbps"
   | "1080p15-2mbps"
   | "720p30-2mbps"
+  | "720p15-2mbps"
+  | "720p15-1mbps"
 
 export interface RecordingConfig {
   telemetry?: { enabled?: boolean; rateHz?: number }

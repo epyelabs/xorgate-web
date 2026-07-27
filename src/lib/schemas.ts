@@ -164,8 +164,6 @@ export const deviceSchema = z.object({
   name: z.string().nullable(),
   firmwareVersion: z.string().nullable(),
   status: deviceStatusSchema,
-  persistTelemetry: z.boolean(),
-  autoRecord: z.boolean(),
   // Tolerate an older backend that doesn't return the field yet.
   gnssAntBias: z.boolean().catch(false),
   // .catch keeps an older client forward-compatible when new view types ship.
@@ -316,34 +314,6 @@ export const kvsChannelSchema = z.object({
 
 export const getKvsChannelsResponseSchema = z.object({
   channels: z.array(kvsChannelSchema),
-})
-
-// --- Recordings: GET /devices/{id}/recordings ---
-export const recordingSchema = z.object({
-  id: z.string(),
-  deviceId: z.string(),
-  streamKey: z.string(),
-  status: z.enum(["recording", "stopping", "completed", "failed"]),
-  trigger: z.enum(["manual", "auto"]),
-  // Why the recording ended (kvs-webrtc-lts §4.1). null while still recording or for
-  // a natural EOS with no explicit reason. Nullable+optional so an older payload that
-  // predates the column still validates.
-  endReason: z.string().nullable().optional(),
-  startedAt: z.string(),
-  captureStartedAt: z.string().nullable(),
-  endedAt: z.string().nullable(),
-  s3Key: z.string().nullable(),
-  sizeBytes: z.number().nullable(),
-  durationMs: z.number().nullable(),
-  taskArn: z.string().nullable(),
-  createdAt: z.string(),
-})
-
-export const getDeviceRecordingsResponseSchema = z.object({
-  recordings: z.array(recordingSchema),
-  // Optional: present on the standardized list endpoint; absent on the compact
-  // (unparameterized) fetches used by the Overview.
-  page: pageSchema.optional(),
 })
 
 // --- Device-recorded media sessions: GET /devices/{id}/sessions (Phase 4/5) ---

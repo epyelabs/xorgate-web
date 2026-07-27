@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties } from "react"
 import { createFileRoute, Link, redirect } from "@tanstack/react-router"
 import { ArrowRightIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -18,19 +18,15 @@ import {
   ApiError,
   getDevice,
   getDeviceModel,
-  getDeviceRecordings,
   type Device,
   type IoCapabilities,
-  type Recording,
 } from "@/lib/api"
 import {
   getDeviceModelResponseSchema,
-  getDeviceRecordingsResponseSchema,
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
-import { RecordingsTable } from "./-components/recordings-table"
 
 // The device Overview: a fast, at-a-glance landing dashboard assembled from the
 // same hooks/components the deeper tabs use. It deliberately does NOT mount the
@@ -45,7 +41,6 @@ export const Route = createFileRoute("/devices/$id/overview")({
   component: DeviceOverviewPage,
 })
 
-const RECENT_RECORDINGS = 5
 const RECENT_TELEMETRY_ROWS = 10
 
 function DeviceOverviewPage() {
@@ -55,7 +50,6 @@ function DeviceOverviewPage() {
   const [device, setDevice] = useState<Device | null>(null)
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
   const [metaLoading, setMetaLoading] = useState(true)
-  const [recordings, setRecordings] = useState<Recording[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   // Device + model (drives the live health tiles the model's caps allow).
@@ -96,26 +90,6 @@ function DeviceOverviewPage() {
     }
   }, [id])
 
-  // Recent recordings (best-effort): the latest few for the summary list.
-  const loadRecordings = useCallback(async () => {
-    try {
-      const raw = await getDeviceRecordings(id)
-      const parsed = getDeviceRecordingsResponseSchema.safeParse(raw)
-      if (parsed.success) setRecordings(parsed.data.recordings)
-      else setRecordings([])
-    } catch {
-      setRecordings([])
-    }
-  }, [id])
-
-  useEffect(() => {
-    // Wrap in an async IIFE (matching the streams/settings tabs) so the mount
-    // load doesn't read as a synchronous setState in the effect body.
-    ;(async () => {
-      await loadRecordings()
-    })()
-  }, [loadRecordings])
-
   // Recent recorded telemetry: fetch whatever the DB has, once. No time window
   // and no metric filter, so the newest stored samples show up even if the
   // device last reported weeks ago.
@@ -130,14 +104,9 @@ function DeviceOverviewPage() {
   const sysMetrics = systemMetrics(caps)
   const sigMetrics = signalMetrics(caps)
   const healthMetrics = [...sysMetrics, ...sigMetrics]
-  const persistOff = Boolean(device && !device.persistTelemetry)
   // Show only the newest few rows on the Overview; "View all" opens the full
   // Telemetry History tab. history is ascending, so the tail is the most recent.
   const recentTelemetry = recordedHistory.slice(-RECENT_TELEMETRY_ROWS)
-  const recentRecordings = (recordings ?? [])
-    .slice()
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-    .slice(0, RECENT_RECORDINGS)
 
   const telemetryViewAll = (
     <Button asChild variant="outline" size="sm">
@@ -147,23 +116,6 @@ function DeviceOverviewPage() {
       </Link>
     </Button>
   )
-
-  const persistNotice = persistOff ? (
-    <p className="text-xs text-muted-foreground">
-      <span className="font-medium text-foreground">
-        Persist telemetry is off.
-      </span>{" "}
-      History isn't retained. Enable it in{" "}
-      <Link
-        to="/devices/$id/settings"
-        params={{ id }}
-        className="underline underline-offset-4"
-      >
-        Settings
-      </Link>
-      .
-    </p>
-  ) : null
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -241,7 +193,6 @@ function DeviceOverviewPage() {
           history={recentTelemetry}
           metrics={recordedMetrics}
           units={recordedUnits}
-          footer={persistNotice}
           pinFirstColumn
           loading={recordedLoading}
           empty={
@@ -252,30 +203,9 @@ function DeviceOverviewPage() {
         />
       </section>
 
-      {/* Recent media recordings — same header-above-card layout as above. */}
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-col gap-0.5">
-            <h2 className="font-heading text-sm font-medium">
-              Recent media recordings
-            </h2>
-          </div>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/devices/$id/media" params={{ id }}>
-              View all
-              <ArrowRightIcon />
-            </Link>
-          </Button>
-        </div>
-        <RecordingsTable
-          card
-          deviceId={id}
-          recordings={recentRecordings}
-          onChanged={loadRecordings}
-          loading={recordings === null}
-          emptyMessage="No recordings yet."
-        />
-      </section>
+      {/* The "Recent media recordings" section that sat here rendered the cloud
+          recorder's table and went with it. Phase 2 of the recorder-removal plan
+          refills this slot with a compact recent ON-DEVICE sessions list. */}
     </div>
   )
 }

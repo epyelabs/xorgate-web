@@ -238,8 +238,6 @@ function DeviceSettingsPage() {
   // Editable form state + the last-saved baseline used to detect real changes.
   const [name, setName] = useState("")
   const [status, setStatus] = useState<DeviceStatus>("provisioned")
-  const [persistTelemetry, setPersistTelemetry] = useState(false)
-  const [autoRecord, setAutoRecord] = useState(false)
   const [gnssAntBias, setGnssAntBias] = useState(false)
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   // IMU inputs are kept as strings so partial numeric input ("-", "1.") never
@@ -261,8 +259,6 @@ function DeviceSettingsPage() {
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
-    persistTelemetry: boolean
-    autoRecord: boolean
     gnssAntBias: boolean
     activeStreamsViewType: ActiveStreamsViewType
     imuMount: ImuMount
@@ -299,8 +295,6 @@ function DeviceSettingsPage() {
         const initialName = fetched.name ?? ""
         setName(initialName)
         setStatus(fetched.status)
-        setPersistTelemetry(fetched.persistTelemetry)
-        setAutoRecord(fetched.autoRecord)
         setGnssAntBias(fetched.gnssAntBias)
         setViewType(fetched.activeStreamsViewType)
         const mount = fetched.imuMount ?? DEFAULT_IMU_MOUNT
@@ -316,8 +310,6 @@ function DeviceSettingsPage() {
         setBaseline({
           name: initialName,
           status: fetched.status,
-          persistTelemetry: fetched.persistTelemetry,
-          autoRecord: fetched.autoRecord,
           gnssAntBias: fetched.gnssAntBias,
           activeStreamsViewType: fetched.activeStreamsViewType,
           imuMount: mount,
@@ -406,8 +398,6 @@ function DeviceSettingsPage() {
       setBaseline({
         name: nextName,
         status: updated.status,
-        persistTelemetry: updated.persistTelemetry,
-        autoRecord: updated.autoRecord,
         gnssAntBias: updated.gnssAntBias,
         activeStreamsViewType: updated.activeStreamsViewType,
         imuMount: updated.imuMount ?? DEFAULT_IMU_MOUNT,
@@ -426,49 +416,6 @@ function DeviceSettingsPage() {
       toast.error((err as Error).message)
       setName(baseline.name)
       setStatus(baseline.status)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Telemetry persistence toggle. Fires immediately on switch change (not on blur):
-  // optimistically flip the switch, persist, and roll back to the saved value on error.
-  async function commitPersist(next: boolean) {
-    if (saving || baseline === null || next === baseline.persistTelemetry) return
-    setPersistTelemetry(next)
-    setSaving(true)
-    try {
-      const res = await updateDevice(id, { persistTelemetry: next })
-      const updated = res.device
-      setDevice(updated)
-      setPersistTelemetry(updated.persistTelemetry)
-      setBaseline({ ...baseline, persistTelemetry: updated.persistTelemetry })
-      toast.success("Settings saved")
-    } catch (err) {
-      toast.error((err as Error).message)
-      setPersistTelemetry(baseline.persistTelemetry)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Auto-record toggle. Same optimistic-flip + rollback-on-error pattern as
-  // telemetry persistence. When on, the backend spawns a cloud viewer-recorder
-  // for each stream as it goes live (and stops it when the stream drops).
-  async function commitAutoRecord(next: boolean) {
-    if (saving || baseline === null || next === baseline.autoRecord) return
-    setAutoRecord(next)
-    setSaving(true)
-    try {
-      const res = await updateDevice(id, { autoRecord: next })
-      const updated = res.device
-      setDevice(updated)
-      setAutoRecord(updated.autoRecord)
-      setBaseline({ ...baseline, autoRecord: updated.autoRecord })
-      toast.success("Settings saved")
-    } catch (err) {
-      toast.error((err as Error).message)
-      setAutoRecord(baseline.autoRecord)
     } finally {
       setSaving(false)
     }
@@ -794,43 +741,6 @@ function DeviceSettingsPage() {
 
                   <Field orientation="horizontal">
                     <FieldContent>
-                      <FieldLabel htmlFor="device-persist-telemetry">
-                        Save telemetry to database
-                      </FieldLabel>
-                      <FieldDescription>
-                        Off by default. The device keeps streaming for live view
-                        either way; enable this to also persist telemetry history.
-                      </FieldDescription>
-                    </FieldContent>
-                    <Switch
-                      id="device-persist-telemetry"
-                      checked={persistTelemetry}
-                      disabled={saving}
-                      onCheckedChange={commitPersist}
-                    />
-                  </Field>
-
-                  <Field orientation="horizontal">
-                    <FieldContent>
-                      <FieldLabel htmlFor="device-auto-record">
-                        Auto-record streams
-                      </FieldLabel>
-                      <FieldDescription>
-                        Off by default. When on, a cloud recorder captures each
-                        stream to S3 while it is live. You can also start/stop
-                        recordings manually from the Active Streams tab.
-                      </FieldDescription>
-                    </FieldContent>
-                    <Switch
-                      id="device-auto-record"
-                      checked={autoRecord}
-                      disabled={saving}
-                      onCheckedChange={commitAutoRecord}
-                    />
-                  </Field>
-
-                  <Field orientation="horizontal">
-                    <FieldContent>
                       <FieldLabel htmlFor="device-gnss-ant-bias">
                         Power the GPS antenna
                       </FieldLabel>
@@ -1118,9 +1028,7 @@ function DeviceSettingsPage() {
           <CardDescription>
             Capture telemetry and video on the device itself — recording
             continues while offline and uploads to the cloud whenever the
-            device is connected. This is separate from &quot;Auto-record
-            streams&quot; above, which records in the cloud and only works
-            while the device is streaming live.
+            device is connected. Recorded runs appear under Media Recordings.
           </CardDescription>
         </CardHeader>
         <CardContent>

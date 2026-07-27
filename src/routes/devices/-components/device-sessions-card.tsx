@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
+import {
+  ArrowDownUpIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FilterIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -19,6 +18,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -30,8 +35,13 @@ import {
 } from "@/components/ui/table"
 import {
   DataTablePagination,
+  DataTableToolbar,
+  DateRangeFilter,
+  downloadCsv,
   formatBytes,
   formatDuration,
+  toCsv,
+  type DateRangeMode,
 } from "@/components/data-table"
 import {
   deleteDeviceSession,
@@ -40,6 +50,8 @@ import {
   getSegmentPlaybackUrl,
   type MediaSegment,
   type MediaSession,
+  type MediaSessionsListParams,
+  type MediaSessionStatus,
 } from "@/lib/api"
 import {
   getDeviceSessionsResponseSchema,
@@ -53,7 +65,68 @@ import {
 } from "@/lib/replay/runs"
 
 const POLL_MS = 5000
-const PAGE_SIZE = 25
+
+export const SESSION_PAGE_SIZES = [25, 50, 100, 200]
+export const DEFAULT_SESSION_PAGE_SIZE = 25
+
+// The list endpoint sorts on one of two columns and takes a SEPARATE order
+// param — it is not free-form column sorting (device-sessions.ts
+// `parseListParams({ sortable: ['startedAt', 'createdAt'] })`).
+export type SessionSortKey = "startedAt" | "createdAt"
+export const SESSION_SORT_KEYS: SessionSortKey[] = ["startedAt", "createdAt"]
+
+// The REAL on-device session statuses (api.ts `MediaSessionStatus`). The cloud
+// recorder's recording/stopping/completed/failed do not exist here. "open" is
+// what the table badges as "Receiving" and "closed" as "Complete", so the
+// filter exposes the raw status under the labels the rows already show.
+export const SESSION_STATUSES: MediaSessionStatus[] = ["open", "closed"]
+const STATUS_LABEL: Record<MediaSessionStatus, string> = {
+  open: "receiving",
+  closed: "complete",
+}
+const STATUS_OPTIONS: readonly (MediaSessionStatus | "any")[] = [
+  "any",
+  ...SESSION_STATUSES,
+]
+
+const SORT_OPTIONS: {
+  sort: SessionSortKey
+  order: "asc" | "desc"
+  label: string
+}[] = [
+  { sort: "startedAt", order: "desc", label: "started ↓" },
+  { sort: "startedAt", order: "asc", label: "started ↑" },
+  { sort: "createdAt", order: "desc", label: "received ↓" },
+  { sort: "createdAt", order: "asc", label: "received ↑" },
+]
+
+// CSV export pages the same server filters at 200/request up to this many rows
+// (same shape the cloud table used) — a hard stop so a device with a huge
+// history can't spin forever.
+const EXPORT_PAGE_LIMIT = 200
+const EXPORT_CAP = 5000
+
+// Debounce for the stream-key box: ⚠️ `DataTableToolbar`'s search slot is a
+// plain controlled Input with no debounce of its own, and unlike the cloud
+// table's client-side search this one is a SERVER param — so the delay has to
+// live here or every keystroke becomes a request.
+const SEARCH_DEBOUNCE_MS = 300
+
+// URL-encoded filter state. Every field is optional: absent = the default, so
+// the unfiltered view has a clean URL.
+export interface SessionsSearch {
+  page?: number
+  size?: number
+  order?: "asc" | "desc"
+  sort?: SessionSortKey
+  status?: MediaSessionStatus // omitted => "any"
+  // ⚠️ Server-side EXACT match (`eq(mediaSessions.streamKey, …)`), not a
+  // substring search — see the placeholder + filtered-empty hint.
+  streamKey?: string
+  range?: DateRangeMode
+  from?: string
+  to?: string
+}
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -75,11 +148,20 @@ const HEAD =
 // (composite: every camera with coverage joins automatically); expand a run
 // for its per-camera sessions (single-cam replay, delete), and a session for
 // its ordered segment index with per-segment playback.
-export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
+export function DeviceSessionsCard({
+  deviceId,
+  search,
+  onSearchChange,
+}: {
+  deviceId: string
+  search: SessionsSearch
+  // Patch the URL search params. Any filter change must also clear `page`.
+  onSearchChange: (patch: Partial<SessionsSearch>) => void
+}) {
   const [sessions, setSessions] = useState<MediaSession[] | null>(null)
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const [expandedRunKey, setExpandedRunKey] = useState<string | null>(null)
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(
@@ -99,6 +181,45 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
   const [deleting, setDeleting] = useState<MediaSession | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
 
+  // --- Filter state, derived from the URL (absent param = default) ---
+  const size = search.size ?? DEFAULT_SESSION_PAGE_SIZE
+  const page = search.page ?? 1
+  const order = search.order ?? "desc"
+  const sort: SessionSortKey = search.sort ?? "startedAt"
+  const status = search.status
+  const streamKey = search.streamKey
+  const rangeMode: DateRangeMode = search.range ?? "all"
+  // "all" ignores from/to (shows the latest sessions).
+  const fromIso = rangeMode === "all" ? undefined : search.from
+  const toIso = rangeMode === "all" ? undefined : search.to
+  const isFiltered =
+    status !== undefined || streamKey !== undefined || rangeMode !== "all"
+
+  // Local draft for the stream-key box so typing stays responsive while the
+  // URL/server param lags by the debounce. Resyncs when the param changes from
+  // the outside (Clear filters, Back).
+  const [streamQuery, setStreamQuery] = useState(streamKey ?? "")
+  const [syncedStreamKey, setSyncedStreamKey] = useState(streamKey)
+  if (syncedStreamKey !== streamKey) {
+    // Adjust-during-render (React's documented alternative to a sync effect).
+    setSyncedStreamKey(streamKey)
+    setStreamQuery(streamKey ?? "")
+  }
+
+  // Every stream key this device has been seen recording, accumulated across
+  // loads. Used to make the exact-match semantics discoverable when a filter
+  // returns nothing (the current page is empty at that point, so it cannot be
+  // derived from `sessions`).
+  const [knownStreamKeys, setKnownStreamKeys] = useState<string[]>([])
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    },
+    []
+  )
+
   const refreshSegments = useCallback(
     async (sessionId: string) => {
       const raw = await getSessionSegments(deviceId, sessionId)
@@ -112,23 +233,51 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
     [deviceId]
   )
 
+  // Server-side filtering (decision H): status / streamKey / from / to / sort
+  // all go to `GET /devices/{id}/sessions`, so this scales as a device's
+  // session count grows. Only run *clustering* is client-side, over whatever
+  // this page returns.
+  const serverParams = useMemo(
+    (): MediaSessionsListParams => ({
+      limit: size,
+      offset: (page - 1) * size,
+      order,
+      sort,
+      status,
+      streamKey,
+      from: fromIso,
+      to: toIso,
+    }),
+    [size, page, order, sort, status, streamKey, fromIso, toIso]
+  )
+
+  // ⚠️ Ordering guard. The 5 s poll means a request with the OLD filters is
+  // routinely in flight when a filter changes; without this, the stale
+  // response lands second and silently overwrites the filtered page (observed:
+  // `?streamKey=cam0` fired, list still showed all 84 sessions). Only the
+  // newest request may write state.
+  const reqSeq = useRef(0)
+
   const refresh = useCallback(async () => {
+    const seq = ++reqSeq.current
     try {
-      const raw = await getDeviceSessions(deviceId, {
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-        order: "desc",
-        sort: "startedAt",
-      })
+      const raw = await getDeviceSessions(deviceId, serverParams)
+      if (seq !== reqSeq.current) return
       const parsed = getDeviceSessionsResponseSchema.safeParse(raw)
       if (!parsed.success) throw new Error("Unexpected sessions response")
       setSessions(parsed.data.sessions)
       setTotal(parsed.data.page?.total ?? parsed.data.sessions.length)
+      setKnownStreamKeys((prev) => {
+        const next = new Set(prev)
+        for (const s of parsed.data.sessions) next.add(s.streamKey)
+        return next.size === prev.length ? prev : [...next].sort()
+      })
       setLoadError(null)
     } catch (err) {
+      if (seq !== reqSeq.current) return
       setLoadError((err as Error).message)
     }
-  }, [deviceId, page])
+  }, [deviceId, serverParams])
 
   // 5 s polling (same convention as the recordings table) so open sessions'
   // rollups keep growing while a backlog drains. The expanded session's
@@ -144,8 +293,120 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
 
   // Runs are clustered within the fetched page (R9: client-side first; a run
   // straddling a page boundary shows as two partial runs — move server-side
-  // only if that proves annoying on real data).
-  const runs = useMemo(() => clusterRuns(sessions ?? []), [sessions])
+  // only if that proves annoying on real data). With filters applied this now
+  // also means a run can show fewer cameras than it recorded (decision H:
+  // "cluster whatever comes back") — the toolbar note says so.
+  // `clusterRuns` re-sorts internally and always returns newest-first, so it is
+  // safe under either `order`; flip it so the rendered order matches the sort
+  // the user asked the server for.
+  const runs = useMemo(() => {
+    const clustered = clusterRuns(sessions ?? [])
+    return order === "asc" ? clustered.slice().reverse() : clustered
+  }, [sessions, order])
+
+  // --- Filter mutations. Every one resets to page 1: offsets are meaningless
+  // across a changed result set. ---
+  const update = useCallback(
+    (patch: Partial<SessionsSearch>) => {
+      setExpandedRunKey(null)
+      setExpandedSessionId(null)
+      onSearchChange(patch)
+    },
+    [onSearchChange]
+  )
+
+  const setStatus = (s: MediaSessionStatus | "any") =>
+    update({ status: s === "any" ? undefined : s, page: undefined })
+  const setSort = (s: SessionSortKey, o: "asc" | "desc") =>
+    update({
+      sort: s === "startedAt" ? undefined : s,
+      order: o === "desc" ? undefined : o,
+      page: undefined,
+    })
+  const clearFilters = () =>
+    update({
+      status: undefined,
+      streamKey: undefined,
+      range: undefined,
+      from: undefined,
+      to: undefined,
+      page: undefined,
+    })
+
+  // Debounced push of the stream-key box into the URL (and thus the request).
+  const onStreamQueryChange = (value: string) => {
+    setStreamQuery(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      const next = value.trim()
+      update({ streamKey: next === "" ? undefined : next, page: undefined })
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  async function exportCsv() {
+    setExporting(true)
+    try {
+      // Page the *server* filters, then serialize one row per session — the
+      // unit the server actually filters and paginates (runs are a client-side
+      // grouping, so exporting them would misrepresent the filter).
+      const all: MediaSession[] = []
+      let off = 0
+      let grandTotal = Infinity
+      while (off < grandTotal && all.length < EXPORT_CAP) {
+        const raw = await getDeviceSessions(deviceId, {
+          ...serverParams,
+          limit: EXPORT_PAGE_LIMIT,
+          offset: off,
+        })
+        const parsed = getDeviceSessionsResponseSchema.safeParse(raw)
+        if (!parsed.success) break
+        all.push(...parsed.data.sessions)
+        grandTotal = parsed.data.page?.total ?? parsed.data.sessions.length
+        if (parsed.data.sessions.length === 0) break
+        off += EXPORT_PAGE_LIMIT
+      }
+      const header = [
+        "sessionId",
+        "streamKey",
+        "startedAt",
+        "endedAt",
+        "status",
+        "timeSource",
+        "durationMs",
+        "sizeBytes",
+        "segments",
+        "width",
+        "height",
+        "fps",
+        "codec",
+      ]
+      downloadCsv(
+        toCsv(
+          header,
+          all.map((s) => [
+            s.id,
+            s.streamKey,
+            s.startedAt,
+            s.endedAt ?? "",
+            s.status,
+            s.timeSource ?? "",
+            s.totalDurationMs,
+            s.totalBytes,
+            s.segmentCount,
+            s.width ?? "",
+            s.height ?? "",
+            s.fps ?? "",
+            s.codec ?? "",
+          ])
+        ),
+        `on-device-sessions-${deviceId}.csv`
+      )
+    } catch (err) {
+      toast.error(`Export failed: ${(err as Error).message}`)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   function toggleRun(run: RecordingRun) {
     const next = expandedRunKey === run.key ? null : run.key
@@ -206,18 +467,98 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
 
   const loading = sessions === null && loadError === null
 
+  const sortLabel =
+    SORT_OPTIONS.find((o) => o.sort === sort && o.order === order)?.label ??
+    "started ↓"
+
+  const statusFilter = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7">
+          <FilterIcon />
+          status: {status ? STATUS_LABEL[status] : "any"}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {STATUS_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt} onSelect={() => setStatus(opt)}>
+            {opt === "any" ? "any" : STATUS_LABEL[opt]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  const sortFilter = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7">
+          <ArrowDownUpIcon />
+          sort: {sortLabel}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {SORT_OPTIONS.map((o) => (
+          <DropdownMenuItem
+            key={o.label}
+            onSelect={() => setSort(o.sort, o.order)}
+          >
+            {o.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <Card className="gap-0 overflow-hidden py-0">
-      <CardHeader className="px-4 pt-4 pb-3">
-        <CardTitle className="text-sm">On-device recordings</CardTitle>
-        <CardDescription>
-          Recorded on the device itself (works offline) and uploaded when
-          connected. One row per recording run — all cameras that were rolling
-          together. Replay plays every camera in sync; expand a run for its
-          per-camera sessions.
-        </CardDescription>
-      </CardHeader>
       <CardContent className="flex flex-col p-0">
+        {/* Filters run SERVER-side on sessions; runs are then clustered from
+            whatever the page returns (decision H), so a filtered run can show
+            fewer cameras than it recorded and page sizes look uneven. */}
+        <div className="flex flex-col gap-2 border-b border-border px-4 pt-4 pb-3">
+          <DataTableToolbar
+            filters={
+              <>
+                <DateRangeFilter
+                  value={{ mode: rangeMode, from: search.from, to: search.to }}
+                  onChange={(v) =>
+                    update({
+                      range: v.mode === "all" ? undefined : v.mode,
+                      from: v.from,
+                      to: v.to,
+                      page: undefined,
+                    })
+                  }
+                />
+                {statusFilter}
+                {sortFilter}
+              </>
+            }
+            search={{
+              value: streamQuery,
+              onChange: onStreamQueryChange,
+              placeholder: "Stream key, e.g. cam0",
+            }}
+            searchAlign="right"
+          />
+          {isFiltered ? (
+            <p className="text-xs text-muted-foreground">
+              Filtering {total.toLocaleString()} matching session
+              {total === 1 ? "" : "s"}; runs are grouped from the sessions on
+              this page.{" "}
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-foreground"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            </p>
+          ) : null}
+        </div>
         {loadError && runs.length === 0 ? (
           <p className="px-4 py-6 text-sm text-destructive">{loadError}</p>
         ) : loading ? (
@@ -225,6 +566,34 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-6 w-full" />
+          </div>
+        ) : runs.length === 0 && isFiltered ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No sessions match these filters.
+            </p>
+            {streamKey && knownStreamKeys.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Stream key is an exact match. This device has recorded:{" "}
+                {knownStreamKeys.map((k, i) => (
+                  <span key={k}>
+                    {i > 0 ? ", " : ""}
+                    <button
+                      type="button"
+                      className="font-mono underline underline-offset-2 hover:text-foreground"
+                      onClick={() =>
+                        update({ streamKey: k, page: undefined })
+                      }
+                    >
+                      {k}
+                    </button>
+                  </span>
+                ))}
+              </p>
+            ) : null}
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
           </div>
         ) : runs.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
@@ -545,20 +914,34 @@ export function DeviceSessionsCard({ deviceId }: { deviceId: string }) {
             </TableBody>
           </Table>
         )}
-        {total > PAGE_SIZE ? (
+        {/* Pagination counts SESSIONS, not runs (decision H) — the server
+            filters and pages sessions, and one run is N per-camera sessions. */}
+        {total > 0 ? (
           <div className="border-t border-border px-3 py-3">
             <DataTablePagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={size}
               total={total}
               rowsOnPage={sessions?.length ?? 0}
-              pageSizes={[PAGE_SIZE]}
-              onPageChange={(p) => {
-                setExpandedRunKey(null)
-                setExpandedSessionId(null)
-                setPage(p)
-              }}
-              onPageSizeChange={() => {}}
+              pageSizes={SESSION_PAGE_SIZES}
+              onPageChange={(p) => update({ page: p <= 1 ? undefined : p })}
+              onPageSizeChange={(s) =>
+                update({
+                  size: s === DEFAULT_SESSION_PAGE_SIZE ? undefined : s,
+                  page: undefined,
+                })
+              }
+              onExportCsv={() => void exportCsv()}
+              exporting={exporting}
+              exportDisabled={total === 0}
+              left={
+                <span className="text-xs text-muted-foreground">
+                  {runs.length.toLocaleString()} run
+                  {runs.length === 1 ? "" : "s"} from{" "}
+                  {(sessions?.length ?? 0).toLocaleString()} session
+                  {sessions?.length === 1 ? "" : "s"} on this page
+                </span>
+              }
             />
           </div>
         ) : null}

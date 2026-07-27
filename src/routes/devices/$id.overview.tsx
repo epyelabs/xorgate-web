@@ -27,6 +27,7 @@ import {
 } from "@/lib/schemas"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { RecentSessionsSection } from "./-components/recent-sessions-section"
 
 // The device Overview: a fast, at-a-glance landing dashboard assembled from the
 // same hooks/components the deeper tabs use. It deliberately does NOT mount the
@@ -203,9 +204,13 @@ function DeviceOverviewPage() {
         />
       </section>
 
-      {/* The "Recent media recordings" section that sat here rendered the cloud
-          recorder's table and went with it. Phase 2 of the recorder-removal plan
-          refills this slot with a compact recent ON-DEVICE sessions list. */}
+      {/* Recent ON-DEVICE recordings (recorder-removal decision G) — the slot
+          the cloud recorder's table used to occupy, same header-above-card
+          layout as above. */}
+      <RecentSessionsSection
+        deviceId={id}
+        recordingEnabled={device?.recordingConfig?.video?.enabled}
+      />
     </div>
   )
 }

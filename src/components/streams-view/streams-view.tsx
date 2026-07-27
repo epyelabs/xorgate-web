@@ -40,9 +40,6 @@ export interface StreamsViewProps {
   // changes. The view reports interactions (false) and Recenter clicks (true).
   following: boolean
   onFollowingChange: (following: boolean) => void
-  // Status chrome above the telemetry column/sections (e.g. the live page's
-  // recording indicator). Rendered as-is; pass null to omit.
-  indicatorSlot?: ReactNode
   // Video tiles for this page's medium (live KVS grid / replay MSE tiles).
   // The section wrapper only renders when non-null, mirroring the live page's
   // videoCaps.length gate.
@@ -72,7 +69,6 @@ export function StreamsView({
   course,
   following,
   onFollowingChange,
-  indicatorSlot,
   videoSlot,
   replayTrace,
   gpsEmptyLabel = "Waiting for GPS fix…",
@@ -143,8 +139,6 @@ export function StreamsView({
             the column fills the tab instead of trailing off into empty space. It
             only scrolls if that leftover runs out. */}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          {indicatorSlot}
-
           <TelemetryPanel caps={caps} latest={latest} />
 
           <ImuPanel caps={caps} latest={latest} view={imuView} />
@@ -159,8 +153,6 @@ export function StreamsView({
 
   return (
     <>
-      {indicatorSlot}
-
       {videoSlot != null ? <section>{videoSlot}</section> : null}
 
       {hasTelemetry ? (

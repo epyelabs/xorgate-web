@@ -21,7 +21,6 @@ import {
   StreamsView,
 } from "@/components/streams-view/streams-view"
 import { LiveVideoGrid } from "@/components/live-video-grid"
-import { DeviceRecordingIndicator } from "@/components/device-recording-indicator"
 
 export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: () => {
@@ -34,8 +33,8 @@ export const Route = createFileRoute("/devices/$id/streams")({
 })
 
 // Live page for the shared StreamsView (R8): owns the device/model fetch, the
-// live telemetry feed, and the live-only slots (recording indicator, KVS video
-// grid); the Card/Map layouts themselves live in components/streams-view.
+// live telemetry feed, and the live-only KVS video grid; the Card/Map layouts
+// themselves live in components/streams-view.
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
@@ -50,7 +49,6 @@ function DeviceStreamsPage() {
   const {
     latest,
     history,
-    recording,
     media,
     status,
     error: connError,
@@ -118,17 +116,27 @@ function DeviceStreamsPage() {
     }
   }
 
-  const indicatorSlot = (
-    <DeviceRecordingIndicator recording={recording} media={media} />
-  )
+  // On-device video recording is a single device-level flag in the payload
+  // (media.recording.value), not per-camera — so every tile shows the dot while
+  // the device is recording, which is correct: it records all configured cameras.
+  const recordingOnDevice = media?.recording?.value === true
   // The section wrapper around the grid comes from StreamsView; the null here
   // (no video capabilities) suppresses it, matching the old inline gate.
   const videoSlot =
     videoCaps.length > 0 ? (
       viewType === "map" ? (
-        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} showRecordAll={false} />
+        <LiveVideoGrid
+          deviceId={id}
+          videoCaps={videoCaps}
+          recordingOnDevice={recordingOnDevice}
+        />
       ) : (
-        <LiveVideoGrid deviceId={id} videoCaps={videoCaps} title="Media" />
+        <LiveVideoGrid
+          deviceId={id}
+          videoCaps={videoCaps}
+          title="Media"
+          recordingOnDevice={recordingOnDevice}
+        />
       )
     ) : null
 
@@ -144,7 +152,6 @@ function DeviceStreamsPage() {
         course={course}
         following={following}
         onFollowingChange={setFollowing}
-        indicatorSlot={indicatorSlot}
         videoSlot={videoSlot}
       />
     )
@@ -172,7 +179,6 @@ function DeviceStreamsPage() {
           course={course}
           following={following}
           onFollowingChange={setFollowing}
-          indicatorSlot={indicatorSlot}
           videoSlot={videoSlot}
         />
       )}

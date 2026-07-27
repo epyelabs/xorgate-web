@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusDot } from "@/components/data-table/status-dot"
+import { DeviceBacklogBadge } from "@/components/device-backlog-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ApiError,
@@ -361,8 +362,11 @@ function DeviceLayout() {
           )} */}
         </header>
 
-        <div className="border-b border-border">
-          <Tabs value={activeTab}>
+        {/* Tabs left, ambient on-device upload backlog right: the badge costs no
+            vertical space here and stays visible from every tab. min-w-0 lets the
+            tab list shrink/scroll on narrow viewports instead of wrapping. */}
+        <div className="flex items-center justify-between gap-2 border-b border-border">
+          <Tabs value={activeTab} className="min-w-0">
             <TabsList variant="line">
               <TabsTrigger value="overview" asChild>
                 <Link to="/devices/$id/overview" params={{ id }}>
@@ -402,6 +406,7 @@ function DeviceLayout() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          <DeviceBacklogBadge recording={recording} />
         </div>
       </div>
 

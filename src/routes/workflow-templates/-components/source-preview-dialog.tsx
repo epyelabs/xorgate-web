@@ -8,19 +8,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getRecordingPlaybackUrl } from "@/lib/api"
+import { getSegmentPlaybackUrl, getSessionSegments } from "@/lib/api"
 import type { VideoBinding } from "./simulator-types"
 import { bindingLabel } from "./simulator-types"
 
 const DESCRIPTION: Record<VideoBinding["kind"], string> = {
   "video-file": "Local preview — this file is not uploaded.",
-  "video-recording": "Playback from S3 (link expires).",
+  "video-session": "First segment of the session (link expires).",
   "video-live": "Live device stream (simulated preview).",
   "video-webcam": "Live camera preview — nothing is uploaded.",
 }
 
 // Plays the video behind a bound source. Uploaded files play straight from their
-// in-browser object URL; device recordings fetch a fresh presigned S3 URL on open;
+// in-browser object URL; an on-device session previews its FIRST segment via a
+// fresh presigned S3 URL (a session is N standalone ~60 s files, so there is no
+// single object to play — the Replay tab is where a whole session is scrubbed);
 // the webcam re-acquires the local camera; a live device stream shows a simulated
 // live panel. Only opened for video bindings.
 export function SourcePreviewDialog({
@@ -33,13 +35,13 @@ export function SourcePreviewDialog({
   onOpenChange: (open: boolean) => void
 }) {
   // Uploaded files play straight from their object URL (known synchronously);
-  // only device recordings need an async presigned URL, tracked here.
+  // only session segments need an async presigned URL, tracked here.
   const [remoteUrl, setRemoteUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const webcamRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    if (!open || !binding || binding.kind !== "video-recording") return
+    if (!open || !binding || binding.kind !== "video-session") return
     let cancelled = false
     /* eslint-disable react-hooks/set-state-in-effect */
     setRemoteUrl(null)
@@ -47,9 +49,20 @@ export function SourcePreviewDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { url: playUrl } = await getRecordingPlaybackUrl(
+        // Chronologically first segment — NOT seq 0, which retention may have
+        // evicted (and seq ordering is unreliable for reopened sessions).
+        const { segments } = await getSessionSegments(
           binding.deviceId,
-          binding.recording.id,
+          binding.session.id,
+        )
+        const first = [...segments].sort((a, b) =>
+          a.startTs < b.startTs ? -1 : 1,
+        )[0]
+        if (!first) throw new Error("This session has no stored segments")
+        const { url: playUrl } = await getSegmentPlaybackUrl(
+          binding.deviceId,
+          binding.session.id,
+          first.seq,
         )
         if (!cancelled) setRemoteUrl(playUrl)
       } catch (err) {

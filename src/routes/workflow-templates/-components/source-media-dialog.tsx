@@ -8,14 +8,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { RecordingsList } from "@/components/recordings-list"
-import { getDeviceRecordings, type Device, type Recording } from "@/lib/api"
+import { SessionsList } from "@/components/session-pickers"
+import { getDeviceSessions, type Device, type MediaSession } from "@/lib/api"
 import { DeviceRadioList } from "./device-radio-list"
 import { deviceLabel, type SourceBinding } from "./simulator-types"
 
+// How many of the device's most recent sessions the picker offers. The Media
+// tab is the place to go hunting through everything; this is "pick something
+// recent to simulate over".
+const SESSION_PAGE = 50
+
 // "Select media from device" for a video source: pick a device, then one of its
-// recordings. Confirms into a `video-recording` binding. Read-only — lists real
-// devices/recordings but never starts or mutates anything.
+// on-device recording sessions. Confirms into a `video-session` binding, which
+// the backend resolves to that session's ordered segment list (the same media
+// path a triggered run takes). Read-only — lists real devices/sessions but
+// never starts or mutates anything.
 export function SourceMediaDialog({
   open,
   onOpenChange,
@@ -23,42 +30,43 @@ export function SourceMediaDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (binding: Extract<SourceBinding, { kind: "video-recording" }>) => void
+  onConfirm: (binding: Extract<SourceBinding, { kind: "video-session" }>) => void
 }) {
   const [device, setDevice] = useState<Device | null>(null)
-  const [recordings, setRecordings] = useState<Recording[] | null>(null)
-  const [recError, setRecError] = useState<string | null>(null)
-  const [recId, setRecId] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<MediaSession[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
   // Reset selection each time the dialog opens.
   useEffect(() => {
     if (!open) return
     /* eslint-disable react-hooks/set-state-in-effect */
     setDevice(null)
-    setRecordings(null)
-    setRecError(null)
-    setRecId(null)
+    setSessions(null)
+    setError(null)
+    setSessionId(null)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open])
 
-  // Load the chosen device's recordings.
+  // Load the chosen device's sessions, newest first (server-side sort).
   useEffect(() => {
     if (!open || !device) return
     let cancelled = false
     /* eslint-disable react-hooks/set-state-in-effect */
-    setRecordings(null)
-    setRecError(null)
-    setRecId(null)
+    setSessions(null)
+    setError(null)
+    setSessionId(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { recordings: recs } = await getDeviceRecordings(device.id)
-        if (!cancelled)
-          setRecordings(
-            [...recs].sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1)),
-          )
+        const { sessions: rows } = await getDeviceSessions(device.id, {
+          limit: SESSION_PAGE,
+          sort: "startedAt",
+          order: "desc",
+        })
+        if (!cancelled) setSessions(rows)
       } catch (err) {
-        if (!cancelled) setRecError((err as Error).message)
+        if (!cancelled) setError((err as Error).message)
       }
     })()
     return () => {
@@ -66,16 +74,16 @@ export function SourceMediaDialog({
     }
   }, [open, device])
 
-  const selectedRec = recordings?.find((r) => r.id === recId) ?? null
-  const canConfirm = !!device && !!selectedRec
+  const selected = sessions?.find((s) => s.id === sessionId) ?? null
+  const canConfirm = !!device && !!selected
 
   const handleConfirm = () => {
-    if (!device || !selectedRec) return
+    if (!device || !selected) return
     onConfirm({
-      kind: "video-recording",
+      kind: "video-session",
       deviceId: device.id,
       deviceName: deviceLabel(device),
-      recording: selectedRec,
+      session: selected,
     })
     onOpenChange(false)
   }
@@ -86,7 +94,8 @@ export function SourceMediaDialog({
         <DialogHeader>
           <DialogTitle>Select media from device</DialogTitle>
           <DialogDescription>
-            Pick a device, then one of its recordings to feed this video source.
+            Pick a device, then one of its on-device recording sessions to feed
+            this video source.
           </DialogDescription>
         </DialogHeader>
 
@@ -102,16 +111,19 @@ export function SourceMediaDialog({
 
           {device ? (
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium">Recording</span>
-              <RecordingsList
-                recordings={recordings}
-                recError={recError}
-                selectedIds={recId ? [recId] : []}
+              <span className="text-xs font-medium">Recording session</span>
+              <SessionsList
+                sessions={sessions}
+                error={error}
+                selectedIds={sessionId ? [sessionId] : []}
                 single
-                onToggle={(id) => setRecId((prev) => (prev === id ? null : id))}
+                onToggle={(id) =>
+                  setSessionId((prev) => (prev === id ? null : id))
+                }
               />
               <p className="text-xs text-muted-foreground">
-                Only completed recordings can be selected.
+                The run decodes every segment in the session, each anchored at
+                its own recorded timestamp.
               </p>
             </div>
           ) : null}
@@ -126,7 +138,7 @@ export function SourceMediaDialog({
             Cancel
           </Button>
           <Button type="button" onClick={handleConfirm} disabled={!canConfirm}>
-            Use recording
+            Use session
           </Button>
         </DialogFooter>
       </DialogContent>

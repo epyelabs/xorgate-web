@@ -35,8 +35,8 @@ import {
 } from "@/lib/device-workflow-schemas"
 
 // Narrow each discriminated-union member so the field editors stay type-safe.
-type RecordingTrigger = Extract<AttachmentTrigger, { type: "recording_saved" }>
 type SessionTrigger = Extract<AttachmentTrigger, { type: "session_completed" }>
+type SegmentTrigger = Extract<AttachmentTrigger, { type: "segment_uploaded" }>
 type ScheduleTrigger = Extract<AttachmentTrigger, { type: "schedule" }>
 type ConditionTrigger = Extract<
   AttachmentTrigger,
@@ -44,8 +44,8 @@ type ConditionTrigger = Extract<
 >
 
 const TRIGGER_ICON: Record<AttachmentTriggerType, LucideIcon> = {
-  recording_saved: VideoIcon,
   session_completed: HardDriveDownloadIcon,
+  segment_uploaded: VideoIcon,
   schedule: ClockIcon,
   telemetry_condition: GaugeIcon,
 }
@@ -60,8 +60,8 @@ const OPERATOR_OPTIONS: { value: ConditionOperator; label: string }[] = [
 ]
 
 const TRIGGER_ORDER: AttachmentTriggerType[] = [
-  "recording_saved",
   "session_completed",
+  "segment_uploaded",
   "schedule",
   "telemetry_condition",
 ]
@@ -73,8 +73,8 @@ function makeDefaultTrigger(
   metricOptions: string[],
 ): AttachmentTrigger {
   switch (type) {
-    case "recording_saved":
     case "session_completed":
+    case "segment_uploaded":
       return { type, streamKeys: [] }
     case "schedule":
       return {
@@ -134,9 +134,9 @@ export function Segmented<T extends string>({
   )
 }
 
-// Shared by recording_saved and session_completed — both are just a
+// Shared by session_completed and segment_uploaded — both are just a
 // stream-key subset picker.
-function RecordingFields<T extends RecordingTrigger | SessionTrigger>({
+function StreamKeyFields<T extends SessionTrigger | SegmentTrigger>({
   value,
   onChange,
   streamKeys,
@@ -217,8 +217,8 @@ function RecordingFields<T extends RecordingTrigger | SessionTrigger>({
       </div>
       <p className="text-xs text-muted-foreground">
         {value.type === "session_completed"
-          ? "Runs once an on-device recording session finishes uploading (may run again if late segments arrive)."
-          : "Runs after each recording finishes on the selected streams."}
+          ? "Runs once an on-device recording session finishes uploading, over the whole session (may run again if late segments arrive)."
+          : "Runs as each ~60s chunk arrives, over that chunk only — near-realtime, one run per chunk per stream."}
       </p>
     </div>
   )
@@ -332,7 +332,7 @@ function ScheduleFields({
       <div className="rounded-md border border-border/70 p-2.5">
         <ContextBlock
           label="Media context"
-          unit="recordings"
+          unit="sessions"
           value={value.mediaContext}
           onChange={(c) => onChange({ ...value, mediaContext: c })}
         />
@@ -541,8 +541,8 @@ export function TriggersEditor({
                 <Trash2Icon />
               </Button>
             </div>
-            {t.type === "recording_saved" || t.type === "session_completed" ? (
-              <RecordingFields
+            {t.type === "session_completed" || t.type === "segment_uploaded" ? (
+              <StreamKeyFields
                 value={t}
                 onChange={(n) => update(i, n)}
                 streamKeys={streamKeys}

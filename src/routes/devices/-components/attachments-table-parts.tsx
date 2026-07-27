@@ -12,8 +12,8 @@ const TRIGGER_META: Record<
   AttachmentTriggerType,
   { label: string; icon: LucideIcon }
 > = {
-  recording_saved: { label: "On recording", icon: VideoIcon },
   session_completed: { label: "On device session", icon: HardDriveDownloadIcon },
+  segment_uploaded: { label: "On each chunk", icon: VideoIcon },
   schedule: { label: "Scheduled", icon: ClockIcon },
   telemetry_condition: { label: "On condition", icon: GaugeIcon },
 }

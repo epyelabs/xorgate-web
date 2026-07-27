@@ -138,8 +138,10 @@ export async function resolveApiBindings(
         api[nodeId] = { kind: "telemetry_csv", uploadKey: key }
         break
       }
-      case "video-recording":
-        api[nodeId] = { kind: "recording", recordingId: binding.recording.id }
+      case "video-session":
+        // The backend resolves the session to its ordered segment list and
+        // feeds the engine the same per-segment binding a triggered run gets.
+        api[nodeId] = { kind: "session", sessionId: binding.session.id }
         break
       case "device-telemetry": {
         const w = binding.window ?? { mode: "lastN" as const, n: 100 }
@@ -165,7 +167,7 @@ export async function resolveApiBindings(
       case "video-live":
         throw new BindingResolveError(
           nodeId,
-          "Live device streams need device-side frame publishing (not yet enabled); bind a file, recording, or webcam",
+          "Live device streams need device-side frame publishing (not yet enabled); bind a file, an on-device session, or the webcam",
         )
     }
   }

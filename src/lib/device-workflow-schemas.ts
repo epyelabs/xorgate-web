@@ -14,8 +14,8 @@ import { metricLabel } from "./telemetry-meta"
 // table and the "Add trigger" menu. `manual` and `telemetry_saved` were dropped:
 // manual survives only as the ad-hoc "Run now" action, not a configured trigger.
 export const attachmentTriggerTypeSchema = z.enum([
-  "recording_saved", // auto after a recording finishes on one or more streams
   "session_completed", // auto after a device-recorded session finishes uploading
+  "segment_uploaded", // auto per ~60s chunk, as each one lands (near-realtime)
   "schedule", // recurring (cron) over a chosen telemetry / media context window
   "telemetry_condition", // when persisted telemetry crosses configured thresholds
 ])
@@ -48,8 +48,8 @@ export const TRIGGER_TYPE_LABELS: Record<
   z.infer<typeof attachmentTriggerTypeSchema>,
   string
 > = {
-  recording_saved: "After a recording is saved",
   session_completed: "After an on-device session completes",
+  segment_uploaded: "As each recorded chunk arrives",
   schedule: "On a schedule",
   telemetry_condition: "On telemetry condition",
 }
@@ -81,15 +81,19 @@ export const contextWindowSchema = z.discriminatedUnion("mode", [
 // How an attached workflow decides to run. An attachment holds one or more of
 // these; a run fires when ANY of them matches.
 export const attachmentTriggerSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("recording_saved"),
-    streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
-  }),
   // Fires when the cloud closes a device-recorded media session (~10 min after
   // its last segment arrives). AT-LEAST-ONCE: a straggler segment reopens the
-  // session and it fires again on re-close.
+  // session and it fires again on re-close. The run processes the WHOLE
+  // session — the batch half of the media trigger pair.
   z.object({
     type: z.literal("session_completed"),
+    streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
+  }),
+  // The near-realtime half: fires once per ~60 s chunk as it lands, so the run
+  // sees that chunk only. Latency is roughly one chunk instead of the session
+  // close window.
+  z.object({
+    type: z.literal("segment_uploaded"),
     streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
   }),
   z.object({
@@ -149,22 +153,25 @@ export type ManualWindow =
   | { mode: "range"; from: string; to: string }
   | { mode: "lastN"; n: number }
 
-// A scheduled run grabs its media either as a hand-picked set of recordings or
-// as the most recent N — one or the other, not both.
+// A scheduled run grabs its media either as a hand-picked set of on-device
+// sessions or as the most recent N — one or the other, not both.
 export type ScheduleRunSelection =
-  | { mode: "recordings"; recordingIds: string[] }
-  | { mode: "lastN"; n: number }
+  | { mode: "sessions"; sessionIds: string[] }
+  | { mode: "lastNSessions"; n: number }
 
 export type ManualRunContext =
-  | { triggerType: "recording_saved"; recordingId: string } // fires per recording
+  // Fires per session, so pick exactly one.
+  | { triggerType: "session_completed"; sessionId: string }
+  // Fires per chunk. `seq` omitted = the session's newest segment.
+  | { triggerType: "segment_uploaded"; sessionId: string; seq?: number }
   | { triggerType: "schedule"; selection: ScheduleRunSelection }
   | { triggerType: "telemetry_condition"; window: ManualWindow }
 
 // One-line, human-readable summary shown under a trigger badge in the table.
 export function triggerSummary(trigger: AttachmentTrigger): string {
   switch (trigger.type) {
-    case "recording_saved":
     case "session_completed":
+    case "segment_uploaded":
       return `stream: ${trigger.streamKeys.join(", ")}`
     case "schedule":
       return `cron ${trigger.cron}`

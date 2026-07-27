@@ -47,7 +47,7 @@ export const MOCK_DEVICE_ATTACHMENTS: DeviceWorkflowAttachment[] = [
     runningVersion: 2,
     enabled: true,
     triggers: [
-      { type: "recording_saved", streamKeys: ["cam0-main", "cam1-main"] },
+      { type: "session_completed", streamKeys: ["cam0-main", "cam1-main"] },
     ],
     lastRunAt: "2026-06-24T07:14:00.000Z",
     lastRunStatus: "running",

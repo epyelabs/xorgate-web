@@ -17,8 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { RecordingsList, WindowPicker } from "@/components/recordings-list"
-import { getDeviceRecordings, type Recording } from "@/lib/api"
+import { SessionsList, WindowPicker } from "@/components/session-pickers"
+import {
+  getDeviceSessions,
+  getSessionSegments,
+  type MediaSegment,
+  type MediaSession,
+} from "@/lib/api"
 import { runAttachmentNow } from "@/lib/device-workflows-api"
 import {
   TRIGGER_TYPE_LABELS,
@@ -30,11 +35,15 @@ import {
 import { Segmented } from "./trigger-editors"
 
 const DEFAULT_WINDOW: ManualWindow = { mode: "lastN", n: 100 }
+// The device's most recent N sessions; enough to cover recent drives without
+// turning this dialog into a second Media tab.
+const SESSION_PAGE = 50
 
 // Ad-hoc "Run now": instead of firing immediately, gather the context the run
-// should process, driven by the selected trigger. A recording trigger picks one
-// recording (it fires per recording); a schedule picks its media EITHER as a
-// hand-picked set OR the most recent N; a telemetry condition picks a window.
+// should process, driven by the selected trigger. A session trigger picks one
+// on-device session (it fires per session); a chunk trigger picks a session and
+// then one of its segments; a schedule picks its media EITHER as a hand-picked
+// set of sessions OR the most recent N; a telemetry condition picks a window.
 export function RunNowDialog({
   deviceId,
   attachment,
@@ -48,30 +57,31 @@ export function RunNowDialog({
   onOpenChange: (open: boolean) => void
   onRan: (attachment: DeviceWorkflowAttachment) => void
 }) {
-  // session_completed has no manual-run context (its runs are driven by the
-  // cloud's session close; there is no "pick a session" backend path yet), so
-  // it is not offered as a run-as choice here.
-  const triggers = (attachment?.triggers ?? []).filter(
-    (t) => t.type !== "session_completed",
-  )
+  // Every trigger type is manually runnable since Phase W — session_completed
+  // used to be filtered out here because the backend had no "pick a session"
+  // path; it does now.
+  const triggers = attachment?.triggers ?? []
   const [triggerIdx, setTriggerIdx] = useState(0)
   const trigger = triggers[triggerIdx] ?? triggers[0] ?? null
 
-  const [recordings, setRecordings] = useState<Recording[] | null>(null)
-  const [recError, setRecError] = useState<string | null>(null)
-  const [selectedRecIds, setSelectedRecIds] = useState<string[]>([])
+  const [sessions, setSessions] = useState<MediaSession[] | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([])
   const [window, setWindow] = useState<ManualWindow>(DEFAULT_WINDOW)
-  // Schedule media context: hand-pick recordings, or grab the most recent N.
-  const [scheduleMode, setScheduleMode] = useState<"recordings" | "lastN">(
-    "recordings",
+  // Schedule media context: hand-pick sessions, or grab the most recent N.
+  const [scheduleMode, setScheduleMode] = useState<"sessions" | "lastN">(
+    "sessions",
   )
-  const [scheduleN, setScheduleN] = useState(100)
+  const [scheduleN, setScheduleN] = useState(5)
+  // Chunk runs (segment_uploaded) additionally pick ONE segment of the session.
+  const [segments, setSegments] = useState<MediaSegment[] | null>(null)
+  const [segmentSeq, setSegmentSeq] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // A recording trigger picks one recording; a schedule can hand-pick some.
-  const recordingSingle = trigger?.type === "recording_saved"
-  const needsRecordings =
-    trigger?.type === "recording_saved" || trigger?.type === "schedule"
+  const sessionSingle =
+    trigger?.type === "session_completed" || trigger?.type === "segment_uploaded"
+  const needsSessions = sessionSingle || trigger?.type === "schedule"
+  const needsSegment = trigger?.type === "segment_uploaded"
 
   // Reset the trigger selection when the dialog opens / targets another attachment.
   useEffect(() => {
@@ -85,44 +95,76 @@ export function RunNowDialog({
   useEffect(() => {
     if (!open) return
     /* eslint-disable react-hooks/set-state-in-effect */
-    setSelectedRecIds([])
+    setSelectedSessionIds([])
     setWindow(DEFAULT_WINDOW)
-    setScheduleMode("recordings")
-    setScheduleN(100)
+    setScheduleMode("sessions")
+    setScheduleN(5)
+    setSegments(null)
+    setSegmentSeq(null)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, attachment?.id, triggerIdx])
 
-  // Load the device's recordings when the selected trigger needs them. We show
-  // all of them (same as the Media tab) and only gate *selection* to completed
-  // ones below — a real backend would additionally scope these to the trigger's
-  // streams, but the mock attachment's stream keys don't map to real recordings.
+  // Load the device's on-device sessions when the selected trigger needs them.
+  // Newest first, server-side — all streams, not just the trigger's, so a
+  // multi-camera attachment can be run against whichever camera you want.
   useEffect(() => {
-    if (!open || !needsRecordings) return
+    if (!open || !needsSessions) return
     let cancelled = false
     /* eslint-disable react-hooks/set-state-in-effect */
-    setRecordings(null)
-    setRecError(null)
+    setSessions(null)
+    setSessionError(null)
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { recordings: all } = await getDeviceRecordings(deviceId)
-        if (cancelled) return
-        setRecordings(
-          [...all].sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1)),
-        )
+        const { sessions: rows } = await getDeviceSessions(deviceId, {
+          limit: SESSION_PAGE,
+          sort: "startedAt",
+          order: "desc",
+        })
+        if (!cancelled) setSessions(rows)
       } catch (err) {
-        if (!cancelled) setRecError((err as Error).message)
+        if (!cancelled) setSessionError((err as Error).message)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [open, needsRecordings, deviceId, triggerIdx])
+  }, [open, needsSessions, deviceId, triggerIdx])
 
-  // Single-select for recording triggers (replace); multi-select otherwise.
-  const toggleRec = (id: string) =>
-    setSelectedRecIds((prev) => {
-      if (recordingSingle) return prev[0] === id ? [] : [id]
+  // A chunk run needs the chosen session's segments to pick one. Defaults to
+  // the newest — the chunk that would have fired most recently.
+  const chosenSessionId = selectedSessionIds[0] ?? null
+  useEffect(() => {
+    if (!open || !needsSegment || !chosenSessionId) return
+    let cancelled = false
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSegments(null)
+    setSegmentSeq(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    ;(async () => {
+      try {
+        const { segments: rows } = await getSessionSegments(
+          deviceId,
+          chosenSessionId,
+        )
+        if (cancelled) return
+        // startTs, never seq — seq lies for reopened/evicted sessions.
+        const ordered = [...rows].sort((a, b) => (a.startTs < b.startTs ? -1 : 1))
+        setSegments(ordered)
+        setSegmentSeq(ordered[ordered.length - 1]?.seq ?? null)
+      } catch (err) {
+        if (!cancelled) setSessionError((err as Error).message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, needsSegment, deviceId, chosenSessionId])
+
+  // Single-select for the two media triggers (replace); multi-select for a schedule.
+  const toggleSession = (id: string) =>
+    setSelectedSessionIds((prev) => {
+      if (sessionSingle) return prev[0] === id ? [] : [id]
       return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     })
 
@@ -134,28 +176,36 @@ export function RunNowDialog({
   const canRun =
     !!trigger &&
     !submitting &&
-    (trigger.type === "recording_saved"
-      ? recordings !== null && selectedRecIds.length === 1
-      : trigger.type === "schedule"
-        ? scheduleMode === "recordings"
-          ? selectedRecIds.length > 0
-          : scheduleN > 0
-        : windowValid)
+    (trigger.type === "session_completed"
+      ? sessions !== null && selectedSessionIds.length === 1
+      : trigger.type === "segment_uploaded"
+        ? sessions !== null && selectedSessionIds.length === 1 && segmentSeq !== null
+        : trigger.type === "schedule"
+          ? scheduleMode === "sessions"
+            ? selectedSessionIds.length > 0
+            : scheduleN > 0
+          : windowValid)
 
   const handleRun = async () => {
     if (!attachment || !trigger) return
     const context: ManualRunContext =
-      trigger.type === "recording_saved"
-        ? { triggerType: "recording_saved", recordingId: selectedRecIds[0] ?? "" }
-        : trigger.type === "schedule"
+      trigger.type === "session_completed"
+        ? { triggerType: "session_completed", sessionId: selectedSessionIds[0] ?? "" }
+        : trigger.type === "segment_uploaded"
           ? {
-              triggerType: "schedule",
-              selection:
-                scheduleMode === "recordings"
-                  ? { mode: "recordings", recordingIds: selectedRecIds }
-                  : { mode: "lastN", n: scheduleN },
+              triggerType: "segment_uploaded",
+              sessionId: selectedSessionIds[0] ?? "",
+              ...(segmentSeq !== null ? { seq: segmentSeq } : {}),
             }
-          : { triggerType: "telemetry_condition", window }
+          : trigger.type === "schedule"
+            ? {
+                triggerType: "schedule",
+                selection:
+                  scheduleMode === "sessions"
+                    ? { mode: "sessions", sessionIds: selectedSessionIds }
+                    : { mode: "lastNSessions", n: scheduleN },
+              }
+            : { triggerType: "telemetry_condition", window }
     setSubmitting(true)
     try {
       const { attachment: updated } = await runAttachmentNow(
@@ -173,6 +223,19 @@ export function RunNowDialog({
     }
   }
 
+  const sessionPicker = (single: boolean, hint: string) => (
+    <div className="flex flex-col gap-1.5">
+      <SessionsList
+        sessions={sessions}
+        error={sessionError}
+        selectedIds={selectedSessionIds}
+        single={single}
+        onToggle={toggleSession}
+      />
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -186,13 +249,6 @@ export function RunNowDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          {triggers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              This workflow only runs when an on-device recording session
-              completes — there is no manual-run context to choose. It will run
-              automatically as sessions finish uploading.
-            </p>
-          ) : null}
           {triggers.length > 1 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium">Run as trigger</span>
@@ -214,48 +270,79 @@ export function RunNowDialog({
             </div>
           ) : null}
 
-          {trigger?.type === "recording_saved" ? (
+          {trigger?.type === "session_completed" ? (
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium">Recording</span>
-              <RecordingsList
-                recordings={recordings}
-                recError={recError}
-                selectedIds={selectedRecIds}
-                single
-                onToggle={toggleRec}
-              />
-              <p className="text-xs text-muted-foreground">
-                This trigger fires per recording, so pick one. Only completed
-                recordings can be selected.
-              </p>
+              <span className="text-xs font-medium">Recording session</span>
+              {sessionPicker(
+                true,
+                "This trigger fires per session, so pick one. The run decodes every segment it holds.",
+              )}
+            </div>
+          ) : trigger?.type === "segment_uploaded" ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium">Recording session</span>
+                {sessionPicker(
+                  true,
+                  "This trigger fires per ~60s chunk. Pick the session the chunk belongs to.",
+                )}
+              </div>
+              {chosenSessionId ? (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium">Segment</span>
+                  {segments === null ? (
+                    <p className="text-xs text-muted-foreground">
+                      Loading segments…
+                    </p>
+                  ) : segments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      This session has no stored segments.
+                    </p>
+                  ) : (
+                    <Select
+                      value={segmentSeq === null ? "" : String(segmentSeq)}
+                      onValueChange={(v) => setSegmentSeq(Number(v))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pick a segment" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {segments.map((seg) => (
+                          <SelectItem key={seg.id} value={String(seg.seq)}>
+                            #{seg.seq} ·{" "}
+                            {new Date(seg.startTs).toLocaleTimeString()} ·{" "}
+                            {Math.round(seg.durationMs / 1000)}s
+                            {seg.finalized ? "" : " · partial"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to the newest chunk — the one that would have fired
+                    most recently.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : trigger?.type === "schedule" ? (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium">Recordings</span>
+                <span className="text-xs font-medium">Recording sessions</span>
                 <Segmented
                   value={scheduleMode}
                   onChange={setScheduleMode}
                   options={[
-                    { value: "recordings", label: "Select recordings" },
+                    { value: "sessions", label: "Select sessions" },
                     { value: "lastN", label: "Last N" },
                   ]}
                 />
               </div>
-              {scheduleMode === "recordings" ? (
-                <>
-                  <RecordingsList
-                    recordings={recordings}
-                    recError={recError}
-                    selectedIds={selectedRecIds}
-                    single={false}
-                    onToggle={toggleRec}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Pick the recordings this scheduled run should process. Only
-                    completed recordings can be selected.
-                  </p>
-                </>
+              {scheduleMode === "sessions" ? (
+                sessionPicker(
+                  false,
+                  "Pick the on-device sessions this scheduled run should process.",
+                )
               ) : (
                 <>
                   <div className="flex items-center gap-2">
@@ -271,11 +358,11 @@ export function RunNowDialog({
                       }
                     />
                     <span className="text-xs text-muted-foreground">
-                      most recent recordings
+                      most recent sessions
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    The run processes the most recent recordings and their
+                    The run processes the most recent sessions and their
                     telemetry.
                   </p>
                 </>

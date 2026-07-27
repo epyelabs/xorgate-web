@@ -42,6 +42,7 @@ import {
   type ImuMount,
   type ImuView,
   type KvsChannel,
+  type LteRecoveryConfig,
   type RecordingConfig,
   type VideoPresetName,
 } from "@/lib/api"
@@ -78,6 +79,26 @@ const STATUS_OPTIONS: DeviceStatus[] = [
 const VIEW_TYPE_OPTIONS: { value: ActiveStreamsViewType; label: string }[] = [
   { value: "card", label: "Card View (Default)" },
   { value: "map", label: "Map View" },
+]
+
+// LTE recovery policy options (lte_gnss_recovery plan, R8). Labels describe
+// the user-facing tradeoff; the preset numbers live in the field descriptions
+// below and in the device daemon (deadzone_profile_params).
+const GPS_FIX_RESET_POLICY_OPTIONS: {
+  value: NonNullable<LteRecoveryConfig["gpsFixResetPolicy"]>
+  label: string
+}[] = [
+  { value: "defer", label: "Protect position (Default)" },
+  { value: "veto-deadzone", label: "Never reset in a dead zone with a fix" },
+]
+
+const DEADZONE_PROFILE_OPTIONS: {
+  value: NonNullable<LteRecoveryConfig["deadZoneProfile"]>
+  label: string
+}[] = [
+  { value: "conservative", label: "Conservative" },
+  { value: "balanced", label: "Balanced (Default)" },
+  { value: "aggressive", label: "Aggressive" },
 ]
 
 const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
@@ -234,6 +255,9 @@ function DeviceSettingsPage() {
   // On-device recording config, optimistic (null = never configured — the
   // controls then show the device defaults).
   const [recConfig, setRecConfig] = useState<RecordingConfig | null>(null)
+  // LTE recovery policy, optimistic (null = never configured — the selects
+  // then show the device defaults: defer / balanced).
+  const [lteRecovery, setLteRecovery] = useState<LteRecoveryConfig | null>(null)
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
@@ -244,6 +268,7 @@ function DeviceSettingsPage() {
     imuMount: ImuMount
     imuView: ImuView
     recordingConfig: RecordingConfig | null
+    lteRecoveryConfig: LteRecoveryConfig | null
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -287,6 +312,7 @@ function DeviceSettingsPage() {
         setCamAzimuth(String(view.azimuthDeg))
         setCamElevation(String(view.elevationDeg))
         setRecConfig(fetched.recordingConfig)
+        setLteRecovery(fetched.lteRecoveryConfig)
         setBaseline({
           name: initialName,
           status: fetched.status,
@@ -297,6 +323,7 @@ function DeviceSettingsPage() {
           imuMount: mount,
           imuView: view,
           recordingConfig: fetched.recordingConfig,
+          lteRecoveryConfig: fetched.lteRecoveryConfig,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -375,6 +402,7 @@ function DeviceSettingsPage() {
       setStatus(updated.status)
       setViewType(updated.activeStreamsViewType)
       setRecConfig(updated.recordingConfig)
+      setLteRecovery(updated.lteRecoveryConfig)
       setBaseline({
         name: nextName,
         status: updated.status,
@@ -385,6 +413,7 @@ function DeviceSettingsPage() {
         imuMount: updated.imuMount ?? DEFAULT_IMU_MOUNT,
         imuView: updated.imuView ?? DEFAULT_IMU_VIEW,
         recordingConfig: updated.recordingConfig,
+        lteRecoveryConfig: updated.lteRecoveryConfig,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -462,6 +491,31 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setGnssAntBias(baseline.gnssAntBias)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // LTE recovery policy (lte_gnss_recovery plan, R8). Same optimistic-select +
+  // rollback-on-error pattern. The backend persists the object and delivers it
+  // to the device as a retained MQTT config message; the modem daemon reads it
+  // live at its next recovery decision — no device restart.
+  async function commitLteRecovery(patch: Partial<LteRecoveryConfig>) {
+    if (saving || baseline === null) return
+    const next: LteRecoveryConfig = { ...(lteRecovery ?? {}), ...patch }
+    if (JSON.stringify(next) === JSON.stringify(baseline.lteRecoveryConfig ?? {})) return
+    setLteRecovery(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { lteRecoveryConfig: next })
+      const updated = res.device
+      setDevice(updated)
+      setLteRecovery(updated.lteRecoveryConfig)
+      setBaseline({ ...baseline, lteRecoveryConfig: updated.lteRecoveryConfig })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setLteRecovery(baseline.lteRecoveryConfig)
     } finally {
       setSaving(false)
     }
@@ -793,6 +847,75 @@ function DeviceSettingsPage() {
                       disabled={saving}
                       onCheckedChange={commitGnssAntBias}
                     />
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="device-gps-fix-reset-policy">
+                      Cellular recovery with a GPS fix
+                    </FieldLabel>
+                    <Select
+                      value={lteRecovery?.gpsFixResetPolicy ?? "defer"}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitLteRecovery({
+                          gpsFixResetPolicy:
+                            v as NonNullable<LteRecoveryConfig["gpsFixResetPolicy"]>,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-gps-fix-reset-policy">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GPS_FIX_RESET_POLICY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      A full modem reset restarts GPS from scratch. Protect
+                      position: allow a reset only after 30+ minutes without
+                      cellular (default). Protect harder: never reset while
+                      parked out of coverage with a GPS fix. Applied by the
+                      device without a restart.
+                    </FieldDescription>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="device-deadzone-profile">
+                      Out-of-coverage recovery pace
+                    </FieldLabel>
+                    <Select
+                      value={lteRecovery?.deadZoneProfile ?? "balanced"}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitLteRecovery({
+                          deadZoneProfile:
+                            v as NonNullable<LteRecoveryConfig["deadZoneProfile"]>,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-deadzone-profile">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DEADZONE_PROFILE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      How hard the device works to restore cellular in a dead
+                      zone. Conservative: gentle radio nudges (15 min–2 h),
+                      never a modem reset. Balanced (default): nudges 10–60
+                      min apart, reset only after 3 failed radio cycles.
+                      Aggressive: nudges 10–20 min apart, reset after 1
+                      failed cycle. Applied by the device without a restart.
+                    </FieldDescription>
                   </Field>
                 </FieldGroup>
               </form>

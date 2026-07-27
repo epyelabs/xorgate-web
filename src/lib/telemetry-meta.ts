@@ -19,9 +19,12 @@ export const METRIC_LABELS: Record<string, string> = {
   "gps.fix_quality": "Fix Quality",
   "gps.satellites_in_view": "Sats in View",
   "gps.hdop": "HDOP",
+  "gps.ttff_s": "Time to Fix",
   "lte.rssi": "LTE RSSI",
   "lte.quality": "LTE Quality",
   "lte.modem_temp": "Modem Temp",
+  "lte.gnss_health": "GPS Health",
+  "lte.resets_24h": "Modem Resets 24h",
   "system.cpu_usage": "CPU Usage",
   "system.cpu_temp": "CPU Temp",
   "system.ram_usage": "RAM Usage",
@@ -91,7 +94,19 @@ export function orderMetrics(keys: string[]): string[] {
   })
 }
 
+// Severity-ordered codes published by the device agent for lte.gnss_health
+// (numeric because telemetry leaves are numbers-only). Mirrors the agent's
+// GNSS_HEALTH_CODES table (device src/agent/collectors/lte.ts).
+export const GNSS_HEALTH_LABELS: Record<number, string> = {
+  0: "OK",
+  1: "Acquiring",
+  2: "Degraded",
+  3: "Unhealthy",
+}
+
 export function formatMetricValue(value: number, metric?: string): string {
+  // GNSS health is a coded state, not a quantity — show its name.
+  if (metric === "lte.gnss_health") return GNSS_HEALTH_LABELS[value] ?? String(value)
   // Coordinates need full precision — the default rounding mangles lat/lon.
   if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)
   // The 5V rail moves in millivolts (5.134 vs 5.089 is signal, not noise).

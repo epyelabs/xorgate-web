@@ -146,6 +146,16 @@ export const recordingConfigSchema = z.object({
     .optional(),
 })
 
+// LTE recovery policy (lte_gnss_recovery plan, R8). .catch(undefined) keeps an
+// older client rendering when new policy/profile values ship.
+export const lteRecoveryConfigSchema = z.object({
+  gpsFixResetPolicy: z.enum(["defer", "veto-deadzone"]).optional().catch(undefined),
+  deadZoneProfile: z
+    .enum(["conservative", "balanced", "aggressive"])
+    .optional()
+    .catch(undefined),
+})
+
 export const deviceSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -164,6 +174,7 @@ export const deviceSchema = z.object({
   imuMount: imuMountSchema.nullable().catch(null),
   imuView: imuViewSchema.nullable().catch(null),
   recordingConfig: recordingConfigSchema.nullable().catch(null),
+  lteRecoveryConfig: lteRecoveryConfigSchema.nullable().catch(null),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

@@ -275,6 +275,15 @@ export interface RecordingConfig {
   retention?: { maxBytes?: number; minFreeBytes?: number }
 }
 
+// LTE recovery policy (lte_gnss_recovery plan, R8): how aggressively the
+// device's connection manager may use the GNSS-destructive full modem reset.
+// Delivered to the device as retained MQTT config; the modem daemon reads it
+// live at each recovery decision. Omitted fields = device safe defaults.
+export interface LteRecoveryConfig {
+  gpsFixResetPolicy?: "defer" | "veto-deadzone"
+  deadZoneProfile?: "conservative" | "balanced" | "aggressive"
+}
+
 export interface Device {
   id: string
   workspaceId: string
@@ -290,6 +299,7 @@ export interface Device {
   imuMount: ImuMount | null
   imuView: ImuView | null
   recordingConfig: RecordingConfig | null
+  lteRecoveryConfig: LteRecoveryConfig | null
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -335,6 +345,7 @@ export async function updateDevice(
     imuMount?: ImuMount | null
     imuView?: ImuView | null
     recordingConfig?: RecordingConfig | null
+    lteRecoveryConfig?: LteRecoveryConfig | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {

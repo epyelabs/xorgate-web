@@ -14,7 +14,10 @@ import { z } from "zod"
 // --- Simulation bindings (API union; FE -> BE) ---------------------------------
 
 export const simulationBindingSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("recording"), recordingId: z.string() }),
+  // An on-device recording session: the backend resolves it to the ordered
+  // segment list and feeds the engine the same per-segment binding a real
+  // triggered run gets. (Replaced the cloud recorder's `recording` kind.)
+  z.object({ kind: z.literal("session"), sessionId: z.string() }),
   z.object({ kind: z.literal("video_file"), uploadKey: z.string() }),
   z.object({
     kind: z.literal("device_telemetry"),

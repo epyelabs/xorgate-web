@@ -10,7 +10,8 @@ import { pageSchema } from "./schemas"
 // GET /workflow-runs/{id}/artifact-url.
 
 export const runStatusSchema = z.enum(["running", "succeeded", "failed"])
-// Raw trigger value from the run row: telemetry_condition | recording_saved |
+// Raw trigger value from the run row: telemetry_condition | session_completed |
+// segment_uploaded |
 // schedule | manual | simulation (open set server-side, so keep it a string).
 export const runTriggerSchema = z.string()
 export const runModeSchema = z.enum(["production", "simulation"])

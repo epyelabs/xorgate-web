@@ -131,7 +131,7 @@ export function AttachWorkflowSheet({
         ])
         if (cancelled) return
         setDeviceCaps(device_model.ioCapabilities)
-        // recording_saved runs against recorded video streams (exclude audio).
+        // The media triggers run against recorded video streams (exclude audio).
         setStreamKeys(
           channels
             .map((c) => c.streamKey)

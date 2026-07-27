@@ -1,4 +1,4 @@
-import type { Device, KvsChannel, Recording } from "@/lib/api"
+import type { Device, KvsChannel, MediaSession } from "@/lib/api"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
 
 // Display name for a device: its label falls back to the serial.
@@ -17,10 +17,10 @@ export function deviceLabel(d: Device): string {
 export type SourceBinding =
   | { kind: "video-file"; file: File; url: string; name: string; uploadKey?: string }
   | {
-      kind: "video-recording"
+      kind: "video-session"
       deviceId: string
       deviceName: string
-      recording: Recording
+      session: MediaSession
     }
   | {
       kind: "video-live"
@@ -38,21 +38,21 @@ export type SourceBinding =
     }
 
 // Any binding that feeds a video source and can be previewed as video: an uploaded
-// file, a device recording, a live device stream, or the local webcam.
+// file, an on-device session, a live device stream, or the local webcam.
 export type VideoBinding = Extract<
   SourceBinding,
-  { kind: "video-file" | "video-recording" | "video-live" | "video-webcam" }
+  { kind: "video-file" | "video-session" | "video-live" | "video-webcam" }
 >
 
-// The mode dropdown options differ by source group: video sources pick a file, a
-// device recording, a live device stream, or the local webcam; sensor sources pick
-// a CSV or a device's telemetry.
-export type VideoMode = "file" | "recordings" | "live" | "webcam"
+// The mode dropdown options differ by source group: video sources pick a file, an
+// on-device recording session, a live device stream, or the local webcam; sensor
+// sources pick a CSV or a device's telemetry.
+export type VideoMode = "file" | "sessions" | "live" | "webcam"
 export type SensorMode = "csv" | "device"
 
 // Video source catalog type; everything else in the "source" group is a sensor
 // (telemetry). The catalog has exactly one abstract video source; its concrete
-// feed (file / recording / live / webcam) is what the mode dropdown binds.
+// feed (file / session / live / webcam) is what the mode dropdown binds.
 export function isVideoSource(catalogType: string): boolean {
   return catalogType === "source.video"
 }
@@ -60,7 +60,7 @@ export function isVideoSource(catalogType: string): boolean {
 export function isVideoBinding(b: SourceBinding): b is VideoBinding {
   return (
     b.kind === "video-file" ||
-    b.kind === "video-recording" ||
+    b.kind === "video-session" ||
     b.kind === "video-live" ||
     b.kind === "video-webcam"
   )
@@ -71,8 +71,8 @@ export function bindingLabel(b: SourceBinding): string {
   switch (b.kind) {
     case "video-file":
       return b.name
-    case "video-recording":
-      return `${b.deviceName} · ${b.recording.streamKey}`
+    case "video-session":
+      return `${b.deviceName} · ${b.session.streamKey}`
     case "video-live":
       return `${b.deviceName} · ${b.channel.streamKey}`
     case "video-webcam":
@@ -124,10 +124,12 @@ function formatDurationMs(ms: number | null): string | null {
   return mm ? `${h}h ${mm}m` : `${h}h`
 }
 
-function recordingDurationMs(rec: Recording): number | null {
-  if (rec.durationMs !== null) return rec.durationMs
-  if (rec.endedAt)
-    return new Date(rec.endedAt).getTime() - new Date(rec.startedAt).getTime()
+// Total recorded duration of a session: the sum of its segments when the list
+// endpoint rolled it up, else the wall-clock span. (Local twin of the one in
+// components/session-pickers.tsx — that file may only export components.)
+function sessionDurationMs(s: MediaSession): number | null {
+  if (s.totalDurationMs > 0) return s.totalDurationMs
+  if (s.endedAt) return new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
   return null
 }
 
@@ -138,10 +140,11 @@ export function bindingMeta(b: SourceBinding): string | null {
     case "video-file":
     case "csv-file":
       return formatBytes(b.file.size)
-    case "video-recording": {
+    case "video-session": {
       const parts = [
-        formatDurationMs(recordingDurationMs(b.recording)),
-        formatBytes(b.recording.sizeBytes),
+        formatDurationMs(sessionDurationMs(b.session)),
+        formatBytes(b.session.totalBytes),
+        `${b.session.segmentCount} segment${b.session.segmentCount === 1 ? "" : "s"}`,
       ].filter(Boolean)
       return parts.length ? parts.join(" · ") : null
     }

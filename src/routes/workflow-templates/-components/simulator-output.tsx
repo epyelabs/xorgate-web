@@ -15,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getRecordingPlaybackUrl } from "@/lib/api"
+import { getSegmentPlaybackUrl, getSessionSegments } from "@/lib/api"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import type {
   RunEvent,
@@ -270,24 +270,35 @@ export function SimulatorOutput({
   }, [ranDefinition])
 
   // Local playback source for the overlay: an uploaded file plays from its
-  // object URL; a device recording fetches a presigned URL.
+  // object URL; an on-device session fetches a presigned URL for its FIRST
+  // segment (a session is N standalone files, so there is no single object to
+  // scrub — the box overlay still replays over the whole run's records).
   const videoBinding = useMemo(() => firstVideoBinding(bindings), [bindings])
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
+  const [sessionUrl, setSessionUrl] = useState<string | null>(null)
   useEffect(() => {
     if (
       phase !== "succeeded" ||
       !videoBinding ||
-      videoBinding.kind !== "video-recording"
+      videoBinding.kind !== "video-session"
     )
       return
     let cancelled = false
     ;(async () => {
       try {
-        const { url } = await getRecordingPlaybackUrl(
+        const { segments } = await getSessionSegments(
           videoBinding.deviceId,
-          videoBinding.recording.id,
+          videoBinding.session.id,
         )
-        if (!cancelled) setRecordingUrl(url)
+        const first = [...segments].sort((a, b) =>
+          a.startTs < b.startTs ? -1 : 1,
+        )[0]
+        if (!first) return
+        const { url } = await getSegmentPlaybackUrl(
+          videoBinding.deviceId,
+          videoBinding.session.id,
+          first.seq,
+        )
+        if (!cancelled) setSessionUrl(url)
       } catch {
         // No local playback; the preview frames remain the visual.
       }
@@ -297,7 +308,7 @@ export function SimulatorOutput({
     }
   }, [phase, videoBinding])
   const videoUrl =
-    videoBinding?.kind === "video-file" ? videoBinding.url : recordingUrl
+    videoBinding?.kind === "video-file" ? videoBinding.url : sessionUrl
 
   // --- idle / preparing ---------------------------------------------------------
 

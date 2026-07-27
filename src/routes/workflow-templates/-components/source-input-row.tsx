@@ -37,7 +37,7 @@ import {
 // device live-stream mode stays disabled until devices publish sampled frames.
 const VIDEO_ACTION: Record<VideoMode, { label: string; icon: LucideIcon }> = {
   file: { label: "Upload video", icon: UploadIcon },
-  recordings: { label: "Select media from device", icon: HardDriveIcon },
+  sessions: { label: "Select media from device", icon: HardDriveIcon },
   live: { label: "Select live stream", icon: HardDriveIcon },
   webcam: { label: "Use webcam", icon: WebcamIcon },
 }
@@ -95,7 +95,7 @@ export function SourceInputRow({
   const runAction = () => {
     if (isVideo) {
       if (videoMode === "file") fileRef.current?.click()
-      else if (videoMode === "recordings") setMediaOpen(true)
+      else if (videoMode === "sessions") setMediaOpen(true)
       else if (videoMode === "webcam") setWebcamOpen(true)
       // the live (device stream) option remains disabled; unreachable.
     } else {
@@ -180,7 +180,7 @@ export function SourceInputRow({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="file">File</SelectItem>
-                <SelectItem value="recordings">Recordings</SelectItem>
+                <SelectItem value="sessions">Recordings</SelectItem>
                 <SelectItem value="live" disabled>
                   Live Stream (soon)
                 </SelectItem>

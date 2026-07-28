@@ -292,8 +292,6 @@ export interface Device {
   name: string | null
   firmwareVersion: string | null
   status: DeviceStatus
-  persistTelemetry: boolean
-  autoRecord: boolean
   gnssAntBias: boolean
   activeStreamsViewType: ActiveStreamsViewType
   imuMount: ImuMount | null
@@ -338,8 +336,6 @@ export async function updateDevice(
     name?: string | null
     status?: DeviceStatus
     firmwareVersion?: string | null
-    persistTelemetry?: boolean
-    autoRecord?: boolean
     gnssAntBias?: boolean
     activeStreamsViewType?: ActiveStreamsViewType
     imuMount?: ImuMount | null
@@ -584,32 +580,6 @@ export async function getDeviceRegistration(
   )
 }
 
-// --- Recordings: cloud viewer-recorder start/stop/list/playback/delete ---
-export type RecordingStatus = "recording" | "stopping" | "completed" | "failed"
-export type RecordingTrigger = "manual" | "auto"
-
-export interface Recording {
-  id: string
-  deviceId: string
-  streamKey: string
-  status: RecordingStatus
-  trigger: RecordingTrigger
-  // Why the recording ended: user_stop | device_offline | stream_ended | max_duration
-  // | task_lost | error. null while recording or for a natural EOS. Lets the UI
-  // distinguish a truncated/offline-ended recording from a clean stop.
-  endReason?: string | null
-  startedAt: string
-  // Set by the recorder on its first received frame (via an IoT "capturing" signal).
-  // null while 'recording' but not yet capturing (cold start) -> UI shows "Starting…".
-  captureStartedAt: string | null
-  endedAt: string | null
-  s3Key: string | null
-  sizeBytes: number | null
-  durationMs: number | null
-  taskArn: string | null
-  createdAt: string
-}
-
 // Standard pagination block returned by list endpoints (see backend
 // src/utils/list-params.ts).
 export interface Page {
@@ -619,117 +589,10 @@ export interface Page {
   total: number
 }
 
-export interface RecordingsListParams {
-  limit?: number
-  offset?: number
-  order?: "asc" | "desc"
-  sort?: "createdAt" | "startedAt" | "durationMs" | "sizeBytes"
-  status?: RecordingStatus
-  from?: string
-  to?: string
-}
-
-export async function getDeviceRecordings(
-  deviceId: string,
-  params: RecordingsListParams = {}
-): Promise<{ recordings: Recording[]; page?: Page }> {
-  const qs = new URLSearchParams()
-  if (params.limit !== undefined) qs.set("limit", String(params.limit))
-  if (params.offset !== undefined) qs.set("offset", String(params.offset))
-  if (params.order) qs.set("order", params.order)
-  if (params.sort) qs.set("sort", params.sort)
-  if (params.status) qs.set("status", params.status)
-  if (params.from) qs.set("from", params.from)
-  if (params.to) qs.set("to", params.to)
-  const suffix = qs.toString() ? `?${qs.toString()}` : ""
-  return apiRequest(`/devices/${deviceId}/recordings${suffix}`)
-}
-
-// Start recording one stream (cloud recorder joins the channel as a viewer).
-export async function startRecording(
-  deviceId: string,
-  streamKey: string
-): Promise<{ recording: Recording }> {
-  return apiRequest(`/devices/${deviceId}/recordings`, {
-    method: "POST",
-    body: JSON.stringify({ streamKey }),
-  })
-}
-
-// Start recording every provisioned stream on the device ("Record All").
-export async function startAllRecordings(
-  deviceId: string
-): Promise<{ recordings: Recording[] }> {
-  return apiRequest(`/devices/${deviceId}/recordings`, {
-    method: "POST",
-    body: JSON.stringify({ all: true }),
-  })
-}
-
-export async function stopRecording(
-  deviceId: string,
-  recordingId: string
-): Promise<{ recording: Recording }> {
-  return apiRequest(`/devices/${deviceId}/recordings/${recordingId}/stop`, {
-    method: "POST",
-  })
-}
-
-/**
- * Best-effort, fire-and-forget stop that survives page unload (kvs-webrtc-lts
- * Phase 5). Called from a `pagehide` handler, which cannot await, so it takes a
- * PRE-CAPTURED id token instead of calling the async getIdToken(); org/workspace
- * come from the registered getters (synchronous). Uses `fetch(..., keepalive:true)`
- * rather than `navigator.sendBeacon` because the stop endpoint requires the
- * Authorization + X-Organization-Id/X-Workspace-Id headers, and sendBeacon cannot
- * set request headers. This is a courtesy only — the server-side max-duration cap is
- * the real backstop (locked decision: recording is kept server-side).
- */
-export function stopRecordingBeacon(
-  deviceId: string,
-  recordingId: string,
-  idToken: string
-): void {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${idToken}`,
-  }
-  const orgId = currentOrgIdGetter()
-  if (orgId) headers["X-Organization-Id"] = orgId
-  const workspaceId = currentWorkspaceIdGetter()
-  if (workspaceId) headers["X-Workspace-Id"] = workspaceId
-  try {
-    void fetch(`${API_URL}/devices/${deviceId}/recordings/${recordingId}/stop`, {
-      method: "POST",
-      headers,
-      keepalive: true,
-    })
-  } catch {
-    // Best-effort; ignore. The max-duration cap ends anything this misses.
-  }
-}
-
-// Presigned GET URL for browser playback (expires; fetch fresh when opening).
-export async function getRecordingPlaybackUrl(
-  deviceId: string,
-  recordingId: string
-): Promise<{ url: string; expiresIn: number }> {
-  return apiRequest(`/devices/${deviceId}/recordings/${recordingId}/playback`)
-}
-
-export async function deleteRecording(
-  deviceId: string,
-  recordingId: string
-): Promise<void> {
-  await apiRequest(`/devices/${deviceId}/recordings/${recordingId}`, {
-    method: "DELETE",
-  })
-}
-
 // --- Device-recorded media sessions (offline recording plan, Phase 4/5) ---
-// Recorded ON the device and uploaded segment-by-segment — distinct from the
-// cloud /recordings above. `status` is advisory: a session closes ~10 min
-// after segments stop arriving and reopens if a straggler lands.
+// Recorded ON the device and uploaded segment-by-segment. `status` is advisory:
+// a session closes ~10 min after segments stop arriving and reopens if a
+// straggler lands.
 export type MediaSessionStatus = "open" | "closed"
 
 export interface MediaSession {

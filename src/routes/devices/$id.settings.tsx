@@ -44,6 +44,7 @@ import {
   type KvsChannel,
   type LteRecoveryConfig,
   type RecordingConfig,
+  type TimeSyncConfig,
   type VideoPresetName,
 } from "@/lib/api"
 import { formatBytes } from "@/components/data-table"
@@ -295,6 +296,10 @@ function DeviceSettingsPage() {
   // LTE recovery policy, optimistic (null = never configured — the selects
   // then show the device defaults: defer / balanced).
   const [lteRecovery, setLteRecovery] = useState<LteRecoveryConfig | null>(null)
+  // Offline time sync, optimistic (null = never configured — the switch then
+  // shows the device default: on). Threshold/cap knobs set out-of-band are
+  // preserved verbatim because commits spread the stored object.
+  const [timeSync, setTimeSync] = useState<TimeSyncConfig | null>(null)
   const [baseline, setBaseline] = useState<{
     name: string
     status: DeviceStatus
@@ -304,6 +309,7 @@ function DeviceSettingsPage() {
     imuView: ImuView
     recordingConfig: RecordingConfig | null
     lteRecoveryConfig: LteRecoveryConfig | null
+    timeSyncConfig: TimeSyncConfig | null
   } | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -346,6 +352,7 @@ function DeviceSettingsPage() {
         setCamElevation(String(view.elevationDeg))
         setRecConfig(fetched.recordingConfig)
         setLteRecovery(fetched.lteRecoveryConfig)
+        setTimeSync(fetched.timeSyncConfig)
         setBaseline({
           name: initialName,
           status: fetched.status,
@@ -355,6 +362,7 @@ function DeviceSettingsPage() {
           imuView: view,
           recordingConfig: fetched.recordingConfig,
           lteRecoveryConfig: fetched.lteRecoveryConfig,
+          timeSyncConfig: fetched.timeSyncConfig,
         })
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
@@ -434,6 +442,7 @@ function DeviceSettingsPage() {
       setViewType(updated.activeStreamsViewType)
       setRecConfig(updated.recordingConfig)
       setLteRecovery(updated.lteRecoveryConfig)
+      setTimeSync(updated.timeSyncConfig)
       setBaseline({
         name: nextName,
         status: updated.status,
@@ -443,6 +452,7 @@ function DeviceSettingsPage() {
         imuView: updated.imuView ?? DEFAULT_IMU_VIEW,
         recordingConfig: updated.recordingConfig,
         lteRecoveryConfig: updated.lteRecoveryConfig,
+        timeSyncConfig: updated.timeSyncConfig,
       })
       // Keep the breadcrumb in sync after a rename (the layout header refreshes
       // on next navigation; the breadcrumb store updates live).
@@ -502,6 +512,32 @@ function DeviceSettingsPage() {
     } catch (err) {
       toast.error((err as Error).message)
       setLteRecovery(baseline.lteRecoveryConfig)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Offline time sync (optimize-system-process-cycle plan, Phase 4). Same
+  // optimistic-flip + rollback-on-error pattern. Spreading the stored object
+  // preserves threshold/cap knobs set out-of-band (xorgate set / API); the
+  // backend persists it and delivers it as retained MQTT config, read live by
+  // the agent's clock stepper.
+  async function commitTimeSync(patch: Partial<TimeSyncConfig>) {
+    if (saving || baseline === null) return
+    const next: TimeSyncConfig = { ...(timeSync ?? {}), ...patch }
+    if (JSON.stringify(next) === JSON.stringify(baseline.timeSyncConfig ?? {})) return
+    setTimeSync(next)
+    setSaving(true)
+    try {
+      const res = await updateDevice(id, { timeSyncConfig: next })
+      const updated = res.device
+      setDevice(updated)
+      setTimeSync(updated.timeSyncConfig)
+      setBaseline({ ...baseline, timeSyncConfig: updated.timeSyncConfig })
+      toast.success("Settings saved")
+    } catch (err) {
+      toast.error((err as Error).message)
+      setTimeSync(baseline.timeSyncConfig)
     } finally {
       setSaving(false)
     }
@@ -865,6 +901,30 @@ function DeviceSettingsPage() {
                       Aggressive: nudges 10–20 min apart, reset after 1
                       failed cycle. Applied by the device without a restart.
                     </FieldDescription>
+                  </Field>
+
+                  <Field orientation="horizontal">
+                    <FieldContent>
+                      <FieldLabel htmlFor="device-time-sync-offline">
+                        Set the clock from GPS when offline
+                      </FieldLabel>
+                      <FieldDescription>
+                        On by default. Until internet time sync succeeds after
+                        a boot, the device corrects a wrong clock from GPS (or
+                        the cellular network) so recordings carry accurate
+                        timestamps — e.g. when driving out of an underground
+                        garage. Stands down automatically once internet time
+                        sync lands. Applied by the device without a restart.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id="device-time-sync-offline"
+                      checked={timeSync?.offlineSources ?? true}
+                      disabled={saving}
+                      onCheckedChange={(next) =>
+                        commitTimeSync({ offlineSources: next })
+                      }
+                    />
                   </Field>
                 </FieldGroup>
               </form>

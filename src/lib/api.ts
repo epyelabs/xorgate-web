@@ -306,6 +306,17 @@ export interface LteRecoveryConfig {
   deadZoneProfile?: "conservative" | "balanced" | "aggressive"
 }
 
+// Offline time sources (optimize-system-process-cycle plan, Phase 4): while
+// NTP is unsynced this boot, the agent may step the system clock from GPS or
+// the modem's NITZ time. Delivered to the device as retained MQTT config; the
+// agent's clock stepper reads it live. Omitted fields = device defaults
+// (stepping on, 10 s threshold, 4 steps/boot).
+export interface TimeSyncConfig {
+  offlineSources?: boolean
+  stepThresholdSecs?: number
+  maxStepsPerBoot?: number
+}
+
 export interface Device {
   id: string
   workspaceId: string
@@ -320,6 +331,7 @@ export interface Device {
   imuView: ImuView | null
   recordingConfig: RecordingConfig | null
   lteRecoveryConfig: LteRecoveryConfig | null
+  timeSyncConfig: TimeSyncConfig | null
   lastSeenAt: string | null
   createdAt: string
   updatedAt: string
@@ -364,6 +376,7 @@ export async function updateDevice(
     imuView?: ImuView | null
     recordingConfig?: RecordingConfig | null
     lteRecoveryConfig?: LteRecoveryConfig | null
+    timeSyncConfig?: TimeSyncConfig | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {

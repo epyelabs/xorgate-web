@@ -176,6 +176,14 @@ export const lteRecoveryConfigSchema = z.object({
     .catch(undefined),
 })
 
+// Offline time sources (optimize-system-process-cycle plan, Phase 4): GPS/NITZ
+// clock stepping while NTP is unsynced. offlineSources=false is the kill switch.
+export const timeSyncConfigSchema = z.object({
+  offlineSources: z.boolean().optional().catch(undefined),
+  stepThresholdSecs: z.number().optional().catch(undefined),
+  maxStepsPerBoot: z.number().optional().catch(undefined),
+})
+
 export const deviceSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -193,6 +201,7 @@ export const deviceSchema = z.object({
   imuView: imuViewSchema.nullable().catch(null),
   recordingConfig: recordingConfigSchema.nullable().catch(null),
   lteRecoveryConfig: lteRecoveryConfigSchema.nullable().catch(null),
+  timeSyncConfig: timeSyncConfigSchema.nullable().catch(null),
   lastSeenAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

@@ -139,12 +139,28 @@ const SEGMENT_SECONDS_OPTIONS = [30, 60, 120, 300]
 const RETENTION_GIB_OPTIONS = [2, 5, 10, 20, 50]
 const GIB = 1024 ** 3
 
+// Boot power staging (optimize-system-process-cycle plan, Phase 2). Display
+// defaults mirror the device agent's RECORDING_DEFAULTS.
+const BOOT_DEFER_OPTIONS: {
+  value: "auto" | "always" | "off"
+  label: string
+}[] = [
+  { value: "auto", label: "Auto — only on constrained power (default)" },
+  { value: "always", label: "Always — stage every boot" },
+  { value: "off", label: "Off — start everything immediately" },
+]
+const BOOT_DEFER_MAX_SECS_OPTIONS = [30, 60, 90, 120, 180]
+
 interface ResolvedRecording {
   telemetryEnabled: boolean
   rateHz: number
   videoEnabled: boolean
   preset: VideoPresetName
   segmentSeconds: number
+  bootDefer: "auto" | "always" | "off"
+  bootDeferMaxSecs: number
+  bootDeferMinBudgetMa: number | undefined
+  spawnStaggerSecs: number | undefined
   uploadMode: "auto" | "off"
   maxBytes: number
   minFreeBytes: number | undefined
@@ -157,6 +173,10 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     videoEnabled: cfg?.video?.enabled ?? false,
     preset: cfg?.video?.preset ?? "1080p15-2mbps",
     segmentSeconds: cfg?.video?.segmentSeconds ?? 60,
+    bootDefer: cfg?.video?.bootDefer ?? "auto",
+    bootDeferMaxSecs: cfg?.video?.bootDeferMaxSecs ?? 90,
+    bootDeferMinBudgetMa: cfg?.video?.bootDeferMinBudgetMa,
+    spawnStaggerSecs: cfg?.video?.spawnStaggerSecs,
     uploadMode: cfg?.upload?.mode ?? "auto",
     maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
     minFreeBytes: cfg?.retention?.minFreeBytes,
@@ -172,6 +192,16 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       enabled: r.videoEnabled,
       preset: r.preset,
       segmentSeconds: r.segmentSeconds,
+      bootDefer: r.bootDefer,
+      bootDeferMaxSecs: r.bootDeferMaxSecs,
+      // Preserve threshold knobs someone set out-of-band (API / field-tuning
+      // loop); the card doesn't edit them.
+      ...(r.bootDeferMinBudgetMa !== undefined
+        ? { bootDeferMinBudgetMa: r.bootDeferMinBudgetMa }
+        : {}),
+      ...(r.spawnStaggerSecs !== undefined
+        ? { spawnStaggerSecs: r.spawnStaggerSecs }
+        : {}),
     },
     upload: { mode: r.uploadMode },
     retention: {
@@ -1166,6 +1196,73 @@ function DeviceSettingsPage() {
                       </SelectContent>
                     </Select>
                   </Field>
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-bootdefer">
+                      Boot power staging
+                    </FieldLabel>
+                    <Select
+                      value={rec.bootDefer}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.bootDefer = v as "auto" | "always" | "off"
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-bootdefer">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOT_DEFER_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Waits for the cellular modem to settle after power-on
+                      before starting the video encoders, easing the load on a
+                      weak power supply. Live streaming stays available while
+                      waiting.
+                    </FieldDescription>
+                  </Field>
+                  {rec.bootDefer !== "off" ? (
+                    <Field>
+                      <FieldLabel htmlFor="device-rec-bootdefer-cap">
+                        Staging time limit
+                      </FieldLabel>
+                      <Select
+                        value={String(rec.bootDeferMaxSecs)}
+                        disabled={saving}
+                        onValueChange={(v) =>
+                          commitRecording((r) => {
+                            r.bootDeferMaxSecs = Number(v)
+                          })
+                        }
+                      >
+                        <SelectTrigger id="device-rec-bootdefer-cap">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {withCurrent(
+                            BOOT_DEFER_MAX_SECS_OPTIONS,
+                            rec.bootDeferMaxSecs
+                          ).map((s) => (
+                            <SelectItem key={s} value={String(s)}>
+                              {s < 60
+                                ? `${s} seconds`
+                                : `${s / 60} minute${s > 60 ? "s" : ""}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        Recording always starts within this bound, even if the
+                        modem never settles.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
                 </div>
               ) : null}
 

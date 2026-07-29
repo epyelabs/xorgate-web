@@ -270,7 +270,16 @@ export type VideoPresetName =
 
 export interface RecordingConfig {
   telemetry?: { enabled?: boolean; rateHz?: number }
-  video?: { enabled?: boolean; preset?: VideoPresetName; segmentSeconds?: number }
+  video?: {
+    enabled?: boolean
+    preset?: VideoPresetName
+    segmentSeconds?: number
+    // Boot power staging (optimize-system-process-cycle plan, Phase 2).
+    bootDefer?: "auto" | "always" | "off"
+    bootDeferMaxSecs?: number
+    bootDeferMinBudgetMa?: number
+    spawnStaggerSecs?: number
+  }
   upload?: { mode?: "auto" | "off" }
   retention?: { maxBytes?: number; minFreeBytes?: number }
 }

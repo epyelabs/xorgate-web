@@ -135,6 +135,11 @@ export const recordingConfigSchema = z.object({
       enabled: z.boolean().optional(),
       preset: videoPresetNameSchema.optional().catch(undefined),
       segmentSeconds: z.number().optional(),
+      // Boot power staging (optimize-system-process-cycle plan, Phase 2).
+      bootDefer: z.enum(["auto", "always", "off"]).optional().catch(undefined),
+      bootDeferMaxSecs: z.number().optional(),
+      bootDeferMinBudgetMa: z.number().optional(),
+      spawnStaggerSecs: z.number().optional(),
     })
     .optional(),
   upload: z.object({ mode: z.enum(["auto", "off"]).optional() }).optional(),

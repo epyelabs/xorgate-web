@@ -164,6 +164,10 @@ interface ResolvedRecording {
   uploadMode: "auto" | "off"
   maxBytes: number
   minFreeBytes: number | undefined
+  powerSheddingEnabled: boolean
+  // Raw namespace, preserved verbatim: the threshold knobs are edited via the
+  // API / field-tuning loop, not this card.
+  powerShedding: RecordingConfig["powerShedding"]
 }
 
 function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
@@ -180,6 +184,8 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     uploadMode: cfg?.upload?.mode ?? "auto",
     maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
     minFreeBytes: cfg?.retention?.minFreeBytes,
+    powerSheddingEnabled: cfg?.powerShedding?.enabled ?? true,
+    powerShedding: cfg?.powerShedding,
   }
 }
 
@@ -209,6 +215,9 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       // Preserve a minFreeBytes someone set out-of-band; the card doesn't edit it.
       ...(r.minFreeBytes !== undefined ? { minFreeBytes: r.minFreeBytes } : {}),
     },
+    // Preserve shedding thresholds set out-of-band (field-tuning loop); the
+    // card only edits the master switch.
+    powerShedding: { ...(r.powerShedding ?? {}), enabled: r.powerSheddingEnabled },
   }
 }
 
@@ -1265,6 +1274,30 @@ function DeviceSettingsPage() {
                   ) : null}
                 </div>
               ) : null}
+
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldLabel htmlFor="device-rec-powershed">
+                    Power protection
+                  </FieldLabel>
+                  <FieldDescription>
+                    On a failing power supply the device automatically pauses
+                    live streaming first, then video recording, and resumes
+                    once the supply recovers — instead of crashing mid-drive.
+                    Recommended on.
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="device-rec-powershed"
+                  checked={rec.powerSheddingEnabled}
+                  disabled={saving}
+                  onCheckedChange={(next) =>
+                    commitRecording((r) => {
+                      r.powerSheddingEnabled = next
+                    })
+                  }
+                />
+              </Field>
 
               <Field orientation="horizontal">
                 <FieldContent>

@@ -149,6 +149,21 @@ export const recordingConfigSchema = z.object({
       minFreeBytes: z.number().optional(),
     })
     .optional(),
+  // Runtime undervoltage load shedding (optimize-system-process-cycle plan,
+  // Phase 3). All thresholds are field-tunable device settings.
+  powerShedding: z
+    .object({
+      enabled: z.boolean().optional(),
+      uvSamples: z.number().optional(),
+      uvWindowSecs: z.number().optional(),
+      railLowVolts: z.number().optional(),
+      railLowSecs: z.number().optional(),
+      escalateDwellSecs: z.number().optional(),
+      restoreSecs: z.number().optional(),
+      railRestoreVolts: z.number().optional(),
+      maxShedsPerHour: z.number().optional(),
+    })
+    .optional(),
 })
 
 // LTE recovery policy (lte_gnss_recovery plan, R8). .catch(undefined) keeps an

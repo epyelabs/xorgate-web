@@ -139,6 +139,9 @@ export const recordingConfigSchema = z.object({
       bootDefer: z.enum(["auto", "always", "off"]).optional().catch(undefined),
       bootDeferMaxSecs: z.number().optional(),
       bootDeferMinBudgetMa: z.number().optional(),
+      // GPS/LTE video gate (Phase 7); gpsGateMaxSecs 0 = no time cap.
+      gpsGate: z.enum(["auto", "always", "off"]).optional().catch(undefined),
+      gpsGateMaxSecs: z.number().optional(),
       spawnStaggerSecs: z.number().optional(),
       // Per-camera enables keyed by stream key (Phase 6); absent key = enabled.
       cameras: z.record(z.string(), z.boolean()).optional().catch(undefined),

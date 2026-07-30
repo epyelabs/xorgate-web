@@ -278,6 +278,10 @@ export interface RecordingConfig {
     bootDefer?: "auto" | "always" | "off"
     bootDeferMaxSecs?: number
     bootDeferMinBudgetMa?: number
+    // GPS/LTE video gate (optimize-system-process-cycle plan, Phase 7): video
+    // waits for the modem to finish acquiring. 0 = no time cap.
+    gpsGate?: "auto" | "always" | "off"
+    gpsGateMaxSecs?: number
     spawnStaggerSecs?: number
     // Per-camera capacity (optimize-system-process-cycle plan, Phase 6):
     // keyed by stream key; a disabled camera gets no pipeline at all. An

@@ -151,6 +151,16 @@ const BOOT_DEFER_OPTIONS: {
   { value: "off", label: "Off — start everything immediately" },
 ]
 const BOOT_DEFER_MAX_SECS_OPTIONS = [30, 60, 90, 120, 180]
+// GPS/LTE video gate (Phase 7). Same tri-state as boot staging, but the wait
+// is for the whole acquisition phase, not just modem bring-up.
+const GPS_GATE_OPTIONS = [
+  { value: "auto", label: "Auto — only on a weak power supply" },
+  { value: "always", label: "Always — wait on every boot" },
+  { value: "off", label: "Off — start video without waiting" },
+]
+// 0 is deliberately offered: "wait as long as it takes" (the other release
+// conditions — dead zone, no signal in view — still bound it).
+const GPS_GATE_MAX_SECS_OPTIONS = [0, 120, 300, 600, 900, 1800]
 
 interface ResolvedRecording {
   telemetryEnabled: boolean
@@ -161,6 +171,8 @@ interface ResolvedRecording {
   bootDefer: "auto" | "always" | "off"
   bootDeferMaxSecs: number
   bootDeferMinBudgetMa: number | undefined
+  gpsGate: "auto" | "always" | "off"
+  gpsGateMaxSecs: number
   spawnStaggerSecs: number | undefined
   // Per-camera enables keyed by stream key (Phase 6). An absent key means the
   // camera is on, so this only ever carries explicit choices.
@@ -184,6 +196,8 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     bootDefer: cfg?.video?.bootDefer ?? "auto",
     bootDeferMaxSecs: cfg?.video?.bootDeferMaxSecs ?? 90,
     bootDeferMinBudgetMa: cfg?.video?.bootDeferMinBudgetMa,
+    gpsGate: cfg?.video?.gpsGate ?? "auto",
+    gpsGateMaxSecs: cfg?.video?.gpsGateMaxSecs ?? 600,
     spawnStaggerSecs: cfg?.video?.spawnStaggerSecs,
     cameras: cfg?.video?.cameras ?? {},
     uploadMode: cfg?.upload?.mode ?? "auto",
@@ -205,6 +219,8 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       segmentSeconds: r.segmentSeconds,
       bootDefer: r.bootDefer,
       bootDeferMaxSecs: r.bootDeferMaxSecs,
+      gpsGate: r.gpsGate,
+      gpsGateMaxSecs: r.gpsGateMaxSecs,
       // Preserve threshold knobs someone set out-of-band (API / field-tuning
       // loop); the card doesn't edit them.
       ...(r.bootDeferMinBudgetMa !== undefined
@@ -1364,6 +1380,77 @@ function DeviceSettingsPage() {
                       <FieldDescription>
                         Recording always starts within this bound, even if the
                         modem never settles.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-gpsgate">
+                      Wait for GPS and cellular
+                    </FieldLabel>
+                    <Select
+                      value={rec.gpsGate}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.gpsGate = v as "auto" | "always" | "off"
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-gpsgate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GPS_GATE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Gives the modem the whole start-up window: video
+                      recording and live streaming both wait until the device
+                      is connected with a GPS fix — or until it is clear one
+                      isn&rsquo;t coming (no cellular coverage, no view of the
+                      sky). Trip logs keep recording throughout.
+                    </FieldDescription>
+                  </Field>
+                  {rec.gpsGate !== "off" ? (
+                    <Field>
+                      <FieldLabel htmlFor="device-rec-gpsgate-cap">
+                        Maximum GPS wait
+                      </FieldLabel>
+                      <Select
+                        value={String(rec.gpsGateMaxSecs)}
+                        disabled={saving}
+                        onValueChange={(v) =>
+                          commitRecording((r) => {
+                            r.gpsGateMaxSecs = Number(v)
+                          })
+                        }
+                      >
+                        <SelectTrigger id="device-rec-gpsgate-cap">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {withCurrent(
+                            GPS_GATE_MAX_SECS_OPTIONS,
+                            rec.gpsGateMaxSecs
+                          ).map((s) => (
+                            <SelectItem key={s} value={String(s)}>
+                              {s === 0
+                                ? "No limit — wait as long as it takes"
+                                : s < 60
+                                  ? `${s} seconds`
+                                  : `${s / 60} minute${s > 60 ? "s" : ""}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        Video starts within this bound even if GPS never
+                        fixes. With no limit, video still starts as soon as the
+                        device gives up on a fix.
                       </FieldDescription>
                     </Field>
                   ) : null}

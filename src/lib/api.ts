@@ -279,6 +279,10 @@ export interface RecordingConfig {
     bootDeferMaxSecs?: number
     bootDeferMinBudgetMa?: number
     spawnStaggerSecs?: number
+    // Per-camera capacity (optimize-system-process-cycle plan, Phase 6):
+    // keyed by stream key; a disabled camera gets no pipeline at all. An
+    // absent key means enabled, so {} is every detected camera.
+    cameras?: Record<string, boolean>
   }
   upload?: { mode?: "auto" | "off" }
   retention?: { maxBytes?: number; minFreeBytes?: number }
@@ -291,6 +295,7 @@ export interface RecordingConfig {
     railLowVolts?: number
     railLowSecs?: number
     escalateDwellSecs?: number
+    escalateDutyPct?: number
     restoreSecs?: number
     railRestoreVolts?: number
     maxShedsPerHour?: number

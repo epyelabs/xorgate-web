@@ -140,6 +140,8 @@ export const recordingConfigSchema = z.object({
       bootDeferMaxSecs: z.number().optional(),
       bootDeferMinBudgetMa: z.number().optional(),
       spawnStaggerSecs: z.number().optional(),
+      // Per-camera enables keyed by stream key (Phase 6); absent key = enabled.
+      cameras: z.record(z.string(), z.boolean()).optional().catch(undefined),
     })
     .optional(),
   upload: z.object({ mode: z.enum(["auto", "off"]).optional() }).optional(),
@@ -159,6 +161,7 @@ export const recordingConfigSchema = z.object({
       railLowVolts: z.number().optional(),
       railLowSecs: z.number().optional(),
       escalateDwellSecs: z.number().optional(),
+      escalateDutyPct: z.number().optional(),
       restoreSecs: z.number().optional(),
       railRestoreVolts: z.number().optional(),
       maxShedsPerHour: z.number().optional(),

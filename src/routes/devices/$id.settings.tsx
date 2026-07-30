@@ -162,6 +162,9 @@ interface ResolvedRecording {
   bootDeferMaxSecs: number
   bootDeferMinBudgetMa: number | undefined
   spawnStaggerSecs: number | undefined
+  // Per-camera enables keyed by stream key (Phase 6). An absent key means the
+  // camera is on, so this only ever carries explicit choices.
+  cameras: Record<string, boolean>
   uploadMode: "auto" | "off"
   maxBytes: number
   minFreeBytes: number | undefined
@@ -182,6 +185,7 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     bootDeferMaxSecs: cfg?.video?.bootDeferMaxSecs ?? 90,
     bootDeferMinBudgetMa: cfg?.video?.bootDeferMinBudgetMa,
     spawnStaggerSecs: cfg?.video?.spawnStaggerSecs,
+    cameras: cfg?.video?.cameras ?? {},
     uploadMode: cfg?.upload?.mode ?? "auto",
     maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
     minFreeBytes: cfg?.retention?.minFreeBytes,
@@ -209,6 +213,7 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       ...(r.spawnStaggerSecs !== undefined
         ? { spawnStaggerSecs: r.spawnStaggerSecs }
         : {}),
+      cameras: r.cameras,
     },
     upload: { mode: r.uploadMode },
     retention: {
@@ -1186,6 +1191,36 @@ function DeviceSettingsPage() {
                     record at their natural once-per-second pace.
                   </FieldDescription>
                 </Field>
+              ) : null}
+
+              {channels && channels.length > 0 ? (
+                <FieldGroup>
+                  {channels.map((ch) => (
+                    <Field key={ch.streamKey} orientation="horizontal">
+                      <FieldContent>
+                        <FieldLabel htmlFor={`device-rec-cam-${ch.streamKey}`}>
+                          Use camera{" "}
+                          <span className="font-mono">{ch.streamKey}</span>
+                        </FieldLabel>
+                        <FieldDescription>
+                          Turning a camera off shuts it down completely — no
+                          recording, no live view, no power drawn. Use one
+                          camera on a vehicle with a weaker power supply.
+                        </FieldDescription>
+                      </FieldContent>
+                      <Switch
+                        id={`device-rec-cam-${ch.streamKey}`}
+                        checked={rec.cameras[ch.streamKey] !== false}
+                        disabled={saving}
+                        onCheckedChange={(next) =>
+                          commitRecording((r) => {
+                            r.cameras = { ...r.cameras, [ch.streamKey]: next }
+                          })
+                        }
+                      />
+                    </Field>
+                  ))}
+                </FieldGroup>
               ) : null}
 
               <Field orientation="horizontal">

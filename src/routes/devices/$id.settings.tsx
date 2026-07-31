@@ -161,6 +161,7 @@ const GPS_GATE_OPTIONS = [
 // 0 is deliberately offered: "wait as long as it takes" (the other release
 // conditions — dead zone, no signal in view — still bound it).
 const GPS_GATE_MAX_SECS_OPTIONS = [0, 120, 300, 600, 900, 1800]
+const GPS_GATE_NO_PROGRESS_SECS_OPTIONS = [0, 60, 120, 180, 300, 600]
 
 interface ResolvedRecording {
   telemetryEnabled: boolean
@@ -173,6 +174,7 @@ interface ResolvedRecording {
   bootDeferMinBudgetMa: number | undefined
   gpsGate: "auto" | "always" | "off"
   gpsGateMaxSecs: number
+  gpsGateNoProgressSecs: number
   spawnStaggerSecs: number | undefined
   // Per-camera enables keyed by stream key (Phase 6). An absent key means the
   // camera is on, so this only ever carries explicit choices.
@@ -198,6 +200,7 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     bootDeferMinBudgetMa: cfg?.video?.bootDeferMinBudgetMa,
     gpsGate: cfg?.video?.gpsGate ?? "auto",
     gpsGateMaxSecs: cfg?.video?.gpsGateMaxSecs ?? 600,
+    gpsGateNoProgressSecs: cfg?.video?.gpsGateNoProgressSecs ?? 120,
     spawnStaggerSecs: cfg?.video?.spawnStaggerSecs,
     cameras: cfg?.video?.cameras ?? {},
     uploadMode: cfg?.upload?.mode ?? "auto",
@@ -221,6 +224,7 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       bootDeferMaxSecs: r.bootDeferMaxSecs,
       gpsGate: r.gpsGate,
       gpsGateMaxSecs: r.gpsGateMaxSecs,
+      gpsGateNoProgressSecs: r.gpsGateNoProgressSecs,
       // Preserve threshold knobs someone set out-of-band (API / field-tuning
       // loop); the card doesn't edit them.
       ...(r.bootDeferMinBudgetMa !== undefined
@@ -1451,6 +1455,46 @@ function DeviceSettingsPage() {
                         Video starts within this bound even if GPS never
                         fixes. With no limit, video still starts as soon as the
                         device gives up on a fix.
+                      </FieldDescription>
+                    </Field>
+                  ) : null}
+                  {rec.gpsGate !== "off" ? (
+                    <Field>
+                      <FieldLabel htmlFor="device-rec-gpsgate-noprogress">
+                        Give up early if nothing is working
+                      </FieldLabel>
+                      <Select
+                        value={String(rec.gpsGateNoProgressSecs)}
+                        disabled={saving}
+                        onValueChange={(v) =>
+                          commitRecording((r) => {
+                            r.gpsGateNoProgressSecs = Number(v)
+                          })
+                        }
+                      >
+                        <SelectTrigger id="device-rec-gpsgate-noprogress">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {withCurrent(
+                            GPS_GATE_NO_PROGRESS_SECS_OPTIONS,
+                            rec.gpsGateNoProgressSecs
+                          ).map((s) => (
+                            <SelectItem key={s} value={String(s)}>
+                              {s === 0
+                                ? "Off \u2014 only use the maximum wait"
+                                : s < 60
+                                  ? `${s} seconds`
+                                  : `${s / 60} minute${s > 60 ? "s" : ""}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        For underground parking: if neither a GPS fix nor a
+                        cellular connection has arrived within this time,
+                        video starts anyway instead of waiting out the
+                        maximum. Never applies once the device is connected.
                       </FieldDescription>
                     </Field>
                   ) : null}

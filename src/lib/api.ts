@@ -282,6 +282,7 @@ export interface RecordingConfig {
     // waits for the modem to finish acquiring. 0 = no time cap.
     gpsGate?: "auto" | "always" | "off"
     gpsGateMaxSecs?: number
+    gpsGateNoProgressSecs?: number
     spawnStaggerSecs?: number
     // Per-camera capacity (optimize-system-process-cycle plan, Phase 6):
     // keyed by stream key; a disabled camera gets no pipeline at all. An

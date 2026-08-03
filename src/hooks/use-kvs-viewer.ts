@@ -30,6 +30,11 @@ const CONNECT_TIMEOUT_MS = 15_000
 // can hang without rejecting, which would park open() forever with no retry
 // scheduled. Deadline each step so a hang becomes a thrown error -> reconnect.
 const SETUP_STEP_TIMEOUT_MS = 10_000
+// How often the inbound-rtp stats are sampled for the player's spec label
+// (resolution / fps / bitrate). Bitrate is a delta between samples, so this is
+// also the averaging window: short enough to feel live, long enough that a
+// single bursty interval doesn't make the number jitter.
+const STATS_INTERVAL_MS = 2000
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -60,10 +65,24 @@ export interface KvsChannelInput {
   region: string
 }
 
+/**
+ * What the viewer is actually receiving right now, sampled from the peer
+ * connection's inbound-rtp stats — not what the device was configured to send.
+ * Any field can be missing: browsers differ on which inbound-rtp counters they
+ * expose, and none are populated until frames are decoding.
+ */
+export interface KvsStreamStats {
+  width: number | null
+  height: number | null
+  fps: number | null
+  kbps: number | null
+}
+
 export interface UseKvsViewer {
   videoRef: React.RefObject<HTMLVideoElement | null>
   status: KvsStatus
   error: string | null
+  stats: KvsStreamStats | null
 }
 
 /**
@@ -78,6 +97,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [status, setStatus] = useState<KvsStatus>("connecting")
   const [error, setError] = useState<string | null>(null)
+  const [stats, setStats] = useState<KvsStreamStats | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +107,13 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
     let disconnectTimer: ReturnType<typeof setTimeout> | null = null
     let connectTimer: ReturnType<typeof setTimeout> | null = null
+    let statsTimer: ReturnType<typeof setInterval> | null = null
+    // Previous inbound-rtp sample, for the byte/frame deltas the label needs.
+    let prevSample: {
+      ts: number
+      bytesReceived: number
+      framesDecoded: number
+    } | null = null
     let backoff = 1000
     // Generation counter: each open() invalidates prior in-flight runs, so a
     // stalled attempt resuming after an await can't cross-wire a newer session.
@@ -116,9 +143,72 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
       return provider()
     }
 
+    // Sample inbound-rtp once and publish the player's spec label. Resolution
+    // and fps come straight off the report; bitrate is derived from the
+    // bytesReceived delta since the previous sample (the first sample after a
+    // (re)connect therefore has no bitrate yet, which is why kbps is nullable).
+    async function sampleStats() {
+      if (cancelled || !pc) return
+      let reports: RTCStatsReport
+      try {
+        reports = await pc.getStats()
+      } catch {
+        return // connection went away mid-sample
+      }
+      if (cancelled) return
+      let inbound: RTCInboundRtpStreamStats | null = null
+      reports.forEach((r) => {
+        const s = r as RTCInboundRtpStreamStats
+        if (s.type === "inbound-rtp" && s.kind === "video") inbound = s
+      })
+      if (!inbound) return
+      // TS narrows a forEach-assigned local to `never`; the runtime shape is
+      // whatever the browser put in the report, so read it through the type.
+      const rtp = inbound as RTCInboundRtpStreamStats & {
+        frameWidth?: number
+        frameHeight?: number
+        framesPerSecond?: number
+        framesDecoded?: number
+        bytesReceived?: number
+      }
+      const ts = rtp.timestamp
+      const bytesReceived = rtp.bytesReceived ?? 0
+      const framesDecoded = rtp.framesDecoded ?? 0
+
+      let kbps: number | null = null
+      // Not every browser reports framesPerSecond; fall back to the decoded-frame
+      // delta over the sample window.
+      let fps: number | null = rtp.framesPerSecond ?? null
+      if (prevSample && ts > prevSample.ts) {
+        const secs = (ts - prevSample.ts) / 1000
+        const byteDelta = bytesReceived - prevSample.bytesReceived
+        if (byteDelta >= 0) kbps = (byteDelta * 8) / secs / 1000
+        if (fps === null) {
+          const frameDelta = framesDecoded - prevSample.framesDecoded
+          if (frameDelta >= 0) fps = frameDelta / secs
+        }
+      }
+      prevSample = { ts, bytesReceived, framesDecoded }
+
+      setStats({
+        width: rtp.frameWidth ?? null,
+        height: rtp.frameHeight ?? null,
+        fps,
+        kbps,
+      })
+    }
+
     // Close the peer connection + signaling client without touching the <video>
     // element, so a transient reconnect keeps the last frame on screen.
     function teardown() {
+      if (statsTimer) {
+        clearInterval(statsTimer)
+        statsTimer = null
+      }
+      // The next session re-measures from scratch — carrying a delta across a
+      // reconnect would report a bogus bitrate for the gap.
+      prevSample = null
+      setStats(null)
       if (disconnectTimer) {
         clearTimeout(disconnectTimer)
         disconnectTimer = null
@@ -342,6 +432,10 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
 
         signaling.open()
 
+        // Spec label sampler. Runs for the life of this session; before media
+        // flows there simply is no inbound-rtp report and the sample no-ops.
+        statsTimer = setInterval(() => void sampleStats(), STATS_INTERVAL_MS)
+
         // Connect-attempt deadline: if we aren't fully connected in time (offer
         // unanswered because the master is offline, ICE stalled, socket half-open),
         // tear down and retry with a fresh session + fresh offer.
@@ -401,5 +495,5 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
     }
   }, [channel?.channelArn, channel?.region])
 
-  return { videoRef, status, error }
+  return { videoRef, status, error, stats }
 }

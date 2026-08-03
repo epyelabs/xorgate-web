@@ -38,6 +38,11 @@ export const Route = createFileRoute("/devices/$id/streams")({
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
+  // Per-camera enables from the device's recording config (keyed by stream key;
+  // absent = enabled). Drives the "camera turned off" placeholder in the grid.
+  const [cameraEnables, setCameraEnables] = useState<
+    Record<string, boolean> | undefined
+  >(undefined)
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [imuView, setImuView] = useState<ImuView | null>(null)
   const [metaLoading, setMetaLoading] = useState(true)
@@ -71,6 +76,9 @@ function DeviceStreamsPage() {
           )
         setViewType(parsedDevice.data.device.activeStreamsViewType)
         setImuView(parsedDevice.data.device.imuView)
+        setCameraEnables(
+          parsedDevice.data.device.recordingConfig?.video?.cameras
+        )
 
         const rawModel = await getDeviceModel(
           parsedDevice.data.device.deviceModelId
@@ -129,6 +137,7 @@ function DeviceStreamsPage() {
           deviceId={id}
           videoCaps={videoCaps}
           recordingOnDevice={recordingOnDevice}
+          cameraEnables={cameraEnables}
         />
       ) : (
         <LiveVideoGrid
@@ -136,6 +145,7 @@ function DeviceStreamsPage() {
           videoCaps={videoCaps}
           title="Media"
           recordingOnDevice={recordingOnDevice}
+          cameraEnables={cameraEnables}
         />
       )
     ) : null

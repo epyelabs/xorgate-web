@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { ArrowRightIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,6 @@ import {
   getDeviceModelResponseSchema,
   getDeviceResponseSchema,
 } from "@/lib/schemas"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { RecentSessionsSection } from "./-components/recent-sessions-section"
 
@@ -33,12 +33,7 @@ import { RecentSessionsSection } from "./-components/recent-sessions-section"
 // same hooks/components the deeper tabs use. It deliberately does NOT mount the
 // live WebRTC grid (that stays on Active Streams) so opening a device is cheap.
 export const Route = createFileRoute("/devices/$id/overview")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceOverviewPage,
 })
 

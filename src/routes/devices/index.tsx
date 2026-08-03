@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,19 +24,13 @@ import {
 import { listDevices, type Device, type DeviceStatus } from "@/lib/api"
 import { listDevicesResponseSchema } from "@/lib/schemas"
 import { formatRelative } from "@/lib/relative-time"
-import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 
 export const Route = createFileRoute("/devices/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DevicesListPage,
 })
 

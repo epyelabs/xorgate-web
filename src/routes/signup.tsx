@@ -2,12 +2,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router"
 import { SignupForm } from "@/components/signup-form"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
+import { DEFAULT_AUTHED_ROUTE, ensureAuthInitialized } from "@/lib/auth-guard"
 
 export const Route = createFileRoute("/signup")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && isAuthenticated) {
-      throw redirect({ to: "/devices" })
+  beforeLoad: async () => {
+    await ensureAuthInitialized()
+    if (useAuthStore.getState().isAuthenticated) {
+      throw redirect({ to: DEFAULT_AUTHED_ROUTE })
     }
   },
   component: SignupPage,

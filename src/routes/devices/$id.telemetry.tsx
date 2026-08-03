@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import {
   CalendarIcon,
   ChevronLeftIcon,
@@ -35,7 +36,6 @@ import {
 } from "@/lib/schemas"
 import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
 import { formatUnit, metricLabel, orderMetrics } from "@/lib/telemetry-meta"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryReadings } from "@/hooks/use-telemetry-readings"
 import { TelemetryTable } from "@/components/telemetry-table"
@@ -89,12 +89,7 @@ export const Route = createFileRoute("/devices/$id/telemetry")({
       size,
     }
   },
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceTelemetryPage,
 })
 

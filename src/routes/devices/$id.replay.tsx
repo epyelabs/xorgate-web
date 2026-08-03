@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +26,6 @@ import {
 import { formatDateTime } from "@/lib/format-time"
 import { formatDuration } from "@/components/data-table"
 import { cn } from "@/lib/utils"
-import { useAuthStore } from "@/store/auth"
 import { StreamsView } from "@/components/streams-view/streams-view"
 import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
@@ -58,12 +58,7 @@ export const Route = createFileRoute("/devices/$id/replay")({
     streamKey:
       typeof search.streamKey === "string" ? search.streamKey : undefined,
   }),
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceReplayPage,
 })
 

@@ -1,5 +1,7 @@
 import { useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
+import { RequirePermission } from "@/components/require-permission"
 import {
   ArrowUpRightIcon,
   Building2Icon,
@@ -53,13 +55,12 @@ import {
 } from "./billing/-components/plan-parts"
 
 export const Route = createFileRoute("/billing")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
-  component: BillingPage,
+  beforeLoad: requireAuth,
+  component: () => (
+    <RequirePermission permission="billing:manage">
+      <BillingPage />
+    </RequirePermission>
+  ),
 })
 
 function BillingPage() {

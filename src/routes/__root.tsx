@@ -2,6 +2,8 @@ import { Fragment, useEffect } from "react"
 import { createRootRoute, Outlet, useLocation } from "@tanstack/react-router"
 import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { ensureAuthInitialized } from "@/lib/auth-guard"
+import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
 import { AppSidebar } from "@/components/app-sidebar"
 import { GlobalSearch } from "@/components/global-search"
 import {
@@ -57,6 +59,7 @@ function resolveCrumbs(
       { label: instanceName ?? "Instance" },
     ]
   }
+  if (pathname === "/forbidden") return [{ label: "Access denied" }]
   if (pathname === "/settings") return [{ label: "Settings" }]
   if (pathname === "/members") return [{ label: "Members" }]
   if (pathname === "/api-keys") return [{ label: "API Keys" }]
@@ -73,7 +76,9 @@ function resolveCrumbs(
     }
     return crumbs
   }
-  return [{ label: "xorgate" }]
+  // Every real route is listed above, so anything reaching here is a path with
+  // no match — the same case the 404 screen below is rendering for.
+  return [{ label: "Not found" }]
 }
 
 function LoadingScreen() {
@@ -91,15 +96,14 @@ const AUTH_ROUTES = ["/login", "/signup"]
 function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const initialize = useAuthStore((s) => s.initialize)
   const deviceName = useBreadcrumbStore((s) => s.deviceName)
   const templateName = useBreadcrumbStore((s) => s.templateName)
   const instanceName = useBreadcrumbStore((s) => s.instanceName)
   const location = useLocation()
 
   useEffect(() => {
-    initialize()
-  }, [initialize])
+    void ensureAuthInitialized()
+  }, [])
 
   const isOnAuthRoute = AUTH_ROUTES.includes(location.pathname)
 
@@ -171,4 +175,10 @@ function RootLayout() {
 
 export const Route = createRootRoute({
   component: RootLayout,
+  // Both render inside RootLayout's <Outlet />, so a signed-in user keeps the
+  // sidebar and breadcrumb while a signed-out one gets the bare screen.
+  notFoundComponent: NotFoundScreen,
+  errorComponent: ({ error, reset }) => (
+    <AppErrorScreen error={error} reset={reset} />
+  ),
 })

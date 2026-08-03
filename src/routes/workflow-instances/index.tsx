@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,17 +24,11 @@ import {
   type RunStatus,
   type WorkflowRunSummary,
 } from "@/lib/workflow-run-schemas"
-import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
 
 export const Route = createFileRoute("/workflow-instances/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: WorkflowInstancesListPage,
 })
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
   MoreHorizontalIcon,
@@ -39,7 +40,6 @@ import {
   listWorkflowRunsResponseSchema,
   type WorkflowRunSummary,
 } from "@/lib/workflow-run-schemas"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import {
   AttachmentsEmptyState,
@@ -54,12 +54,7 @@ const RUNS_PAGE_SIZES = [25, 50, 100]
 const RUNS_DEFAULT_SIZE = 25
 
 export const Route = createFileRoute("/devices/$id/workflows")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceWorkflowsPage,
 })
 

@@ -1,5 +1,7 @@
 import { useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
+import { RequirePermission } from "@/components/require-permission"
 import { MoreHorizontalIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,13 +32,12 @@ import { DeleteWorkspaceDialog } from "./-components/delete-workspace-dialog"
 import { CredentialsCard } from "./-components/credentials-card"
 
 export const Route = createFileRoute("/settings/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
-  component: OrganizationSettingsPage,
+  beforeLoad: requireAuth,
+  component: () => (
+    <RequirePermission permission="workspace:manage">
+      <OrganizationSettingsPage />
+    </RequirePermission>
+  ),
 })
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" })

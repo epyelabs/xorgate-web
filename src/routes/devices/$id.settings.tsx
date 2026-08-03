@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -55,18 +56,12 @@ import {
   getKvsChannelsResponseSchema,
   updateDeviceSchema,
 } from "@/lib/schemas"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { DeleteDeviceDialog } from "./-components/delete-device-dialog"
 import { InfoRow } from "./-components/info-row"
 
 export const Route = createFileRoute("/devices/$id/settings")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceSettingsPage,
 })
 

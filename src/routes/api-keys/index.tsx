@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
+import { RequirePermission } from "@/components/require-permission"
 import { toast } from "sonner"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,19 +15,17 @@ import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import { listApiKeys, type ApiKey } from "@/lib/api"
 import { formatRelative } from "@/lib/relative-time"
-import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { CreateApiKeyDialog } from "./-components/create-api-key-dialog"
 import { DeleteApiKeyDialog } from "./-components/delete-api-key-dialog"
 
 export const Route = createFileRoute("/api-keys/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
-  component: ApiKeysPage,
+  beforeLoad: requireAuth,
+  component: () => (
+    <RequirePermission permission="api-keys:manage">
+      <ApiKeysPage />
+    </RequirePermission>
+  ),
 })
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {

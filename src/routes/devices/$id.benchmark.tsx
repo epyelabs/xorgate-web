@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
   ApiError,
@@ -11,7 +12,6 @@ import {
   getDeviceModelResponseSchema,
   getDeviceResponseSchema,
 } from "@/lib/schemas"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { gpsMetrics, imuMetrics, signalMetrics } from "@/lib/capability-metrics"
 import { Badge } from "@/components/ui/badge"
@@ -20,12 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 
 export const Route = createFileRoute("/devices/$id/benchmark")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceBenchmarkPage,
 })
 

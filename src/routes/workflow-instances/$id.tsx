@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { AlertTriangleIcon, RadioIcon, RotateCwIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +18,6 @@ import {
   type WorkflowRunDetail,
 } from "@/lib/workflow-run-schemas"
 import { useSimProgress } from "@/hooks/use-sim-progress"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { StickyHeader } from "@/components/sticky-header"
@@ -29,12 +29,7 @@ import { RunTrace } from "./-components/run-trace"
 import { formatDuration } from "@/components/data-table"
 
 export const Route = createFileRoute("/workflow-instances/$id")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: WorkflowInstanceDetailPage,
 })
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
   BracesIcon,
@@ -26,7 +27,6 @@ import {
   type WorkflowTemplateDetail,
   type WorkflowTemplateVersion,
 } from "@/lib/workflow-schemas"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
@@ -42,12 +42,7 @@ import { VersionsSheet } from "./-components/versions-sheet"
 import { WorkflowCanvas } from "./-components/workflow-canvas"
 
 export const Route = createFileRoute("/workflow-templates/$id")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: WorkflowTemplateDetailPage,
 })
 

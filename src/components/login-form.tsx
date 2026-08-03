@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { getRouteApi, Link, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -19,12 +19,21 @@ import {
 import { Input } from "@/components/ui/input"
 import { useAuthStore } from "@/store/auth"
 import { loginSchema } from "@/lib/schemas"
+import { DEFAULT_AUTHED_ROUTE, sanitizeRedirect } from "@/lib/auth-guard"
+
+// Read via the route API rather than importing the route module, which would
+// close an import cycle (the route renders this form).
+const loginRoute = getRouteApi("/login")
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const navigate = useNavigate()
+  // Set by the private-route guard: where the visitor was headed before being
+  // bounced to login. Sanitized here (not just in validateSearch) because the
+  // router hands back whatever the query string actually held.
+  const redirectTo = sanitizeRedirect(loginRoute.useSearch().redirect)
   const login = useAuthStore((s) => s.login)
   const completeNewPassword = useAuthStore((s) => s.completeNewPassword)
   const [email, setEmail] = useState("")
@@ -50,7 +59,7 @@ export function LoginForm({
         setNeedsNewPassword(true)
         return
       }
-      navigate({ to: "/devices" })
+      navigate({ href: redirectTo ?? DEFAULT_AUTHED_ROUTE, replace: true })
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -71,7 +80,7 @@ export function LoginForm({
     setSubmitting(true)
     try {
       await completeNewPassword(newPassword)
-      navigate({ to: "/devices" })
+      navigate({ href: redirectTo ?? DEFAULT_AUTHED_ROUTE, replace: true })
     } catch (err) {
       toast.error((err as Error).message)
     } finally {

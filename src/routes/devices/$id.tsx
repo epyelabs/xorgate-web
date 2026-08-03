@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react"
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  redirect,
-  useLocation,
-} from "@tanstack/react-router"
+import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { EllipsisVerticalIcon, PowerIcon, ZapIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -47,7 +42,6 @@ import {
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { formatRelative } from "@/lib/relative-time"
-import { useAuthStore } from "@/store/auth"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // Layout route for /devices/$id. Owns the device fetch and renders the shared
@@ -55,12 +49,7 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
 // through the Outlet below. Because this layout stays mounted while only the
 // leaf swaps, the header persists across tab switches without refetching.
 export const Route = createFileRoute("/devices/$id")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: DeviceLayout,
 })
 

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { createFileRoute, redirect } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
+import { RequirePermission } from "@/components/require-permission"
 import { toast } from "sonner"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -20,13 +22,12 @@ import { AddMemberDialog } from "./-components/add-member-dialog"
 import { RemoveMemberDialog } from "./-components/remove-member-dialog"
 
 export const Route = createFileRoute("/members/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
-  component: MembersPage,
+  beforeLoad: requireAuth,
+  component: () => (
+    <RequirePermission permission="members:read">
+      <MembersPage />
+    </RequirePermission>
+  ),
 })
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {

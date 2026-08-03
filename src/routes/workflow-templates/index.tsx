@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { createFileRoute, Link, redirect } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -23,17 +24,11 @@ import {
   type TemplateStatus,
   type WorkflowTemplateSummary,
 } from "@/lib/workflow-schemas"
-import { useAuthStore } from "@/store/auth"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
 
 export const Route = createFileRoute("/workflow-templates/")({
-  beforeLoad: () => {
-    const { isAuthenticated, isLoading } = useAuthStore.getState()
-    if (!isLoading && !isAuthenticated) {
-      throw redirect({ to: "/login" })
-    }
-  },
+  beforeLoad: requireAuth,
   component: WorkflowTemplatesListPage,
 })
 

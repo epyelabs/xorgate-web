@@ -403,6 +403,30 @@ export const getDeviceSessionsResponseSchema = z.object({
   page: pageSchema.optional(),
 })
 
+// A RECORDING RUN as the server now clusters it (`?group=runs`) — the row the
+// Media Recordings table and Overview's recent-recordings list actually render.
+// Timestamps are ISO (the sessions-API dialect); `runFromApi` in
+// `lib/replay/runs.ts` converts them to the epoch-ms `RecordingRun` the replay
+// helpers consume.
+export const recordingRunSchema = z.object({
+  // The earliest member session's id — stable across polls, unlike run_no.
+  key: z.string(),
+  fromTs: z.string(),
+  toTs: z.string(),
+  streamKeys: z.array(z.string()),
+  sessionCount: z.number(),
+  segmentCount: z.number().default(0),
+  totalBytes: z.number().default(0),
+  anyOpen: z.boolean().default(false),
+  anyUnsynced: z.boolean().default(false),
+  sessions: z.array(mediaSessionSchema),
+})
+
+export const getDeviceRunsResponseSchema = z.object({
+  runs: z.array(recordingRunSchema),
+  page: pageSchema.optional(),
+})
+
 export const getSessionSegmentsResponseSchema = z.object({
   session: mediaSessionSchema,
   segments: z.array(mediaSegmentSchema),

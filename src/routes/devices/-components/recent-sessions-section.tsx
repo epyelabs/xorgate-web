@@ -14,12 +14,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatBytes, formatDuration } from "@/components/data-table"
-import { getDeviceSessions, type MediaSession } from "@/lib/api"
-import { getDeviceSessionsResponseSchema } from "@/lib/schemas"
+import { getDeviceRuns } from "@/lib/api"
+import { getDeviceRunsResponseSchema } from "@/lib/schemas"
 import {
-  clusterRuns,
+  runFromApi,
   runReplayBlocked,
   runReplaySearch,
+  type RecordingRun,
 } from "@/lib/replay/runs"
 
 // Overview's glance surface for on-device recordings (recorder-removal plan,
@@ -27,11 +28,14 @@ import {
 // section that Phase 1 deleted. Deliberately NOT `DeviceSessionsCard`: no
 // filters, no pagination, no 3-level expansion. Just the newest few runs and a
 // door into the Media tab.
-// Fetch comfortably more sessions than the runs we show: a run is N per-camera
-// sessions and a long one can be 16+, so a tight limit truncates the oldest run
-// and reports a wrong start/duration for it (observed: 69m for a run the Media
-// tab correctly shows as 83m).
-const SESSION_FETCH_LIMIT = 40
+//
+// Asks the server for RUNS, so it gets exactly this many, each whole
+// (improve-recording-history-fetching Phase 3). It used to over-fetch 40
+// sessions and cluster them client-side, then discard the oldest cluster in
+// case the limit had cut it in half — a heuristic that still reported a wrong
+// start and duration when a run spanned more sessions than the fetch
+// (observed: 69m for a run the Media tab correctly showed as 83m). Both
+// surfaces now read the same server-side clustering, so they cannot disagree.
 const RECENT_RUNS = 4
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
@@ -49,7 +53,7 @@ export function RecentSessionsSection({
   // Drives the empty-state hint: "turn it on" only makes sense when it is off.
   recordingEnabled?: boolean
 }) {
-  const [sessions, setSessions] = useState<MediaSession[] | null>(null)
+  const [runs, setRuns] = useState<RecordingRun[] | null>(null)
 
   // Load once on mount — Overview's other panels (device, model, recent
   // telemetry) fetch once too; the Media tab owns the 5 s live cadence.
@@ -57,15 +61,17 @@ export function RecentSessionsSection({
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getDeviceSessions(deviceId, {
-          limit: SESSION_FETCH_LIMIT,
+        const raw = await getDeviceRuns(deviceId, {
+          limit: RECENT_RUNS,
           order: "desc",
           sort: "startedAt",
         })
-        const parsed = getDeviceSessionsResponseSchema.safeParse(raw)
-        if (!cancelled) setSessions(parsed.success ? parsed.data.sessions : [])
+        const parsed = getDeviceRunsResponseSchema.safeParse(raw)
+        if (!cancelled) {
+          setRuns(parsed.success ? parsed.data.runs.map(runFromApi) : [])
+        }
       } catch {
-        if (!cancelled) setSessions([])
+        if (!cancelled) setRuns([])
       }
     })()
     return () => {
@@ -73,17 +79,7 @@ export function RecentSessionsSection({
     }
   }, [deviceId])
 
-  // Same `clusterRuns` the Media tab uses, so both agree on what a "run" is.
-  // If the response filled the limit, its OLDEST cluster may be cut off at the
-  // page boundary — drop it rather than render a run with a wrong start and
-  // duration. (`clusterRuns` returns newest-first, so that is the last one.)
-  const clustered = clusterRuns(sessions ?? [])
-  const complete =
-    (sessions?.length ?? 0) >= SESSION_FETCH_LIMIT && clustered.length > 1
-      ? clustered.slice(0, -1)
-      : clustered
-  const runs = complete.slice(0, RECENT_RUNS)
-  const loading = sessions === null
+  const loading = runs === null
 
   return (
     <section className="flex flex-col gap-3">
@@ -108,7 +104,7 @@ export function RecentSessionsSection({
               <Skeleton className="h-6 w-full" />
               <Skeleton className="h-6 w-full" />
             </div>
-          ) : runs.length === 0 ? (
+          ) : (runs ?? []).length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               No on-device recordings yet.
               {recordingEnabled === false ? (
@@ -143,7 +139,7 @@ export function RecentSessionsSection({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {runs.map((run) => {
+                {(runs ?? []).map((run) => {
                   const blocked = runReplayBlocked(run)
                   return (
                     <TableRow key={run.key}>

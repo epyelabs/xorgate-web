@@ -691,10 +691,23 @@ export interface MediaSessionsListParams {
   to?: string
 }
 
-export async function getDeviceSessions(
-  deviceId: string,
-  params: MediaSessionsListParams = {}
-): Promise<{ sessions: MediaSession[]; page?: Page }> {
+// A run as the API returns it (`?group=runs`). ISO timestamps — the sessions
+// dialect. `runFromApi` (lib/replay/runs.ts) turns this into the epoch-ms
+// `RecordingRun` the replay helpers read.
+export interface ApiRecordingRun {
+  key: string
+  fromTs: string
+  toTs: string
+  streamKeys: string[]
+  sessionCount: number
+  segmentCount: number
+  totalBytes: number
+  anyOpen: boolean
+  anyUnsynced: boolean
+  sessions: MediaSession[]
+}
+
+function sessionsQuery(params: MediaSessionsListParams): string {
   const qs = new URLSearchParams()
   if (params.limit !== undefined) qs.set("limit", String(params.limit))
   if (params.offset !== undefined) qs.set("offset", String(params.offset))
@@ -704,8 +717,29 @@ export async function getDeviceSessions(
   if (params.streamKey) qs.set("streamKey", params.streamKey)
   if (params.from) qs.set("from", params.from)
   if (params.to) qs.set("to", params.to)
-  const suffix = qs.toString() ? `?${qs.toString()}` : ""
-  return apiRequest(`/devices/${deviceId}/sessions${suffix}`)
+  return qs.toString() ? `?${qs.toString()}` : ""
+}
+
+export async function getDeviceSessions(
+  deviceId: string,
+  params: MediaSessionsListParams = {}
+): Promise<{ sessions: MediaSession[]; page?: Page }> {
+  return apiRequest(`/devices/${deviceId}/sessions${sessionsQuery(params)}`)
+}
+
+// Same endpoint, grouped: the server clusters the device's sessions into
+// recording runs and paginates THOSE, so a run can never straddle a page
+// boundary and `page.total` counts runs. Filters select which runs to return,
+// not which sessions to cluster — `streamKey=cam0` yields the runs cam0
+// recorded in, every camera still present.
+export async function getDeviceRuns(
+  deviceId: string,
+  params: MediaSessionsListParams = {}
+): Promise<{ runs: ApiRecordingRun[]; page?: Page }> {
+  const qs = sessionsQuery(params)
+  return apiRequest(
+    `/devices/${deviceId}/sessions${qs ? `${qs}&` : "?"}group=runs`
+  )
 }
 
 // The whole ordered segment index in one response (seq asc = chronological).

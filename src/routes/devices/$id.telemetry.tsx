@@ -300,6 +300,10 @@ function DeviceTelemetryPage() {
           offset: off,
         })
         grandTotal = res.page.total
+        // The server caps `total` at the samples it can page to, so the loop
+        // bound above is itself a truncation — warn even if EXPORT_CAP is never
+        // reached, or the user silently gets a partial CSV.
+        if (res.page.totalIsCapped) capped = true
         for (const r of res.readings) {
           if (r.value === null) continue
           const ts = Date.parse(r.ts)
@@ -344,7 +348,7 @@ function DeviceTelemetryPage() {
       downloadCsv(lines.join("\n"), `telemetry-${id}.csv`)
       if (capped) {
         toast.warning(
-          `Export capped at ${EXPORT_CAP.toLocaleString()} rows. Narrow the range for a complete export.`
+          `Export capped at ${byTs.size.toLocaleString()} rows. Narrow the range for a complete export.`
         )
       }
     } catch (err) {

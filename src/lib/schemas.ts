@@ -7,6 +7,13 @@ export const pageSchema = z.object({
   offset: z.number(),
   order: z.enum(["asc", "desc"]),
   total: z.number(),
+  // Only /telemetry/readings sets these: its table is large enough that an
+  // exact count times out, so `total` is capped at 10,000 addressable samples
+  // and the covered span says which ones. Every other list endpoint counts an
+  // exact total and omits them.
+  totalIsCapped: z.boolean().optional(),
+  coveredFrom: z.string().optional(),
+  coveredTo: z.string().optional(),
 })
 
 export const loginSchema = z.object({

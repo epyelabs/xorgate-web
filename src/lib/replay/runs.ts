@@ -1,17 +1,23 @@
-import type { MediaSession } from "@/lib/api"
+import type { ApiRecordingRun, MediaSession } from "@/lib/api"
 
 // Recording runs (composite replays plan, R9): one drive with N cameras
 // produces N per-cam sessions; the sessions table's primary object is the
 // RUN — sessions clustered by time overlap. There is NO device-side runId
-// and no schema change: clustering is a pure client-side sweep over the
-// fetched page (sessions from one drive sort adjacently by startedAt).
-// If page-boundary splits prove annoying on real data, grouping moves
-// server-side — decide on evidence (phase-5 doc).
+// and no schema change.
+//
+// ⚠️ Clustering now happens SERVER-side (improve-recording-history-fetching,
+// Phase 3): `GET /devices/{id}/sessions?group=runs` clusters over the device's
+// whole session set and paginates runs, which is what removed the uneven pages
+// and the runs that rendered twice at a page boundary. Use `runFromApi` to turn
+// a response run into the `RecordingRun` the helpers below consume.
 
 // A session that starts within this of another's end joins the same run —
 // covers capture restarts and per-cam pipeline start staggers. The device
 // rotates segments every ~60 s, so a genuinely separate recording is
 // minutes away in practice.
+// ⚠️ Mirrored by `RUN_GAP_TOLERANCE_MS` in
+// `backend/src/services/session-runs.ts`, which is now the value that actually
+// decides run boundaries. The two must agree.
 export const RUN_GAP_TOLERANCE_MS = 60_000
 
 export interface RecordingRun {
@@ -45,8 +51,33 @@ function endMs(s: MediaSession): number {
   return start + Math.max(s.totalDurationMs ?? 0, 0)
 }
 
+// Adapt a `?group=runs` response row to the `RecordingRun` shape the replay
+// helpers below read. The API speaks ISO (the sessions dialect); replay works
+// in epoch ms (the replay-clock unit), so the conversion happens here, once.
+export function runFromApi(run: ApiRecordingRun): RecordingRun {
+  return {
+    key: run.key,
+    sessions: run.sessions,
+    fromMs: Date.parse(run.fromTs),
+    toMs: Date.parse(run.toTs),
+    streamKeys: run.streamKeys,
+    segmentCount: run.segmentCount,
+    totalBytes: run.totalBytes,
+    anyOpen: run.anyOpen,
+    anyUnsynced: run.anyUnsynced,
+  }
+}
+
 // Cluster a page of sessions into runs, newest-first (table order). Input
 // order does not matter; overlap is evaluated on the time axis.
+//
+// ⚠️ No screen calls this any more — the server clusters (Phase 3). It is kept
+// as the executable reference specification of what a run IS: the backend's
+// `src/services/session-runs.ts` mirrors this algorithm, its window-function
+// equivalence proof is stated against it, and `test/session-runs.test.ts` +
+// `test/session-runs.live.test.ts` are ports of the cases in `runs.test.ts`
+// below. If you change the tolerance or the open-session end estimate here,
+// change them there too — or delete both.
 export function clusterRuns(
   sessions: readonly MediaSession[],
   toleranceMs: number = RUN_GAP_TOLERANCE_MS

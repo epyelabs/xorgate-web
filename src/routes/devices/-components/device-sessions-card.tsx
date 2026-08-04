@@ -45,6 +45,7 @@ import {
 } from "@/components/data-table"
 import {
   deleteDeviceSession,
+  getDeviceRuns,
   getDeviceSessions,
   getSessionSegments,
   getSegmentPlaybackUrl,
@@ -54,11 +55,12 @@ import {
   type MediaSessionStatus,
 } from "@/lib/api"
 import {
+  getDeviceRunsResponseSchema,
   getDeviceSessionsResponseSchema,
   getSessionSegmentsResponseSchema,
 } from "@/lib/schemas"
 import {
-  clusterRuns,
+  runFromApi,
   runReplayBlocked,
   runReplaySearch,
   type RecordingRun,
@@ -72,8 +74,13 @@ export const DEFAULT_SESSION_PAGE_SIZE = 25
 // The list endpoint sorts on one of two columns and takes a SEPARATE order
 // param — it is not free-form column sorting (device-sessions.ts
 // `parseListParams({ sortable: ['startedAt', 'createdAt'] })`).
+// ⚠️ Only `startedAt` survives under `?group=runs`: a run has no created_at of
+// its own (its members were received over whatever span the uploads took), so
+// the server rejects `sort=createdAt` with a 400 rather than silently ignoring
+// it. Keeping `createdAt` out of this list makes the route drop a stale
+// `?sort=createdAt` from the URL instead of sending it.
 export type SessionSortKey = "startedAt" | "createdAt"
-export const SESSION_SORT_KEYS: SessionSortKey[] = ["startedAt", "createdAt"]
+export const SESSION_SORT_KEYS: SessionSortKey[] = ["startedAt"]
 
 // The REAL on-device session statuses (api.ts `MediaSessionStatus`). The cloud
 // recorder's recording/stopping/completed/failed do not exist here. "open" is
@@ -96,8 +103,6 @@ const SORT_OPTIONS: {
 }[] = [
   { sort: "startedAt", order: "desc", label: "started ↓" },
   { sort: "startedAt", order: "asc", label: "started ↑" },
-  { sort: "createdAt", order: "desc", label: "received ↓" },
-  { sort: "createdAt", order: "asc", label: "received ↑" },
 ]
 
 // CSV export pages the same server filters at 200/request up to this many rows
@@ -148,6 +153,12 @@ const HEAD =
 // (composite: every camera with coverage joins automatically); expand a run
 // for its per-camera sessions (single-cam replay, delete), and a session for
 // its ordered segment index with per-segment playback.
+//
+// The SERVER clusters and paginates runs (`?group=runs`,
+// improve-recording-history-fetching Phase 3), so every page holds exactly
+// `size` runs and a run can never straddle a page boundary. Filters pick which
+// runs to show, never which sessions to cluster — a run matching on `cam0`
+// still arrives with every camera it recorded.
 export function DeviceSessionsCard({
   deviceId,
   search,
@@ -158,7 +169,7 @@ export function DeviceSessionsCard({
   // Patch the URL search params. Any filter change must also clear `page`.
   onSearchChange: (patch: Partial<SessionsSearch>) => void
 }) {
-  const [sessions, setSessions] = useState<MediaSession[] | null>(null)
+  const [runs, setRuns] = useState<RecordingRun[] | null>(null)
   const [total, setTotal] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -233,10 +244,11 @@ export function DeviceSessionsCard({
     [deviceId]
   )
 
-  // Server-side filtering (decision H): status / streamKey / from / to / sort
-  // all go to `GET /devices/{id}/sessions`, so this scales as a device's
-  // session count grows. Only run *clustering* is client-side, over whatever
-  // this page returns.
+  // Server-side filtering AND grouping (decision H + Phase 3): status /
+  // streamKey / from / to / sort / pagination all go to
+  // `GET /devices/{id}/sessions`, so this scales as a device's session count
+  // grows. `limit`/`offset` count RUNS here, because that is what the request
+  // asks the server to group by.
   const serverParams = useMemo(
     (): MediaSessionsListParams => ({
       limit: size,
@@ -261,15 +273,17 @@ export function DeviceSessionsCard({
   const refresh = useCallback(async () => {
     const seq = ++reqSeq.current
     try {
-      const raw = await getDeviceSessions(deviceId, serverParams)
+      const raw = await getDeviceRuns(deviceId, serverParams)
       if (seq !== reqSeq.current) return
-      const parsed = getDeviceSessionsResponseSchema.safeParse(raw)
-      if (!parsed.success) throw new Error("Unexpected sessions response")
-      setSessions(parsed.data.sessions)
-      setTotal(parsed.data.page?.total ?? parsed.data.sessions.length)
+      const parsed = getDeviceRunsResponseSchema.safeParse(raw)
+      if (!parsed.success) throw new Error("Unexpected runs response")
+      // The server already returns runs in the requested order, so there is
+      // nothing to re-sort or reverse here.
+      setRuns(parsed.data.runs.map(runFromApi))
+      setTotal(parsed.data.page?.total ?? parsed.data.runs.length)
       setKnownStreamKeys((prev) => {
         const next = new Set(prev)
-        for (const s of parsed.data.sessions) next.add(s.streamKey)
+        for (const r of parsed.data.runs) for (const k of r.streamKeys) next.add(k)
         return next.size === prev.length ? prev : [...next].sort()
       })
       setLoadError(null)
@@ -291,18 +305,12 @@ export function DeviceSessionsCard({
     return () => clearInterval(t)
   }, [refresh, refreshSegments, expandedSessionId])
 
-  // Runs are clustered within the fetched page (R9: client-side first; a run
-  // straddling a page boundary shows as two partial runs — move server-side
-  // only if that proves annoying on real data). With filters applied this now
-  // also means a run can show fewer cameras than it recorded (decision H:
-  // "cluster whatever comes back") — the toolbar note says so.
-  // `clusterRuns` re-sorts internally and always returns newest-first, so it is
-  // safe under either `order`; flip it so the rendered order matches the sort
-  // the user asked the server for.
-  const runs = useMemo(() => {
-    const clustered = clusterRuns(sessions ?? [])
-    return order === "asc" ? clustered.slice().reverse() : clustered
-  }, [sessions, order])
+  // Sessions carried by the runs on this page — footer detail only; the page
+  // itself is measured in runs.
+  const sessionsOnPage = useMemo(
+    () => (runs ?? []).reduce((n, r) => n + r.sessions.length, 0),
+    [runs]
+  )
 
   // --- Filter mutations. Every one resets to page 1: offsets are meaningless
   // across a changed result set. ---
@@ -346,9 +354,14 @@ export function DeviceSessionsCard({
   async function exportCsv() {
     setExporting(true)
     try {
-      // Page the *server* filters, then serialize one row per session — the
-      // unit the server actually filters and paginates (runs are a client-side
-      // grouping, so exporting them would misrepresent the filter).
+      // Deliberately the UNGROUPED endpoint: one CSV row per session, and the
+      // sessions that match the filter. The table shows runs, but a run is a
+      // nested object with no honest flat representation, and under the run
+      // filter semantics ("show me the runs cam0 appears in") an export would
+      // otherwise include cam1 rows the user did not ask for. So the export
+      // stays "the sessions matching these filters" and pages sessions —
+      // `page.total` is a session count on this call, which is what the loop
+      // below needs.
       const all: MediaSession[] = []
       let off = 0
       let grandTotal = Infinity
@@ -465,7 +478,7 @@ export function DeviceSessionsCard({
     }
   }
 
-  const loading = sessions === null && loadError === null
+  const loading = runs === null && loadError === null
 
   const sortLabel =
     SORT_OPTIONS.find((o) => o.sort === sort && o.order === order)?.label ??
@@ -515,9 +528,9 @@ export function DeviceSessionsCard({
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <CardContent className="flex flex-col p-0">
-        {/* Filters run SERVER-side on sessions; runs are then clustered from
-            whatever the page returns (decision H), so a filtered run can show
-            fewer cameras than it recorded and page sizes look uneven. */}
+        {/* Filters run SERVER-side and select whole RUNS (Phase 3, Q1 option
+            b): a run matching on one camera or overlapping the date range comes
+            back intact, so no note has to apologise for clipped rows. */}
         <div className="flex flex-col gap-2 border-b border-border px-4 pt-4 pb-3">
           <DataTableToolbar
             filters={
@@ -546,9 +559,10 @@ export function DeviceSessionsCard({
           />
           {isFiltered ? (
             <p className="text-xs text-muted-foreground">
-              Filtering {total.toLocaleString()} matching session
-              {total === 1 ? "" : "s"}; runs are grouped from the sessions on
-              this page.{" "}
+              {total.toLocaleString()} matching recording
+              {total === 1 ? "" : "s"}, shown whole — a run that matches on one
+              camera or overlaps the date range still lists every camera and
+              segment it recorded.{" "}
               <button
                 type="button"
                 className="underline underline-offset-2 hover:text-foreground"
@@ -559,7 +573,7 @@ export function DeviceSessionsCard({
             </p>
           ) : null}
         </div>
-        {loadError && runs.length === 0 ? (
+        {loadError && (runs ?? []).length === 0 ? (
           <p className="px-4 py-6 text-sm text-destructive">{loadError}</p>
         ) : loading ? (
           <div className="flex flex-col gap-2 px-4 py-4">
@@ -567,10 +581,10 @@ export function DeviceSessionsCard({
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-6 w-full" />
           </div>
-        ) : runs.length === 0 && isFiltered ? (
+        ) : (runs ?? []).length === 0 && isFiltered ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <p className="text-sm text-muted-foreground">
-              No sessions match these filters.
+              No recordings match these filters.
             </p>
             {streamKey && knownStreamKeys.length > 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -595,7 +609,7 @@ export function DeviceSessionsCard({
               Clear filters
             </Button>
           </div>
-        ) : runs.length === 0 ? (
+        ) : (runs ?? []).length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             No on-device recordings yet. Turn on &quot;Record on device&quot; in
             Settings to capture drives even while offline.
@@ -615,7 +629,7 @@ export function DeviceSessionsCard({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.map((run) => {
+              {(runs ?? []).map((run) => {
                 const expanded = expandedRunKey === run.key
                 const blocked = runReplayBlocked(run)
                 return [
@@ -914,15 +928,16 @@ export function DeviceSessionsCard({
             </TableBody>
           </Table>
         )}
-        {/* Pagination counts SESSIONS, not runs (decision H) — the server
-            filters and pages sessions, and one run is N per-camera sessions. */}
+        {/* Pagination counts RUNS — the noun the table renders (Phase 3).
+            `total` is the server's run count over the whole filtered set, so
+            every page but the last holds exactly `size` rows. */}
         {total > 0 ? (
           <div className="border-t border-border px-3 py-3">
             <DataTablePagination
               page={page}
               pageSize={size}
               total={total}
-              rowsOnPage={sessions?.length ?? 0}
+              rowsOnPage={(runs ?? []).length}
               pageSizes={SESSION_PAGE_SIZES}
               onPageChange={(p) => update({ page: p <= 1 ? undefined : p })}
               onPageSizeChange={(s) =>
@@ -936,10 +951,10 @@ export function DeviceSessionsCard({
               exportDisabled={total === 0}
               left={
                 <span className="text-xs text-muted-foreground">
-                  {runs.length.toLocaleString()} run
-                  {runs.length === 1 ? "" : "s"} from{" "}
-                  {(sessions?.length ?? 0).toLocaleString()} session
-                  {sessions?.length === 1 ? "" : "s"} on this page
+                  {(runs ?? []).length.toLocaleString()} run
+                  {(runs ?? []).length === 1 ? "" : "s"} ·{" "}
+                  {sessionsOnPage.toLocaleString()} session
+                  {sessionsOnPage === 1 ? "" : "s"} on this page
                 </span>
               }
             />

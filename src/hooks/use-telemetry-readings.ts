@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react"
-import { ApiError, getTelemetryReadings } from "@/lib/api"
-import { getTelemetryReadingsResponseSchema } from "@/lib/schemas"
-import { orderMetrics } from "@/lib/telemetry-meta"
+import { ApiError, getTelemetryTable } from "@/lib/api"
+import { getTelemetryTableResponseSchema } from "@/lib/schemas"
 import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
 
 export interface UseTelemetryReadings {
-  // Pivoted rows ({ts, [metric]: value}) already in display order (per `order`).
+  // Rows in display order (per `order`), keyed by metric for the table.
   history: HistoryPoint[]
-  // Distinct metric keys present in the page, in canonical column order.
+  // Column keys in the server's order — authoritative, not page-derived.
   metrics: string[]
-  // First non-null unit seen per metric.
+  // Unit per metric, from device_latest, so headers do not change as you page.
   units: Record<string, string>
-  // Total distinct timestamps (samples) matching the filter — for pagination.
+  // Addressable distinct timestamps (samples) under this filter — for the pager.
   total: number
+  // True when more samples match than `total` reports (the common case on the
+  // default All range). `coveredFrom`/`coveredTo` bound what IS addressable.
+  totalIsCapped: boolean
+  coveredFrom: string | null
+  coveredTo: string | null
   loading: boolean
   error: string | null
 }
@@ -25,41 +29,56 @@ export interface TelemetryReadingsParams {
   limit: number
   // Timestamps to skip.
   offset: number
-  // Optional comma-joined metric filter (also fixes the column set).
+  // Optional comma-joined metric filter. Omit it and the server derives the
+  // column set from the device model — which is what the history table wants.
   metric?: string
-  // Gate the fetch (e.g. until device capabilities have loaded).
-  enabled?: boolean
 }
 
-// Fetches one page of raw stored readings for the Telemetry History table and
-// pivots the flat {ts, metric, value} rows into table-ready points. Rows come
-// back ordered by ts in the requested direction; we keep that order so the table
-// renders as-is (newest- or oldest-first without an internal reverse).
+const EMPTY: UseTelemetryReadings = {
+  history: [],
+  metrics: [],
+  units: {},
+  total: 0,
+  totalIsCapped: false,
+  coveredFrom: null,
+  coveredTo: null,
+  loading: true,
+  error: null,
+}
+
+/**
+ * One page of the Telemetry History table.
+ *
+ * The server assembles the table (`shape=table`): it owns the column set, the
+ * column order and the units, and returns one row per timestamp with a
+ * positional value array. This hook only widens those positional arrays into
+ * the `{ts, [metric]: value}` points TelemetryTable renders.
+ *
+ * ⚠ It deliberately does NOT derive columns or units from the rows. That is
+ * what it used to do, and it is why the header changed as you paged: a metric
+ * that was all-null on the current page lost its unit, and with no metric filter
+ * the table changed width. Both are now the server's answer, and the same
+ * answer on every page.
+ *
+ * It also no longer needs the device model, so the tab renders after ONE
+ * request instead of getDevice → getDeviceModel → readings.
+ */
 export function useTelemetryReadings(
   deviceId: string,
   params: TelemetryReadingsParams
 ): UseTelemetryReadings {
-  const { from, to, order, limit, offset, metric, enabled = true } = params
+  const { from, to, order, limit, offset, metric } = params
 
-  const [state, setState] = useState<UseTelemetryReadings>({
-    history: [],
-    metrics: [],
-    units: {},
-    total: 0,
-    loading: true,
-    error: null,
-  })
+  const [state, setState] = useState<UseTelemetryReadings>(EMPTY)
 
   useEffect(() => {
-    // Until enabled (e.g. capabilities still loading) stay in the initial
-    // loading state without a synchronous setState.
-    if (!deviceId || !enabled) return
+    if (!deviceId) return
     let cancelled = false
 
     setState((s) => ({ ...s, loading: true, error: null }))
     ;(async () => {
       try {
-        const raw = await getTelemetryReadings(deviceId, {
+        const raw = await getTelemetryTable(deviceId, {
           from,
           to,
           order,
@@ -67,36 +86,36 @@ export function useTelemetryReadings(
           offset,
           metric: metric || undefined,
         })
-        const parsed = getTelemetryReadingsResponseSchema.safeParse(raw)
+        const parsed = getTelemetryTableResponseSchema.safeParse(raw)
         if (!parsed.success) {
           throw new Error("Unexpected /telemetry/readings response shape")
         }
         if (cancelled) return
+        const { columns, rows, page } = parsed.data
 
-        const byTs = new Map<number, HistoryPoint>()
         const units: Record<string, string> = {}
-        const seen = new Set<string>()
-        for (const r of parsed.data.readings) {
-          if (r.value === null) continue
-          const ts = Date.parse(r.ts)
-          let point = byTs.get(ts)
-          if (!point) {
-            point = { ts }
-            byTs.set(ts, point)
+        for (const c of columns) if (c.unit) units[c.key] = c.unit
+
+        // Widen each positional array. Rows arrive in the requested order, so
+        // there is nothing to sort. `v[i]` is null where the sample has no
+        // reading for that column — skipped, so the cell renders as "—".
+        const history = rows.map((r) => {
+          const point: HistoryPoint = { ts: Date.parse(r.ts) }
+          for (let i = 0; i < columns.length; i += 1) {
+            const value = r.v[i]
+            if (value !== null && value !== undefined) point[columns[i].key] = value
           }
-          point[r.metric] = r.value
-          seen.add(r.metric)
-          if (r.unit && !(r.metric in units)) units[r.metric] = r.unit
-        }
-        // Keep the server's ts ordering so the table shows the chosen direction.
-        const history = [...byTs.values()].sort((a, b) =>
-          order === "asc" ? a.ts - b.ts : b.ts - a.ts
-        )
+          return point
+        })
+
         setState({
           history,
-          metrics: orderMetrics([...seen]),
+          metrics: columns.map((c) => c.key),
           units,
-          total: parsed.data.page.total,
+          total: page.total,
+          totalIsCapped: page.totalIsCapped ?? false,
+          coveredFrom: page.coveredFrom ?? null,
+          coveredTo: page.coveredTo ?? null,
           loading: false,
           error: null,
         })
@@ -111,7 +130,7 @@ export function useTelemetryReadings(
     return () => {
       cancelled = true
     }
-  }, [deviceId, enabled, from, to, order, limit, offset, metric])
+  }, [deviceId, from, to, order, limit, offset, metric])
 
   return state
 }

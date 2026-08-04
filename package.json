@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "routes:generate": "tsr generate",
-    "typecheck": "npm run routes:generate && tsc --noEmit",
+    "typecheck": "npm run routes:generate && tsc -b --force",
     "preview": "vite preview",
     "test": "vitest run"
   },

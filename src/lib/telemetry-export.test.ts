@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { TelemetryReadingRow, TelemetryReadingsPage } from "@/lib/api"
+import type { TelemetryTablePage } from "@/lib/api"
 import {
   TELEMETRY_EXPORT_CAP,
   type TelemetryExport,
@@ -8,16 +8,27 @@ import {
   collectTelemetryForExport,
 } from "@/lib/telemetry-export"
 
-// A stand-in for GET /devices/{id}/telemetry/readings that reproduces the
-// handler's semantics exactly, because the export's correctness turns on them:
+// A stand-in for GET /devices/{id}/telemetry/readings?shape=table that
+// reproduces the handler's semantics exactly, because the export's correctness
+// turns on them:
 //
 //   - `from` is INCLUSIVE (ts >= from), `to` is EXCLUSIVE (ts < to)
 //   - `limit` counts DISTINCT TIMESTAMPS, not rows
+//   - `columns` is authoritative and stable; `v` is POSITIONAL against it and
+//     always exactly columns.length long, nulls included
 //   - `page.total` is bounded at READINGS_TOTAL_CAP and `totalIsCapped` says so
 //
 // (backend src/handlers/telemetry-history.ts handleReadings + services/
-// telemetry-readings.ts). Anything the fake gets wrong here, the tests get wrong.
+// telemetry-readings.ts + services/telemetry-columns.ts). Anything the fake gets
+// wrong here, the tests get wrong.
 const SERVER_TOTAL_CAP = 10_000
+
+// The model-derived column set, as the server would send it: fixed for the whole
+// walk, and independent of what any one page contains.
+const COLUMNS = [
+  { key: "imu.accel_x", unit: "m/s^2" },
+  { key: "system.cpu_usage", unit: "%" },
+]
 
 interface FakeServer {
   fetchPage: Parameters<typeof collectTelemetryForExport>[0]
@@ -38,7 +49,7 @@ function makeServer(
     to?: string
     limit: number
     order: "asc" | "desc"
-  }): Promise<TelemetryReadingsPage> => {
+  }): Promise<TelemetryTablePage> => {
     hooks.beforeEach?.(calls.length)
     calls.push(params)
 
@@ -48,21 +59,19 @@ function makeServer(
       .filter((ts) => ts >= fromMs && ts < toMs)
       .sort((a, b) => (params.order === "asc" ? a - b : b - a))
 
-    const pageTs = matching.slice(0, params.limit)
-    const readings: TelemetryReadingRow[] = []
-    for (const ts of pageTs) {
-      for (const [metric, value] of Object.entries(samples.get(ts)!)) {
-        readings.push({
-          ts: new Date(ts).toISOString(),
-          metric,
-          value,
-          unit: metric.startsWith("imu.") ? "m/s^2" : "%",
-        })
+    const rows = matching.slice(0, params.limit).map((ts) => {
+      const sample = samples.get(ts)!
+      return {
+        ts: new Date(ts).toISOString(),
+        // Dense and positional: a metric the sample lacks is null, not absent.
+        v: COLUMNS.map((c) => sample[c.key] ?? null),
       }
-    }
+    })
     const rawTotal = matching.length
     return {
-      readings,
+      columns: COLUMNS,
+      rows,
+      columnSource: "model" as const,
       page: {
         limit: params.limit,
         offset: 0,
@@ -227,12 +236,12 @@ describe("collectTelemetryForExport", () => {
   })
 
   it("terminates on an all-null batch without dropping the walk early", async () => {
-    // A metric that is null for the newest 600 samples and present below: the
-    // cursor must keep going rather than treat "no rows added" as the end.
+    // Every metric is null for the newest 600 samples and present below: the
+    // cursor must keep going rather than treat "no values added" as the end.
     const samples = series(1200)
     let i = 0
     for (const ts of [...samples.keys()].sort((a, b) => b - a)) {
-      if (i++ < 600) samples.set(ts, { "imu.accel_x": null })
+      if (i++ < 600) samples.set(ts, { "imu.accel_x": null, "system.cpu_usage": null })
     }
     const srv = makeServer(samples)
     const res = await collectTelemetryForExport(srv.fetchPage, {
@@ -240,7 +249,12 @@ describe("collectTelemetryForExport", () => {
       pageLimit: 500,
     })
 
-    expect(res.points).toHaveLength(600)
+    // A timestamp the server returned is a row, even when every cell is empty —
+    // the same rule the on-screen table follows, so the CSV's row count matches
+    // what the pager claims. The newest 600 are present with no values.
+    expect(res.points).toHaveLength(1200)
+    expect(res.points[0].values).toEqual({})
+    expect(res.points[600].values).not.toEqual({})
     expect(res.capped).toBe(false)
   })
 
@@ -260,9 +274,9 @@ describe("collectTelemetryForExport", () => {
     const fetchPage = async () => {
       ts -= 1000
       return {
-        readings: [
-          { ts: new Date(ts).toISOString(), metric: "imu.accel_x", value: 1, unit: null },
-        ],
+        columns: [{ key: "imu.accel_x", unit: null }],
+        rows: [{ ts: new Date(ts).toISOString(), v: [1] }],
+        columnSource: "model" as const,
         page: { limit: 500, offset: 0, order: "desc" as const, total: 1 },
       }
     }
@@ -275,8 +289,16 @@ describe("collectTelemetryForExport", () => {
     expect(res.capped).toBe(true)
   })
 
-  it("collects units across the whole export, not just the first page", async () => {
-    const srv = makeServer(series(600))
+  it("takes units and column order from the server, not from the data", async () => {
+    // Only the newest sample carries cpu_usage. Under the old flat shape the
+    // unit was scraped from whatever rows came back; now it is a property of the
+    // column, so a sparse metric keeps its unit and its place.
+    const samples = series(600)
+    let i = 0
+    for (const ts of [...samples.keys()].sort((a, b) => b - a)) {
+      if (i++ > 0) samples.set(ts, { "imu.accel_x": i })
+    }
+    const srv = makeServer(samples)
     const res = await collectTelemetryForExport(srv.fetchPage, {
       order: "desc",
       pageLimit: 500,
@@ -284,7 +306,7 @@ describe("collectTelemetryForExport", () => {
 
     expect(res.units["imu.accel_x"]).toBe("m/s^2")
     expect(res.units["system.cpu_usage"]).toBe("%")
-    expect(res.metrics).toEqual(["imu.accel_x", "system.cpu_usage"])
+    expect(res.columns).toEqual(["imu.accel_x", "system.cpu_usage"])
   })
 
   it("defaults to the 20 000-row export cap", async () => {
@@ -293,7 +315,7 @@ describe("collectTelemetryForExport", () => {
 })
 
 describe("buildTelemetryCsv", () => {
-  const result: Pick<TelemetryExport, "points" | "units" | "metrics"> = {
+  const result: Pick<TelemetryExport, "points" | "units" | "columns"> = {
     points: [
       { ts: Date.parse("2026-08-04T12:00:01.000Z"), values: { "imu.accel_x": 1.5 } },
       {
@@ -302,7 +324,7 @@ describe("buildTelemetryCsv", () => {
       },
     ],
     units: { "imu.accel_x": "m/s^2", "system.cpu_usage": "%" },
-    metrics: ["imu.accel_x", "system.cpu_usage"],
+    columns: ["imu.accel_x", "system.cpu_usage"],
   }
 
   it("uses the on-screen column order and labelled headers", () => {
@@ -325,14 +347,14 @@ describe("buildTelemetryCsv", () => {
     expect(csv.split("\n")[1]).toBe("2026-08-04T12:00:01.000Z,1.5,")
   })
 
-  it("falls back to the discovered metrics when there are no capability columns", () => {
+  it("falls back to the export's own columns when the caller passes none", () => {
     const csv = buildTelemetryCsv(result, [])
     expect(csv.split("\n")[0]).toBe("Time,Accel X (m/s²),CPU Usage (%)")
   })
 
   it("quotes cells containing a comma, quote or newline", () => {
     const csv = buildTelemetryCsv(
-      { points: [], units: { "x.y": 'a,b"c' }, metrics: ["x.y"] },
+      { points: [], units: { "x.y": 'a,b"c' }, columns: ["x.y"] },
       ["x.y"],
     )
     expect(csv).toBe('Time,"x.y (a,b""c)"')

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import {
@@ -23,23 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
-  getTelemetryReadings,
-  type IoCapabilities,
-} from "@/lib/api"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
-import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
+import { ApiError, getTelemetryTable } from "@/lib/api"
 import {
   buildTelemetryCsv,
   collectTelemetryForExport,
 } from "@/lib/telemetry-export"
-import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryReadings } from "@/hooks/use-telemetry-readings"
 import { TelemetryTable } from "@/components/telemetry-table"
 
@@ -71,6 +59,28 @@ const shortDate = new Intl.DateTimeFormat(undefined, {
   month: "short",
   day: "numeric",
 })
+
+// "Aug 3, 19:01" — the covered span is read alongside a date, so the year is
+// noise and the seconds are below the resolution of the sentence.
+const spanStamp = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+})
+
+// The covered span reads as one period, so drop the repeated date when both
+// ends fall on the same day: "Aug 3, 19:01 – 21:48".
+function coveredSpanLabel(fromIso: string, toIso: string): string {
+  const from = new Date(fromIso)
+  const to = new Date(toIso)
+  const sameDay = from.toDateString() === to.toDateString()
+  return `${spanStamp.format(from)} – ${
+    sameDay
+      ? to.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      : spanStamp.format(to)
+  }`
+}
 
 export const Route = createFileRoute("/devices/$id/telemetry")({
   validateSearch: (search: Record<string, unknown>): HistorySearch => {
@@ -140,72 +150,25 @@ function DeviceTelemetryPage() {
   const fromIso = rangeMode === "all" ? undefined : search.from
   const toIso = rangeMode === "all" ? undefined : search.to
 
-  const [caps, setCaps] = useState<IoCapabilities | null>(null)
-  const [capsLoaded, setCapsLoaded] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
   const [customOpen, setCustomOpen] = useState(false)
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(
     undefined
   )
   const [exporting, setExporting] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
-        if (cancelled) return
-        useBreadcrumbStore
-          .getState()
-          .setDeviceName(
-            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
-          )
-
-        const rawModel = await getDeviceModel(
-          parsedDevice.data.device.deviceModelId
-        )
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
-      } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
-        if (!cancelled) {
-          setLoadError(message)
-          toast.error(message)
-        }
-      } finally {
-        if (!cancelled) setCapsLoaded(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
-
-  const imu = useMemo(() => imuMetrics(caps), [caps])
-  const sysChart = useMemo(() => systemChartMetrics(caps), [caps])
-  const hasGps = Boolean(caps?.comm?.gps)
-  // Capability-derived columns keep a stable, ordered column set (and double as
-  // the server-side metric filter). If capabilities are unavailable we fall back
-  // to whatever metrics the data itself surfaces.
-  const capsMetrics = useMemo(
-    () => [...imu, ...sysChart, ...(hasGps ? ["gps.lat", "gps.lon"] : [])],
-    [imu, sysChart, hasGps]
-  )
-  const metricFilter = capsMetrics.length ? capsMetrics.join(",") : undefined
-
+  // The server assembles the table: columns, their order and their units all
+  // come back with the page, so this renders after ONE request. It used to walk
+  // getDevice → getDeviceModel → readings to derive the column set itself, and
+  // the breadcrumb name it set on the way is already set by the parent layout
+  // route ($id.tsx), which owns the device fetch.
   const {
     history,
-    metrics: discovered,
+    metrics: columns,
     units,
     total,
+    totalIsCapped,
+    coveredFrom,
+    coveredTo,
     loading,
     error,
   } = useTelemetryReadings(id, {
@@ -214,11 +177,7 @@ function DeviceTelemetryPage() {
     order,
     limit: size,
     offset,
-    metric: metricFilter,
-    enabled: capsLoaded,
   })
-
-  const columns = capsMetrics.length ? capsMetrics : discovered
 
   const update = (patch: Partial<HistorySearch>) =>
     navigate({ search: (prev) => ({ ...prev, ...patch }) })
@@ -284,11 +243,10 @@ function DeviceTelemetryPage() {
     setExporting(true)
     try {
       const result = await collectTelemetryForExport(
-        (params) =>
-          getTelemetryReadings(id, { ...params, metric: metricFilter }),
+        (params) => getTelemetryTable(id, params),
         { order, from: fromIso, to: toIso }
       )
-      const csv = buildTelemetryCsv(result, capsMetrics)
+      const csv = buildTelemetryCsv(result, columns)
       downloadCsv(csv, `telemetry-${id}.csv`)
       if (result.capped) {
         toast.warning(
@@ -315,12 +273,32 @@ function DeviceTelemetryPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / size))
   const goTo = (p: number) => update({ page: p <= 1 ? undefined : p })
+  // A bookmarked ?page= can point past the addressable window (which shrinks as
+  // the range narrows, and is capped at 10 000 regardless). The page renders
+  // empty and correct; Prev then jumps back to the last real page rather than
+  // walking one empty page at a time.
+  const beyondEnd = total > 0 && offset >= total
   const hasPrev = page > 1
   const hasNext = page < totalPages
 
   const rowsOnPage = history.length
-  const startIdx = total === 0 ? 0 : offset + 1
-  const endIdx = offset + rowsOnPage
+  // ⚠ Clamp against `total`. Without it ?page=5000 rendered "499,901–499,900 of
+  // 10,000" — a backwards range, because endIdx was offset + rowsOnPage with
+  // rowsOnPage = 0.
+  const startIdx = rowsOnPage === 0 ? 0 : Math.min(offset + 1, total)
+  const endIdx = Math.min(offset + rowsOnPage, total)
+
+  // ⚠ The capped view is the COMMON case, not an edge case: at 1 Hz a day is
+  // ~86 400 samples, so All, 7d, 24h and 6h all cap and only 1h comes back
+  // exact. A bare "10,000+" would tell a user who asked for "All" nothing about
+  // the fact that they are looking at a slice — so render the span the server
+  // measured. Never derive it from the cap: how long 10 000 samples covers
+  // depends entirely on how densely the device reported (measured between
+  // ~2 h 47 min and ~13 h 20 min on the same device, a day apart).
+  const cappedNotice =
+    totalIsCapped && coveredFrom && coveredTo
+      ? `${order === "desc" ? "Most recent" : "Oldest"} ${total.toLocaleString()} samples · ${coveredSpanLabel(coveredFrom, coveredTo)}`
+      : null
 
   const customActive = rangeMode === "custom"
   const customLabel =
@@ -329,7 +307,8 @@ function DeviceTelemetryPage() {
       : "Date"
 
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
       <Popover open={customOpen} onOpenChange={openCustom}>
         <PopoverTrigger asChild>
           <Button
@@ -368,6 +347,16 @@ function DeviceTelemetryPage() {
           </Button>
         ))}
       </div>
+      </div>
+
+      {cappedNotice ? (
+        <p className="text-xs text-muted-foreground">
+          {cappedNotice} —{" "}
+          <span className="text-foreground/70">
+            narrow the date range to see older data
+          </span>
+        </p>
+      ) : null}
     </div>
   )
 
@@ -379,7 +368,7 @@ function DeviceTelemetryPage() {
         size="sm"
         className="h-8 gap-1.5"
         onClick={exportCsv}
-        disabled={exporting || !capsLoaded || total === 0}
+        disabled={exporting || total === 0}
       >
         <DownloadIcon className="size-3.5" />
         {exporting ? "Exporting…" : "Export CSV"}
@@ -403,8 +392,15 @@ function DeviceTelemetryPage() {
         </div>
         {total > 0 ? (
           <span className="text-xs text-muted-foreground tabular-nums">
-            {startIdx.toLocaleString()}–{endIdx.toLocaleString()} of{" "}
-            {total.toLocaleString()}
+            {beyondEnd ? (
+              <>Past the last page of {total.toLocaleString()}</>
+            ) : (
+              <>
+                {startIdx.toLocaleString()}–{endIdx.toLocaleString()} of{" "}
+                {total.toLocaleString()}
+                {totalIsCapped ? "+" : null}
+              </>
+            )}
           </span>
         ) : null}
         <div className="flex items-center gap-2">
@@ -413,7 +409,7 @@ function DeviceTelemetryPage() {
             size="sm"
             className="h-8"
             disabled={!hasPrev || loading}
-            onClick={() => goTo(page - 1)}
+            onClick={() => goTo(beyondEnd ? totalPages : page - 1)}
           >
             <ChevronLeftIcon />
             Prev
@@ -435,10 +431,6 @@ function DeviceTelemetryPage() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      {loadError ? (
-        <p className="text-sm text-destructive">{loadError}</p>
-      ) : null}
-
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
@@ -452,7 +444,7 @@ function DeviceTelemetryPage() {
           fillHeight
           toolbar={toolbar}
           footer={footer}
-          loading={!capsLoaded || (loading && history.length === 0)}
+          loading={loading && history.length === 0}
           empty={
             <p className="text-sm text-muted-foreground">
               {rangeMode === "all"

@@ -545,40 +545,67 @@ export async function getTelemetryRecent(
   return apiRequest(`/devices/${deviceId}/telemetry/recent${suffix}`)
 }
 
-// A page of raw readings for the Telemetry History table. Unlike getTelemetry
-// (which averages into buckets), these are the actual stored samples, paginated
-// over distinct timestamps and sortable by ts.
-export interface TelemetryReadingsPage {
-  readings: TelemetryReadingRow[]
-  page: {
-    limit: number
-    offset: number
-    order: "asc" | "desc"
-    // Distinct timestamps (samples) the pager can ADDRESS under this filter —
-    // bounded at 10 000, not the true match count. See `totalIsCapped`.
-    total: number
-    // Always sent by this endpoint (false when `total` is exact); the other list
-    // endpoints omit all three, hence optional.
-    totalIsCapped?: boolean
-    // ISO bounds of the addressable slice. Omitted when nothing matches. Render
-    // these — never derive a span from the cap; how long 10 000 samples covers
-    // depends entirely on how densely the device reported.
-    coveredFrom?: string
-    coveredTo?: string
-  }
+// Pagination block for /telemetry/readings. Unlike the other list endpoints,
+// this one cannot afford an exact count (see backend
+// services/telemetry-readings.ts), so `total` is bounded and says so.
+export interface TelemetryReadingsPageMeta {
+  limit: number
+  offset: number
+  order: "asc" | "desc"
+  // Distinct timestamps (samples) the pager can ADDRESS under this filter —
+  // bounded at 10 000, not the true match count. See `totalIsCapped`.
+  total: number
+  // Always sent by this endpoint (false when `total` is exact); the other list
+  // endpoints omit all three, hence optional.
+  totalIsCapped?: boolean
+  // ISO bounds of the addressable slice. Omitted when nothing matches. Render
+  // these — never derive a span from the cap; how long 10 000 samples covers
+  // depends entirely on how densely the device reported.
+  coveredFrom?: string
+  coveredTo?: string
 }
 
-export async function getTelemetryReadings(
-  deviceId: string,
-  params: {
-    limit?: number
-    offset?: number
-    order?: "asc" | "desc"
-    from?: string
-    to?: string
-    metric?: string
-  } = {}
-): Promise<TelemetryReadingsPage> {
+// One page of the Telemetry History table, assembled server-side (`shape=table`,
+// the endpoint's default). Unlike getTelemetry (which averages into buckets),
+// these are the actual stored samples, paginated over distinct timestamps.
+export interface TelemetryTablePage {
+  // Ordered — the array order IS the column order.
+  columns: { key: string; unit: string | null }[]
+  rows: {
+    ts: string
+    // POSITIONAL against `columns`, always exactly columns.length long.
+    // null = no reading for that column at this timestamp.
+    v: (number | null)[]
+  }[]
+  // "model"/"request" = an authoritative column set, stable across pages.
+  // "data" = the device model declares nothing, so columns were discovered from
+  // this page's rows and may change as you page.
+  columnSource: "request" | "model" | "data"
+  page: TelemetryReadingsPageMeta
+}
+
+// The same page in the raw-rows shape (`shape=flat`) — the generic contract
+// shared with /telemetry and /telemetry/recent.
+//
+// ⚠ No screen calls this any more: the table and the CSV export both moved to
+// getTelemetryTable. It is kept because `shape=flat` is a supported, documented
+// part of the public API (API-key consumers may depend on it), so this stays as
+// its maintained, typechecked client. Delete it only with the endpoint.
+export interface TelemetryReadingsPage {
+  readings: TelemetryReadingRow[]
+  page: TelemetryReadingsPageMeta
+}
+
+interface TelemetryReadingsParams {
+  limit?: number
+  offset?: number
+  order?: "asc" | "desc"
+  from?: string
+  to?: string
+  metric?: string
+}
+
+function readingsQuery(params: TelemetryReadingsParams): URLSearchParams {
   const qs = new URLSearchParams()
   if (params.limit !== undefined) qs.set("limit", String(params.limit))
   if (params.offset !== undefined) qs.set("offset", String(params.offset))
@@ -586,8 +613,28 @@ export async function getTelemetryReadings(
   if (params.from) qs.set("from", params.from)
   if (params.to) qs.set("to", params.to)
   if (params.metric) qs.set("metric", params.metric)
-  const suffix = qs.toString() ? `?${qs.toString()}` : ""
-  return apiRequest(`/devices/${deviceId}/telemetry/readings${suffix}`)
+  return qs
+}
+
+// `shape=table` is the server default, but send it explicitly: this call site
+// parses the table shape and should not silently change meaning if the default
+// ever moves again.
+export async function getTelemetryTable(
+  deviceId: string,
+  params: TelemetryReadingsParams = {}
+): Promise<TelemetryTablePage> {
+  const qs = readingsQuery(params)
+  qs.set("shape", "table")
+  return apiRequest(`/devices/${deviceId}/telemetry/readings?${qs.toString()}`)
+}
+
+export async function getTelemetryReadings(
+  deviceId: string,
+  params: TelemetryReadingsParams = {}
+): Promise<TelemetryReadingsPage> {
+  const qs = readingsQuery(params)
+  qs.set("shape", "flat")
+  return apiRequest(`/devices/${deviceId}/telemetry/readings?${qs.toString()}`)
 }
 
 export interface DeviceLatestRow {

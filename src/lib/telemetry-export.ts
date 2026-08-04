@@ -1,5 +1,5 @@
-import type { TelemetryReadingsPage } from "@/lib/api"
-import { formatUnit, metricLabel, orderMetrics } from "@/lib/telemetry-meta"
+import type { TelemetryTablePage } from "@/lib/api"
+import { formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 /**
  * CSV export for the Telemetry History table.
@@ -38,6 +38,12 @@ import { formatUnit, metricLabel, orderMetrics } from "@/lib/telemetry-meta"
  * The export is still bounded — `TELEMETRY_EXPORT_CAP` rows — but that bound is
  * now the export's own, is reported honestly, and is reachable in full. It is
  * no longer a server-side cap leaking through a stopping condition.
+ *
+ * It walks the endpoint's TABLE shape (`shape=table`), which is what made a
+ * 20 000-row export affordable: the flat shape repeats the metric key, the unit
+ * and a re-serialised ISO timestamp once per reading, and this API does not
+ * compress. Only the fetch callback and this loop know the difference — the
+ * cursor logic below is shape-agnostic.
  */
 
 /** Rows (timestamps) an export will write before it stops and warns. */
@@ -64,8 +70,11 @@ export interface TelemetryExport {
   points: ExportPoint[]
   /** First non-null unit seen per metric, across the whole export. */
   units: Record<string, string>
-  /** Metrics that carried a value, in canonical column order. */
-  metrics: string[]
+  /**
+   * The server's column keys, in its order — the same set the table displays,
+   * including columns that happened to be all-null over the exported window.
+   */
+  columns: string[]
   /** True when the walk stopped on a limit rather than on the end of the data. */
   capped: boolean
   /** Requests actually issued — measured, for the record. */
@@ -86,14 +95,16 @@ type FetchPage = (params: {
   to?: string
   limit: number
   order: "asc" | "desc"
-}) => Promise<TelemetryReadingsPage>
+}) => Promise<TelemetryTablePage>
 
 /**
  * Walk every sample matching the current filter, newest-first (`desc`) or
  * oldest-first (`asc`), up to `cap` timestamps.
  *
  * `fetchPage` is injected so the walk is testable without a network: it is
- * `getTelemetryReadings` bound to a device and metric filter at the call site.
+ * `getTelemetryTable` bound to a device at the call site. No metric filter is
+ * sent — the server derives the column set from the device model, the same set
+ * the table displays.
  *
  * ⚠ `offset` is never sent. The server's bounded `total` is ignored entirely —
  * reading it back would reintroduce the cap this function exists to escape.
@@ -108,7 +119,10 @@ export async function collectTelemetryForExport(
 
   const byTs = new Map<number, Record<string, number>>()
   const units: Record<string, string> = {}
-  const seen = new Set<string>()
+  // The server's column set. Stable across the walk (it is derived from the
+  // device model, not from the page), so last-writer-wins is fine; it is read
+  // from every response only so an empty first page cannot leave it unset.
+  let columns: string[] = []
 
   // The moving bound. `desc` walks backwards by pulling `to` down; `asc` walks
   // forwards by pushing `from` up. The other bound is the user's and never moves.
@@ -130,29 +144,35 @@ export async function collectTelemetryForExport(
     })
     requests += 1
 
+    if (res.columns.length > 0) columns = res.columns.map((c) => c.key)
+    for (const c of res.columns) {
+      if (c.unit && !(c.key in units)) units[c.key] = c.unit
+    }
+
     let oldest = Number.POSITIVE_INFINITY
     let newest = Number.NEGATIVE_INFINITY
-    for (const r of res.readings) {
+    for (const r of res.rows) {
       const ts = Date.parse(r.ts)
       if (Number.isNaN(ts)) continue
       if (ts < oldest) oldest = ts
       if (ts > newest) newest = ts
-      // A null value marks its timestamp as visited (so the cursor moves past
-      // it) but contributes no column, exactly as the on-screen table treats it.
-      if (r.value === null) continue
       let point = byTs.get(ts)
       if (!point) {
         point = {}
         byTs.set(ts, point)
       }
-      point[r.metric] = r.value
-      seen.add(r.metric)
-      if (r.unit && !(r.metric in units)) units[r.metric] = r.unit
+      // `v` is positional against `res.columns`. A null marks its timestamp as
+      // visited (so the cursor moves past it) but contributes no cell, exactly
+      // as the on-screen table treats it.
+      for (let i = 0; i < res.columns.length; i += 1) {
+        const value = r.v[i]
+        if (value !== null && value !== undefined) point[res.columns[i].key] = value
+      }
     }
 
     // End of the data in the walk direction — nothing left, or nothing with a
     // usable timestamp to advance the cursor to.
-    if (res.readings.length === 0 || oldest === Number.POSITIVE_INFINITY) break
+    if (res.rows.length === 0 || oldest === Number.POSITIVE_INFINITY) break
 
     // Reaching the cap and the data ending on exactly the cap are
     // indistinguishable without one more request. We warn, because over-warning
@@ -186,7 +206,7 @@ export async function collectTelemetryForExport(
   return {
     points: kept.map((ts) => ({ ts, values: byTs.get(ts)! })),
     units,
-    metrics: orderMetrics([...seen]),
+    columns,
     capped,
     requests,
   }
@@ -199,16 +219,16 @@ function csvCell(v: string): string {
 /**
  * Render an export as CSV.
  *
- * `columns` is the on-screen column set (capability-derived), so the file's
- * headers and their order match the table exactly. It is passed in rather than
- * derived from the data for that reason; only the no-capabilities fallback uses
- * the export's own discovered metrics.
+ * `columns` is the on-screen column set, so the file's headers and their order
+ * match the table exactly. It is passed in rather than derived from the data for
+ * that reason; the export's own column list (also server-supplied) is the
+ * fallback when the caller has none.
  */
 export function buildTelemetryCsv(
-  result: Pick<TelemetryExport, "points" | "units" | "metrics">,
+  result: Pick<TelemetryExport, "points" | "units" | "columns">,
   columns: string[],
 ): string {
-  const cols = columns.length ? columns : result.metrics
+  const cols = columns.length ? columns : result.columns
   const header = [
     "Time",
     ...cols.map(

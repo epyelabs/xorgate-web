@@ -490,8 +490,36 @@ export const getTelemetryResponseSchema = z.object({
   truncated: z.boolean(),
 })
 
+// `shape=flat` — the raw-rows contract shared with /telemetry and
+// /telemetry/recent. No longer the endpoint's default; the CSV export is the
+// only caller left (it walks rows, not pages of a table).
 export const getTelemetryReadingsResponseSchema = z.object({
   readings: z.array(telemetryReadingSchema),
+  page: pageSchema,
+})
+
+// `shape=table` (the endpoint's DEFAULT) — the table itself, assembled server
+// side. `v` is POSITIONAL against `columns`, so the two are only meaningful
+// together; see backend handlers/telemetry-history.ts.
+export const telemetryTableColumnSchema = z.object({
+  key: z.string(),
+  // From device_latest, so it does not change as you page. Null = no known unit.
+  unit: z.string().nullable(),
+})
+
+export const telemetryTableRowSchema = z.object({
+  ts: z.string(),
+  // `v` is the wire name — short on purpose, it repeats once per row. Always
+  // exactly columns.length long; null = no reading for that column here.
+  v: z.array(z.number().nullable()),
+})
+
+export const getTelemetryTableResponseSchema = z.object({
+  columns: z.array(telemetryTableColumnSchema),
+  rows: z.array(telemetryTableRowSchema),
+  // Where the column set came from — "data" means the model declares nothing
+  // and the columns were discovered from this page, so they may vary.
+  columnSource: z.enum(["request", "model", "data"]),
   page: pageSchema,
 })
 

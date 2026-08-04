@@ -554,8 +554,17 @@ export interface TelemetryReadingsPage {
     limit: number
     offset: number
     order: "asc" | "desc"
-    // Total distinct timestamps (samples) matching the filter — drives page count.
+    // Distinct timestamps (samples) the pager can ADDRESS under this filter —
+    // bounded at 10 000, not the true match count. See `totalIsCapped`.
     total: number
+    // Always sent by this endpoint (false when `total` is exact); the other list
+    // endpoints omit all three, hence optional.
+    totalIsCapped?: boolean
+    // ISO bounds of the addressable slice. Omitted when nothing matches. Render
+    // these — never derive a span from the cap; how long 10 000 samples covers
+    // depends entirely on how densely the device reported.
+    coveredFrom?: string
+    coveredTo?: string
   }
 }
 

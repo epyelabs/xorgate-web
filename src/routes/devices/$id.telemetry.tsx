@@ -35,7 +35,10 @@ import {
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { imuMetrics, systemChartMetrics } from "@/lib/capability-metrics"
-import { formatUnit, metricLabel, orderMetrics } from "@/lib/telemetry-meta"
+import {
+  buildTelemetryCsv,
+  collectTelemetryForExport,
+} from "@/lib/telemetry-export"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useTelemetryReadings } from "@/hooks/use-telemetry-readings"
 import { TelemetryTable } from "@/components/telemetry-table"
@@ -108,10 +111,6 @@ function rangeLabel(fromIso: string, toIso: string): string {
   const f = shortDate.format(from)
   const t = shortDate.format(toIncl)
   return f === t ? f : `${f} – ${t}`
-}
-
-function csvCell(v: string): string {
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
 }
 
 function downloadCsv(csv: string, filename: string): void {
@@ -272,9 +271,11 @@ function DeviceTelemetryPage() {
   const setSize = (s: number) =>
     update({ size: s === DEFAULT_SIZE ? undefined : s, page: undefined })
 
-  // Export every reading matching the current filter (paging through the API),
-  // pivoted to one row per timestamp. Capped so an unbounded "All" export can't
-  // run away; the user is warned when the cap is hit.
+  // Export every sample matching the current filter, pivoted to one row per
+  // timestamp. The walk pages by TIME rather than by `offset` — see
+  // lib/telemetry-export.ts for why that matters (the server's `total` is capped
+  // at 10 000, and offset paging also loses rows to the 1 Hz sliding window).
+  // Bounded at TELEMETRY_EXPORT_CAP rows, and the user is told when it binds.
   const exportCsv = async () => {
     if (total === 0) {
       toast.error("Nothing to export")
@@ -282,73 +283,16 @@ function DeviceTelemetryPage() {
     }
     setExporting(true)
     try {
-      const EXPORT_CAP = 20000
-      const pageLimit = 500
-      const byTs = new Map<number, Record<string, number>>()
-      const exportUnits: Record<string, string> = {}
-      const seen = new Set<string>()
-      let off = 0
-      let grandTotal = Infinity
-      let capped = false
-      while (off < grandTotal) {
-        const res = await getTelemetryReadings(id, {
-          from: fromIso,
-          to: toIso,
-          order,
-          metric: metricFilter,
-          limit: pageLimit,
-          offset: off,
-        })
-        grandTotal = res.page.total
-        // The server caps `total` at the samples it can page to, so the loop
-        // bound above is itself a truncation — warn even if EXPORT_CAP is never
-        // reached, or the user silently gets a partial CSV.
-        if (res.page.totalIsCapped) capped = true
-        for (const r of res.readings) {
-          if (r.value === null) continue
-          const ts = Date.parse(r.ts)
-          let pt = byTs.get(ts)
-          if (!pt) {
-            pt = {}
-            byTs.set(ts, pt)
-          }
-          pt[r.metric] = r.value
-          seen.add(r.metric)
-          if (r.unit && !(r.metric in exportUnits)) exportUnits[r.metric] = r.unit
-        }
-        if (res.readings.length === 0) break
-        off += pageLimit
-        if (byTs.size >= EXPORT_CAP) {
-          capped = true
-          break
-        }
-      }
-
-      const cols = capsMetrics.length ? capsMetrics : orderMetrics([...seen])
-      const tsList = [...byTs.keys()].sort((a, b) =>
-        order === "asc" ? a - b : b - a
+      const result = await collectTelemetryForExport(
+        (params) =>
+          getTelemetryReadings(id, { ...params, metric: metricFilter }),
+        { order, from: fromIso, to: toIso }
       )
-      const header = [
-        "Time",
-        ...cols.map(
-          (m) =>
-            metricLabel(m) +
-            (exportUnits[m] ? ` (${formatUnit(exportUnits[m])})` : "")
-        ),
-      ]
-      const lines = [header.map(csvCell).join(",")]
-      for (const ts of tsList) {
-        const pt = byTs.get(ts)!
-        const row = [
-          new Date(ts).toISOString(),
-          ...cols.map((m) => (typeof pt[m] === "number" ? String(pt[m]) : "")),
-        ]
-        lines.push(row.map(csvCell).join(","))
-      }
-      downloadCsv(lines.join("\n"), `telemetry-${id}.csv`)
-      if (capped) {
+      const csv = buildTelemetryCsv(result, capsMetrics)
+      downloadCsv(csv, `telemetry-${id}.csv`)
+      if (result.capped) {
         toast.warning(
-          `Export capped at ${byTs.size.toLocaleString()} rows. Narrow the range for a complete export.`
+          `Export capped at ${result.points.length.toLocaleString()} rows. Narrow the date range for a complete export.`
         )
       }
     } catch (err) {

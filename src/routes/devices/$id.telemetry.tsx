@@ -446,9 +446,13 @@ function DeviceTelemetryPage() {
           footer={footer}
           loading={loading && history.length === 0}
           empty={
+            // Telemetry history is opt-in: only the on-device recorder writes it
+            // (disable_telemetry_recording, 2026-08-04), and it defaults to off.
+            // So an empty All range usually means the setting is off, not that
+            // data is still on its way — name the setting instead of saying "yet".
             <p className="text-sm text-muted-foreground">
               {rangeMode === "all"
-                ? "No telemetry recorded for this device yet."
+                ? "No telemetry history. Turn on “Record telemetry on device” in Settings to start recording."
                 : "No telemetry in this range."}
             </p>
           }

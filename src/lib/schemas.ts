@@ -173,6 +173,13 @@ export const recordingConfigSchema = z.object({
       railLowSecs: z.number().optional(),
       escalateDwellSecs: z.number().optional(),
       escalateDutyPct: z.number().optional(),
+      // Thermal arm (power_management_improvements plan, Phase 1). No UI yet —
+      // these are here so the settings page ROUND-TRIPS them: it re-PUTs the
+      // parsed object wholesale, so a key zod strips on read is a key deleted
+      // on the next save.
+      cpuTempC: z.number().optional(),
+      cpuTempRestoreC: z.number().optional(),
+      cpuTempSecs: z.number().optional(),
       restoreSecs: z.number().optional(),
       railRestoreVolts: z.number().optional(),
       maxShedsPerHour: z.number().optional(),

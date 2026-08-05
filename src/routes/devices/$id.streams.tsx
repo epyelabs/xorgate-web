@@ -16,6 +16,7 @@ import {
 } from "@/lib/schemas"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import { useLiveBlock } from "@/hooks/use-live-block"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -50,9 +51,15 @@ function DeviceStreamsPage() {
     latest,
     history,
     media,
+    recording,
+    receivedAt,
     status,
     error: connError,
   } = useIotTelemetry(id)
+  // Is the device refusing to run live KVS masters right now, and why? Resolved
+  // (with fail-open + staleness) in one place and handed to the grid, which
+  // renders a tile instead of mounting a viewer against a parked master.
+  const liveBlock = useLiveBlock({ status, recording, receivedAt })
 
   useEffect(() => {
     let cancelled = false
@@ -133,6 +140,7 @@ function DeviceStreamsPage() {
           videoCaps={videoCaps}
           recordingOnDevice={recordingOnDevice}
           cameraEnables={cameraEnables}
+          liveBlock={liveBlock}
         />
       ) : (
         <LiveVideoGrid
@@ -141,6 +149,7 @@ function DeviceStreamsPage() {
           title="Media"
           recordingOnDevice={recordingOnDevice}
           cameraEnables={cameraEnables}
+          liveBlock={liveBlock}
         />
       )
     ) : null

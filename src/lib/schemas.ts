@@ -349,6 +349,30 @@ export const telemetryPayloadSchema = z.object({
       droppedSegments: z.number(),
       uploading: z.boolean(),
       lastUploadAt: z.number().nullable(),
+      // Boot power staging verdict: "off" | "skipped" | "deferring" | "gating"
+      // | "released:<why>". Published and backend-accepted since the
+      // optimize-system-process-cycle plan, but dropped here until now — zod
+      // strips unknown keys.
+      bootDefer: z.string().optional(),
+      // Load-shedding rung: "no-live" | "bridge-only", "parked:" prefixed once
+      // the shed-cycle cap is exhausted. Absent at full operation.
+      powerShed: z.string().optional(),
+      // Why live streaming is parked right now (power management plan, Phase
+      // 2). ABSENT means allowed — an agent too old to send it, a stale feed
+      // and a device that simply isn't blocked are all the same thing here.
+      //
+      // `reason` is deliberately z.string(), NOT a zod enum: the wire contract
+      // is an OPEN set (Q7), and an enum would reject a future reason and —
+      // through the .catch(undefined) below — silently discard the WHOLE
+      // recording block, turning a forward-compatible field into a fail-open
+      // hole. It is narrowed in the UI's reason→descriptor registry instead.
+      liveBlock: z
+        .object({
+          reason: z.string(),
+          detail: z.string(),
+          since: z.number(),
+        })
+        .optional(),
     })
     .optional()
     .catch(undefined),

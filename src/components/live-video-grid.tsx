@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { Link } from "@tanstack/react-router"
-import { VideoOffIcon } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { getKvsChannels, type KvsChannel } from "@/lib/api"
 import { getKvsChannelsResponseSchema } from "@/lib/schemas"
+import { selectStreamTile, type LiveBlockState } from "@/lib/live-block"
+import { UnavailableStreamTile } from "@/components/unavailable-stream-tile"
 import {
   useKvsViewer,
   type KvsStatus,
@@ -156,43 +156,6 @@ function LiveVideoTile({
 }
 
 /**
- * Stand-in for a camera the operator turned off in Settings
- * (`recording.video.cameras[streamKey] === false`). Deliberately NOT a player:
- * a disabled camera has no KVS master on the device (the agent parks it), so
- * mounting a viewer here would only produce a black tile plus an endless
- * offer/timeout/backoff loop against KVS + Cognito. Rendering this instead of
- * <LiveVideoTile> keeps `useKvsViewer` unmounted, so nothing reconnects.
- */
-function DisabledCameraTile({
-  deviceId,
-  label,
-}: {
-  deviceId: string
-  label: string
-}) {
-  return (
-    <Card className="overflow-hidden py-0">
-      <CardContent className="p-0">
-        <div className="bg-muted/40 flex aspect-video max-h-[40vh] w-full flex-col items-center justify-center gap-2 px-6 text-center">
-          <VideoOffIcon
-            aria-hidden="true"
-            className="text-muted-foreground size-6"
-          />
-          <p className="text-sm font-medium">{label} is turned off</p>
-          <Link
-            to="/devices/$id/settings"
-            params={{ id: deviceId }}
-            className="text-muted-foreground hover:text-foreground text-xs underline underline-offset-4 transition-colors"
-          >
-            Open device settings
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-/**
  * Live video grid: fetches the device's KVS channels and renders one VIEWER tile
  * per channel. Viewing only — the cloud viewer-recorder and its per-tile /
  * "Record all" controls were removed; on-device recording is configured in
@@ -204,6 +167,7 @@ export function LiveVideoGrid({
   title,
   recordingOnDevice = false,
   cameraEnables,
+  liveBlock,
 }: {
   deviceId: string
   videoCaps: { key: string; label?: string }[]
@@ -215,6 +179,11 @@ export function LiveVideoGrid({
   // (recordingConfig.video.cameras), keyed by stream key. An absent key means
   // enabled, so `{}` / undefined = every camera on.
   cameraEnables?: Record<string, boolean>
+  // Already-resolved live-stream block verdict (power management plan, Phase
+  // 3). The grid does NOT derive it: fail-open, staleness and the reason
+  // registry all live in lib/live-block.ts, so this component only chooses
+  // which tile to render. Absent = treat as allowed.
+  liveBlock?: LiveBlockState
 }) {
   const [channels, setChannels] = useState<KvsChannel[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -260,22 +229,32 @@ export function LiveVideoGrid({
   } else {
     body = (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {channels.map((ch) =>
-          cameraEnables?.[ch.streamKey] === false ? (
-            <DisabledCameraTile
-              key={ch.channelArn}
-              deviceId={deviceId}
-              label={labelFor(ch.streamKey)}
-            />
-          ) : (
+        {channels.map((ch) => {
+          // Precedence (disabled > blocked > player) is decided in one pure
+          // function so it can be tested without a DOM. Anything other than
+          // "player" leaves `useKvsViewer` unmounted, which is the entire
+          // guarantee: nothing loops against a master the device killed.
+          const tile = selectStreamTile({
+            streamKey: ch.streamKey,
+            label: labelFor(ch.streamKey),
+            cameraEnables,
+            liveBlock: liveBlock ?? { blocked: false, why: "no-live-block" },
+          })
+          return tile.kind === "player" ? (
             <LiveVideoTile
               key={ch.channelArn}
               channel={ch}
               label={labelFor(ch.streamKey)}
               recordingOnDevice={recordingOnDevice}
             />
+          ) : (
+            <UnavailableStreamTile
+              key={ch.channelArn}
+              deviceId={deviceId}
+              descriptor={tile.descriptor}
+            />
           )
-        )}
+        })}
       </div>
     )
   }

@@ -42,6 +42,13 @@ export interface UseIotTelemetry {
   // reported-state hint; media.recording.value = video recording active.
   recording: DeviceRecordingStatus | null
   media: DeviceMediaStatus | null
+  // Browser-clock ms (Date.now()) when the last valid payload arrived, or null
+  // if none has yet. Deliberately OUR clock, not the payload's `ts`: the device
+  // can publish timestamps from an unsynced RTC (the 2026-07-24 rtc-vs-ntp
+  // observation), so `ts` is unusable for "how fresh is this?". Consumers that
+  // must fail open on a silent device use this — the live-stream gate ages the
+  // block out after LIVE_BLOCK_STALE_MS.
+  receivedAt: number | null
   status: ConnStatus
   error: string | null
 }
@@ -68,6 +75,7 @@ class TelemetryFeed {
   private history: HistoryPoint[] = []
   private recording: DeviceRecordingStatus | null = null
   private media: DeviceMediaStatus | null = null
+  private receivedAt: number | null = null
   private status: ConnStatus = "connecting"
   private error: string | null = null
 
@@ -89,6 +97,7 @@ class TelemetryFeed {
       history: this.history.slice(),
       recording: this.recording,
       media: this.media,
+      receivedAt: this.receivedAt,
       status: this.status,
       error: this.error,
     }
@@ -126,7 +135,10 @@ class TelemetryFeed {
     for (const cb of this.subscribers) cb()
   }
 
-  private setStatus(status: ConnStatus, error: string | null = this.error): void {
+  private setStatus(
+    status: ConnStatus,
+    error: string | null = this.error
+  ): void {
     this.status = status
     this.error = error
     this.notify()
@@ -196,7 +208,11 @@ class TelemetryFeed {
         for (const [group, fields] of Object.entries(p.metrics)) {
           for (const [field, leaf] of Object.entries(fields)) {
             const metric = `${group}.${field}`
-            this.latest[metric] = { value: leaf.value, unit: leaf.unit, ts: p.ts }
+            this.latest[metric] = {
+              value: leaf.value,
+              unit: leaf.unit,
+              ts: p.ts,
+            }
             point[metric] = leaf.value
           }
         }
@@ -208,6 +224,10 @@ class TelemetryFeed {
         // them — e.g. a validation .catch downgrade should not flicker the UI).
         if (p.recording) this.recording = p.recording
         if (p.media) this.media = p.media
+        // Stamped on every accepted payload, including one that carries no
+        // `recording` block — freshness is a property of the FEED, not of the
+        // block, and a consumer aging out a stale verdict needs the former.
+        this.receivedAt = Date.now()
         this.dirty = true
       })
 
@@ -269,6 +289,7 @@ export function useIotTelemetry(deviceId: string): UseIotTelemetry {
     history: [],
     recording: null,
     media: null,
+    receivedAt: null,
     status: "connecting",
     error: null,
   })

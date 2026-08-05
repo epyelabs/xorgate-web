@@ -158,6 +158,15 @@ const GPS_GATE_OPTIONS = [
 const GPS_GATE_MAX_SECS_OPTIONS = [0, 120, 300, 600, 900, 1800]
 const GPS_GATE_NO_PROGRESS_SECS_OPTIONS = [0, 60, 120, 180, 300, 600]
 
+// Thermal load-shed arm (power_management_improvements plan, Phases 1+3).
+// Offered values sit inside the backend's accepted ranges (cpuTempC 50-90,
+// cpuTempRestoreC 40-85, cpuTempSecs 5-120) — a Select rather than a free
+// number input so the form can never PUT a value the API will reject, and so
+// the restore list can be filtered against the trigger (below).
+const CPU_TEMP_C_OPTIONS = [65, 70, 75, 80, 85, 90]
+const CPU_TEMP_RESTORE_C_OPTIONS = [55, 60, 65, 70, 75, 80]
+const CPU_TEMP_SECS_OPTIONS = [5, 10, 15, 30, 60, 120]
+
 interface ResolvedRecording {
   telemetryEnabled: boolean
   rateHz: number
@@ -178,8 +187,15 @@ interface ResolvedRecording {
   maxBytes: number
   minFreeBytes: number | undefined
   powerSheddingEnabled: boolean
-  // Raw namespace, preserved verbatim: the threshold knobs are edited via the
-  // API / field-tuning loop, not this card.
+  // Thermal arm thresholds (power_management_improvements plan). Defaults
+  // mirror the device agent's RECORDING_DEFAULTS, so an untouched device shows
+  // what it is actually doing rather than a blank control.
+  cpuTempC: number
+  cpuTempRestoreC: number
+  cpuTempSecs: number
+  // Raw namespace, preserved verbatim: the REMAINING threshold knobs (rail,
+  // escalation, cycle cap) are edited via the API / field-tuning loop, not
+  // this card.
   powerShedding: RecordingConfig["powerShedding"]
 }
 
@@ -202,6 +218,9 @@ function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
     maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
     minFreeBytes: cfg?.retention?.minFreeBytes,
     powerSheddingEnabled: cfg?.powerShedding?.enabled ?? true,
+    cpuTempC: cfg?.powerShedding?.cpuTempC ?? 80,
+    cpuTempRestoreC: cfg?.powerShedding?.cpuTempRestoreC ?? 70,
+    cpuTempSecs: cfg?.powerShedding?.cpuTempSecs ?? 15,
     powerShedding: cfg?.powerShedding,
   }
 }
@@ -237,8 +256,17 @@ function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
       ...(r.minFreeBytes !== undefined ? { minFreeBytes: r.minFreeBytes } : {}),
     },
     // Preserve shedding thresholds set out-of-band (field-tuning loop); the
-    // card only edits the master switch.
-    powerShedding: { ...(r.powerShedding ?? {}), enabled: r.powerSheddingEnabled },
+    // card edits the master switch and the thermal arm, and the spread carries
+    // the rest through untouched. A key this form doesn't know about but the
+    // zod schema keeps is a key preserved; one the schema strips is one this
+    // save would silently delete, which is why lib/schemas.ts lists them all.
+    powerShedding: {
+      ...(r.powerShedding ?? {}),
+      enabled: r.powerSheddingEnabled,
+      cpuTempC: r.cpuTempC,
+      cpuTempRestoreC: r.cpuTempRestoreC,
+      cpuTempSecs: r.cpuTempSecs,
+    },
   }
 }
 
@@ -335,8 +363,15 @@ function DeviceSettingsPage() {
 
   // Live payload feed for the reported-state hint (what the device is actually
   // doing, vs. what we asked for).
-  const { recording: reportedRecording, media: reportedMedia } =
-    useIotTelemetry(id)
+  const {
+    recording: reportedRecording,
+    media: reportedMedia,
+    latest: reportedLatest,
+  } = useIotTelemetry(id)
+  // Live SoC temperature, shown beside the thermal threshold: choosing a limit
+  // is far easier when you can see where the device actually sits today.
+  // Best-effort — absent until the first payload, and simply omitted then.
+  const cpuTemp = reportedLatest["system.cpu_temp"]?.value ?? null
 
   // Read-only sections, fetched independently so a failure here never blocks the form.
   const [identity, setIdentity] = useState<DeviceIdentity | null>(null)
@@ -1519,6 +1554,135 @@ function DeviceSettingsPage() {
                   }
                 />
               </Field>
+
+              {rec.powerSheddingEnabled ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-cputemp">
+                      Pause live streaming above
+                    </FieldLabel>
+                    <Select
+                      value={String(rec.cpuTempC)}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.cpuTempC = Number(v)
+                          // Keep the restore point below the trigger: equal or
+                          // above means the device can shed and instantly
+                          // qualify to restore, tearing live streams down and
+                          // back up in a loop (README principle 4). The 10 °C
+                          // default gap also keeps the restore point clear of
+                          // the ~3 °C sample noise that kept a bench device
+                          // shed for minutes on 2026-08-05.
+                          if (r.cpuTempRestoreC >= r.cpuTempC) {
+                            r.cpuTempRestoreC = Math.max(
+                              CPU_TEMP_RESTORE_C_OPTIONS[0],
+                              r.cpuTempC - 10
+                            )
+                          }
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-cputemp">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {withCurrent(CPU_TEMP_C_OPTIONS, rec.cpuTempC).map(
+                          (t) => (
+                            <SelectItem key={t} value={String(t)}>
+                              {t} °C{t === 80 ? " (default)" : ""}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      When the device's processor reaches this temperature it
+                      stops live streaming so it can cool down. Recording keeps
+                      running — heat never costs you footage.
+                      {cpuTemp !== null ? (
+                        <>
+                          {" "}
+                          <span className="tabular-nums">
+                            Right now: {cpuTemp.toFixed(1)} °C.
+                          </span>
+                        </>
+                      ) : null}
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-cputemp-restore">
+                      Resume below
+                    </FieldLabel>
+                    <Select
+                      value={String(rec.cpuTempRestoreC)}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.cpuTempRestoreC = Number(v)
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-cputemp-restore">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {withCurrent(
+                          CPU_TEMP_RESTORE_C_OPTIONS,
+                          rec.cpuTempRestoreC
+                        )
+                          // Only offer values that are genuinely below the
+                          // trigger, for the anti-flap reason above.
+                          .filter((t) => t < rec.cpuTempC)
+                          .map((t) => (
+                            <SelectItem key={t} value={String(t)}>
+                              {t} °C{t === 70 ? " (default)" : ""}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Live streaming comes back once the device has stayed at or
+                      below this temperature for a while. Set it well clear of
+                      the pause temperature: a device that settles just above
+                      this point never resumes. Recovery takes minutes, not
+                      seconds.
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="device-rec-cputemp-secs">
+                      Confirm heat for
+                    </FieldLabel>
+                    <Select
+                      value={String(rec.cpuTempSecs)}
+                      disabled={saving}
+                      onValueChange={(v) =>
+                        commitRecording((r) => {
+                          r.cpuTempSecs = Number(v)
+                        })
+                      }
+                    >
+                      <SelectTrigger id="device-rec-cputemp-secs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {withCurrent(
+                          CPU_TEMP_SECS_OPTIONS,
+                          rec.cpuTempSecs
+                        ).map((s) => (
+                          <SelectItem key={s} value={String(s)}>
+                            {s} seconds{s === 15 ? " (default)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      How long the device must stay that hot before it acts, so
+                      a brief spike doesn't interrupt a live view.
+                    </FieldDescription>
+                  </Field>
+                </div>
+              ) : null}
 
               <Field orientation="horizontal">
                 <FieldContent>

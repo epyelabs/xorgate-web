@@ -112,25 +112,22 @@ export const LIVE_BLOCK_DESCRIPTORS: Record<
     title: "Live view paused while the device starts up",
     description:
       "The device is conserving power until it has a GPS fix and a cellular " +
-      "connection. This clears on its own — live view returns as soon as the " +
-      "device is ready.",
+      "connection. This clears on its own.",
   },
   undervoltage: {
     icon: BatteryWarningIcon,
     title: "Live view paused — the power supply is struggling",
     description:
-      "The device dropped live streaming first to protect recording, which is " +
-      "still running. Live view returns once the supply recovers; check the " +
-      "vehicle's power feed if this keeps happening.",
+      "Live streaming was dropped first to protect recording, which is still " +
+      "running. It returns once the supply recovers.",
     action: { label: "Open device settings", to: "settings" },
   },
   thermal: {
     icon: ThermometerSunIcon,
     title: "Live view paused — the device is too hot",
     description:
-      "Live streaming stops so the device can cool down. Recording keeps " +
-      "running. This resumes once the device has cooled below its restore " +
-      "temperature — expect several minutes, not seconds.",
+      "Live streaming stops so the device can cool down; recording keeps " +
+      "running. It resumes once the device has cooled — minutes, not seconds.",
     action: { label: "Open device settings", to: "settings" },
   },
 }
@@ -148,9 +145,8 @@ export const GENERIC_LIVE_BLOCK: Omit<
   icon: CirclePauseIcon,
   title: "Live view paused",
   description:
-    "The device reported that live streaming is unavailable right now. This " +
-    "version of the web app doesn't recognise the reason it gave — the " +
-    "device's own explanation is below.",
+    "The device says live streaming is unavailable, for a reason this version " +
+    "of the web app doesn't recognise. Its own explanation is below.",
   action: { label: "Open device settings", to: "settings" },
 }
 
@@ -161,9 +157,8 @@ export const GENERIC_LIVE_BLOCK: Omit<
  * saying "this resumes once it cools" would be a lie.
  */
 const PARKED_NOTE =
-  "The device has paused too many times in the last hour and will not resume " +
-  "live view on its own. Restart the device, or change its power settings, to " +
-  "clear this."
+  "It has paused too many times in the last hour and will not resume on its " +
+  "own — restart the device or change its power settings."
 
 /** The disabled-camera case — the first caller of the generalized tile. */
 export function disabledCameraDescriptor(

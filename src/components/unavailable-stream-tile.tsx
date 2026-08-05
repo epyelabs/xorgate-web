@@ -28,8 +28,17 @@ export function UnavailableStreamTile({
   return (
     <Card className="overflow-hidden py-0">
       <CardContent className="p-0">
-        <div className="flex aspect-video max-h-[40vh] w-full flex-col items-center justify-center gap-2 bg-muted/40 px-6 text-center">
-          <Icon aria-hidden="true" className="size-6 text-muted-foreground" />
+        {/* 16:9 is a FLOOR, not a fixed height: `aspect-video` with no explicit
+            height yields to content, so the box matches LiveVideoTile in the
+            wide grid and grows in the Map View's narrow column rather than
+            clipping the copy. Do not add `overflow-hidden`/`overflow-y-auto`
+            here — either one re-imposes the 16:9 height and hides the action
+            link, which is the one thing on the tile the operator can act on. */}
+        <div className="flex aspect-video max-h-[40vh] w-full flex-col items-center justify-center gap-2 bg-muted/40 px-4 py-3 text-center">
+          <Icon
+            aria-hidden="true"
+            className="size-6 shrink-0 text-muted-foreground"
+          />
           <p className="text-sm font-medium">{descriptor.title}</p>
           {descriptor.description ? (
             <p className="max-w-prose text-xs text-muted-foreground">

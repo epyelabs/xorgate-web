@@ -19,6 +19,8 @@ import {
   SETTINGS_TAB_LABELS,
   type SettingsTab,
 } from "@/lib/device-settings-tabs"
+import { tabAttentionCounts } from "@/lib/device-config-status"
+import { Badge } from "@/components/ui/badge"
 import { useDeviceSettings } from "@/hooks/use-device-settings"
 import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
 import { ConnectivityTab } from "./-components/settings/connectivity-tab"
@@ -54,12 +56,18 @@ function DeviceSettingsPage() {
   const {
     device,
     recording,
+    configStatus,
     error,
     notFound,
     isPending,
     commit,
     commitRecording,
   } = useDeviceSettings(id)
+
+  // Pending/queued/rejected namespaces, counted per tab (Phase 3). The point is
+  // the tab the operator ISN'T looking at: `recording` spans four of them, so a
+  // value the device refused on the Media tab is visible from Power too.
+  const attention = tabAttentionCounts(configStatus)
 
   // Live payload feed: the reported-state strip on Media and the SoC
   // temperature shown beside the thermal threshold on Power. Fetched once here
@@ -140,6 +148,11 @@ function DeviceSettingsPage() {
           {SETTINGS_TABS.map((t) => (
             <TabsTrigger key={t} value={t}>
               {SETTINGS_TAB_LABELS[t]}
+              {attention[t] ? (
+                <Badge variant="secondary" className="ml-1.5 px-1.5">
+                  {attention[t]}
+                </Badge>
+              ) : null}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -168,6 +181,7 @@ function DeviceSettingsPage() {
               <TelemetryTab
                 device={device}
                 recording={recording}
+                configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
                 commitRecording={commitRecording}
@@ -176,7 +190,7 @@ function DeviceSettingsPage() {
             <TabsContent value="media">
               <MediaTab
                 recording={recording}
-                recordingConfigured={device.recordingConfig !== null}
+                configStatus={configStatus}
                 channels={channels}
                 reportedRecording={reportedRecording}
                 reportedMedia={reportedMedia}
@@ -187,6 +201,7 @@ function DeviceSettingsPage() {
             <TabsContent value="connectivity">
               <ConnectivityTab
                 device={device}
+                configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
               />
@@ -195,6 +210,7 @@ function DeviceSettingsPage() {
               <PowerTab
                 recording={recording}
                 cpuTemp={cpuTemp}
+                configStatus={configStatus}
                 isPending={isPending}
                 commitRecording={commitRecording}
               />
@@ -203,6 +219,7 @@ function DeviceSettingsPage() {
               <SystemTab
                 device={device}
                 recording={recording}
+                configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
                 commitRecording={commitRecording}

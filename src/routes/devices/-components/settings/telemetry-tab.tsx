@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -29,6 +30,8 @@ import {
   DEFAULT_IMU_MOUNT,
   type ResolvedRecording,
 } from "@/lib/device-config-defaults"
+import type { DeviceConfigStatus } from "@/lib/device-config-status"
+import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { parseAngle, withCurrent } from "./shared"
 
 const TELEMETRY_KEY = "device-recording-telemetry-enabled"
@@ -40,12 +43,14 @@ const RATE_HZ_OPTIONS = [1, 2, 5, 10, 20]
 export function TelemetryTab({
   device,
   recording,
+  configStatus,
   isPending,
   commit,
   commitRecording,
 }: {
   device: Device
   recording: ResolvedRecording
+  configStatus: DeviceConfigStatus
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
@@ -96,6 +101,9 @@ export function TelemetryTab({
             Log sensor readings on the device itself — recording continues while
             offline and uploads whenever the device is connected.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.recording} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -151,6 +159,9 @@ export function TelemetryTab({
                 </FieldDescription>
               </Field>
             ) : null}
+            {/* `recording` is one namespace spanning four tabs, so this verdict
+                covers every recording control, not just the two above. */}
+            <ConfigStatusCallout status={configStatus.recording} />
           </FieldGroup>
         </CardContent>
       </Card>
@@ -162,6 +173,9 @@ export function TelemetryTab({
             Correct roll, pitch and yaw for how the enclosure is physically
             installed in the vehicle.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.imuMount} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>

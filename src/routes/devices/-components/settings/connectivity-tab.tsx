@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,6 +22,8 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { Device, LteRecoveryConfig } from "@/lib/api"
+import type { DeviceConfigStatus } from "@/lib/device-config-status"
+import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import {
   DEFAULT_LTE_DEADZONE_PROFILE,
@@ -53,10 +56,12 @@ const DEADZONE_PROFILE_OPTIONS: {
 
 export function ConnectivityTab({
   device,
+  configStatus,
   isPending,
   commit,
 }: {
   device: Device
+  configStatus: DeviceConfigStatus
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
 }) {
@@ -77,6 +82,9 @@ export function ConnectivityTab({
           <CardDescription>
             Power delivered to the antenna over the coaxial cable.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.gnssAntBias} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -98,6 +106,9 @@ export function ConnectivityTab({
                 }
               />
             </Field>
+            {/* The reported bias comes from the modem daemon's own telemetry,
+                so this is the APPLIED state, not the requested one. */}
+            <ConfigStatusCallout status={configStatus.gnssAntBias} />
           </FieldGroup>
         </CardContent>
       </Card>
@@ -109,6 +120,9 @@ export function ConnectivityTab({
             How the device recovers its cellular connection when it drops, and
             what that is allowed to cost the GPS fix.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.lteRecovery} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -186,6 +200,7 @@ export function ConnectivityTab({
                 restart.
               </FieldDescription>
             </Field>
+            <ConfigStatusCallout status={configStatus.lteRecovery} />
           </FieldGroup>
         </CardContent>
       </Card>

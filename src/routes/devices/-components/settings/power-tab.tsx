@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,6 +22,8 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import type { ResolvedRecording } from "@/lib/device-config-defaults"
+import type { DeviceConfigStatus } from "@/lib/device-config-status"
+import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { withCurrent } from "./shared"
 
 const SHED_KEY = "device-power-shedding-enabled"
@@ -53,10 +56,12 @@ function setCpuTempTrigger(r: ResolvedRecording, cpuTempC: number) {
 export function PowerTab({
   recording,
   cpuTemp,
+  configStatus,
   isPending,
   commitRecording,
 }: {
   recording: ResolvedRecording
+  configStatus: DeviceConfigStatus
   /** Live SoC temperature from the 1 Hz payload; null until the first arrives. */
   cpuTemp: number | null
   isPending: (key: string) => boolean
@@ -71,6 +76,9 @@ export function PowerTab({
             What the device gives up, and in what order, when its supply or its
             temperature stops being able to carry the full workload.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.recording} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -210,6 +218,7 @@ export function PowerTab({
                 </Field>
               </div>
             ) : null}
+            <ConfigStatusCallout status={configStatus.recording} />
           </FieldGroup>
         </CardContent>
       </Card>

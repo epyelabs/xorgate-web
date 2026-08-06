@@ -22,6 +22,11 @@ import {
   resolveRecording,
   type ResolvedRecording,
 } from "@/lib/device-config-defaults"
+import {
+  computeConfigStatus,
+  hasPending,
+  type DeviceConfigStatus,
+} from "@/lib/device-config-status"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven
@@ -60,6 +65,15 @@ export interface DeviceSettingsPatch {
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
+
+/**
+ * How often to re-read the device while a namespace is pending, and for how
+ * long. 5 s comfortably beats the device's own report latency (it publishes
+ * within ~2 s of applying), and 2 minutes is far longer than any healthy
+ * round trip — past that the device is not answering and polling is noise.
+ */
+const REPORT_POLL_MS = 5000
+const REPORT_POLL_MAX_TICKS = 24
 
 /** Device field -> config namespace (`PATCH /devices/{id}/config`). */
 const CONFIG_FIELDS = {
@@ -112,6 +126,12 @@ export interface DeviceSettings {
   device: Device | null
   /** Recording namespace resolved over the device defaults. */
   recording: ResolvedRecording
+  /**
+   * Desired-vs-reported verdict per config namespace (Phase 3). Refreshed by
+   * the poll below while anything is pending, so a control settles from
+   * "Applying…" to "In force" without the operator reloading the page.
+   */
+  configStatus: DeviceConfigStatus
   error: string | null
   notFound: boolean
   /**
@@ -189,6 +209,61 @@ export function useDeviceSettings(id: string): DeviceSettings {
       cancelled = true
     }
   }, [id, applyDevice])
+
+  const configStatus = computeConfigStatus(device)
+  const pendingCount = Object.keys(pending).length
+
+  // Reported state arrives out of band (device -> MQTT -> mirror Lambda -> DB),
+  // so there is nothing to await after a save: poll while a namespace is
+  // pending and stop as soon as it settles. Only ONLINE devices produce a
+  // `pending` state — an offline one reads `queued` and never spins here.
+  useEffect(() => {
+    if (!hasPending(configStatus)) return
+    // A device that is online but never reports (a pre-Phase-3 agent) would
+    // otherwise poll for as long as the page is open. Cap it; the operator can
+    // reload, and the tab badge keeps saying "Applying…" honestly either way.
+    let ticksLeft = REPORT_POLL_MAX_TICKS
+    let cancelled = false
+    const timer = setInterval(() => {
+      if (ticksLeft-- <= 0) {
+        clearInterval(timer)
+        return
+      }
+      // Never race a save: an in-flight write is about to return a fresher row
+      // than this fetch would, and re-seeding from a stale read mid-queue is
+      // how optimistic edits get clobbered.
+      if (pendingCount > 0) return
+      void (async () => {
+        try {
+          const raw = await getDevice(id)
+          const parsed = getDeviceResponseSchema.safeParse(raw)
+          if (!parsed.success || cancelled) return
+          const fetched = parsed.data.device
+          serverRef.current = fetched
+          // Merge only the server-owned fields. The rest of the object is the
+          // live form state and must not be reset under the operator's hands.
+          applyDevice({
+            ...(optimisticRef.current ?? fetched),
+            status: fetched.status,
+            lastSeenAt: fetched.lastSeenAt,
+            configRev: fetched.configRev,
+            reportedConfig: fetched.reportedConfig,
+            reportedAt: fetched.reportedAt,
+          })
+        } catch {
+          // A failed background refresh is not worth a toast — the next tick
+          // (or a reload) retries, and nothing the operator did has failed.
+        }
+      })()
+    }, REPORT_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+    // `configStatus` is recomputed every render; keying the effect on the
+    // boolean keeps this to one interval per pending episode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, hasPending(configStatus), pendingCount, applyDevice])
 
   const commit = useCallback(
     (key: string, patch: DeviceSettingsPatch) => {
@@ -333,6 +408,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
   return {
     device,
     recording: resolveRecording(device?.recordingConfig ?? null),
+    configStatus,
     error,
     notFound,
     isPending,

@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,11 +21,14 @@ import {
   type DataTableColumn,
 } from "@/components/data-table"
 import type { KvsChannel } from "@/lib/api"
+import type { DeviceConfigStatus } from "@/lib/device-config-status"
 import type { ResolvedRecording } from "@/lib/device-config-defaults"
 import type {
   DeviceMediaStatus,
   DeviceRecordingStatus,
 } from "@/hooks/use-iot-telemetry"
+import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
+import { SettingsCallout } from "./callout"
 import { VideoOptions } from "./video-options"
 
 const VIDEO_KEY = "device-recording-video-enabled"
@@ -51,7 +55,7 @@ const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
 
 export function MediaTab({
   recording,
-  recordingConfigured,
+  configStatus,
   channels,
   reportedRecording,
   reportedMedia,
@@ -59,8 +63,7 @@ export function MediaTab({
   commitRecording,
 }: {
   recording: ResolvedRecording
-  /** False while `recordingConfig` is null — the cloud manages nothing yet. */
-  recordingConfigured: boolean
+  configStatus: DeviceConfigStatus
   channels: KvsChannel[] | null
   reportedRecording: DeviceRecordingStatus | null
   reportedMedia: DeviceMediaStatus | null
@@ -68,13 +71,13 @@ export function MediaTab({
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
   const reportedVideo = reportedMedia?.recording?.value === true
-  // Reported-vs-configured mismatch: only meaningful once we've heard from the
-  // device AND the cloud actually manages the config.
-  const reportedMismatch =
+  // Runtime state, NOT config: what the capture pipeline is doing right now and
+  // how much is queued for upload. This half still comes off the live 1 Hz
+  // payload — the config report says what the device was TOLD to do, never
+  // whether a segment is currently in flight.
+  const hasBacklog =
     reportedRecording !== null &&
-    recordingConfigured &&
-    (reportedRecording.enabled !== recording.telemetryEnabled ||
-      reportedVideo !== recording.videoEnabled)
+    (reportedRecording.backlogSegments > 0 || reportedRecording.droppedSegments > 0)
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -86,6 +89,9 @@ export function MediaTab({
               Which cameras this device runs at all — live view and recording
               both.
             </CardDescription>
+            <CardAction>
+              <ConfigStatusBadge status={configStatus.recording} />
+            </CardAction>
           </CardHeader>
           <CardContent>
             <FieldGroup>
@@ -130,6 +136,9 @@ export function MediaTab({
             offline and uploads to the cloud whenever the device is connected.
             Recorded runs appear under Media Recordings.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.recording} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -165,46 +174,44 @@ export function MediaTab({
               />
             ) : null}
 
-            {/* Reported state from the live 1 Hz payload: shows whether the
-                device has actually applied what was asked (poor man's
-                desired-vs-reported until Phase 3 of the settings-management
-                plan lands the real reported channel). */}
-            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              {reportedRecording === null ? (
-                "Waiting for a live status report from the device… (the device may be offline; settings saved here are delivered when it reconnects)"
-              ) : (
-                <>
-                  Device reports: telemetry recording{" "}
-                  <span className="font-medium">
-                    {reportedRecording.enabled ? "on" : "off"}
+            {/* Desired-vs-reported (Phase 3) now comes from the device's own
+                config report, not from inferring it off the live payload. The
+                strip this replaces guessed at a mismatch by comparing two
+                telemetry gauges against the saved config — it could say "not
+                applied yet" but never why, and it went blind the moment the
+                device was offline. */}
+            <ConfigStatusCallout status={configStatus.recording} />
+
+            {/* Runtime state deliberately KEPT on telemetry: what the capture
+                pipeline is doing this second, and what is queued for upload.
+                The config plane has no opinion on either. */}
+            {reportedRecording !== null ? (
+              <SettingsCallout>
+                Recording now: telemetry{" "}
+                <span className="font-medium">
+                  {reportedRecording.enabled ? "on" : "off"}
+                </span>
+                {" · "}video{" "}
+                <span className="font-medium">
+                  {reportedVideo ? "on" : "off"}
+                </span>
+                {hasBacklog && reportedRecording.backlogSegments > 0 ? (
+                  <>
+                    {" · "}
+                    {formatBytes(reportedRecording.backlogBytes)} awaiting upload
+                    ({reportedRecording.backlogSegments} segments
+                    {reportedRecording.uploading ? ", uploading" : ""})
+                  </>
+                ) : null}
+                {reportedRecording.droppedSegments > 0 ? (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    {" · "}
+                    {reportedRecording.droppedSegments} segments deleted before
+                    upload (disk full)
                   </span>
-                  {" · "}video recording{" "}
-                  <span className="font-medium">
-                    {reportedVideo ? "on" : "off"}
-                  </span>
-                  {reportedRecording.backlogSegments > 0 ? (
-                    <>
-                      {" · "}
-                      {formatBytes(reportedRecording.backlogBytes)} awaiting
-                      upload ({reportedRecording.backlogSegments} segments
-                      {reportedRecording.uploading ? ", uploading" : ""})
-                    </>
-                  ) : null}
-                  {reportedRecording.droppedSegments > 0 ? (
-                    <span className="text-amber-600 dark:text-amber-400">
-                      {" · "}
-                      {reportedRecording.droppedSegments} segments deleted
-                      before upload (disk full)
-                    </span>
-                  ) : null}
-                  {reportedMismatch ? (
-                    <span className="text-amber-600 dark:text-amber-400">
-                      {" — the device has not applied the saved settings yet"}
-                    </span>
-                  ) : null}
-                </>
-              )}
-            </div>
+                ) : null}
+              </SettingsCallout>
+            ) : null}
           </FieldGroup>
         </CardContent>
       </Card>

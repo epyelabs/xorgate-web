@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -28,6 +29,8 @@ import {
   GIB,
   type ResolvedRecording,
 } from "@/lib/device-config-defaults"
+import type { DeviceConfigStatus } from "@/lib/device-config-status"
+import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { withCurrent } from "./shared"
 
 const TIME_SYNC_KEY = "device-time-sync-offline"
@@ -39,12 +42,14 @@ const RETENTION_GIB_OPTIONS = [2, 5, 10, 20, 50]
 export function SystemTab({
   device,
   recording,
+  configStatus,
   isPending,
   commit,
   commitRecording,
 }: {
   device: Device
   recording: ResolvedRecording
+  configStatus: DeviceConfigStatus
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
@@ -59,6 +64,9 @@ export function SystemTab({
           <CardDescription>
             Where the device gets the time when it can&apos;t reach the internet.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.timeSync} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -94,6 +102,7 @@ export function SystemTab({
                 }
               />
             </Field>
+            <ConfigStatusCallout status={configStatus.timeSync} />
           </FieldGroup>
         </CardContent>
       </Card>
@@ -105,6 +114,9 @@ export function SystemTab({
             One budget and one upload switch across everything the device
             records — trip logs and video share the same recordings tree.
           </CardDescription>
+          <CardAction>
+            <ConfigStatusBadge status={configStatus.recording} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           <FieldGroup>
@@ -161,6 +173,7 @@ export function SystemTab({
                 will flag any dropped data.
               </FieldDescription>
             </Field>
+            <ConfigStatusCallout status={configStatus.recording} />
           </FieldGroup>
         </CardContent>
       </Card>

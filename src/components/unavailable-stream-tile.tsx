@@ -59,6 +59,7 @@ export function UnavailableStreamTile({
             <Link
               to="/devices/$id/settings"
               params={{ id: deviceId }}
+              search={{ tab: descriptor.action.tab }}
               className="text-xs text-muted-foreground underline underline-offset-4 transition-colors hover:text-foreground"
             >
               {descriptor.action.label}

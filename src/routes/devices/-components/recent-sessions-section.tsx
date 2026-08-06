@@ -114,6 +114,9 @@ export function RecentSessionsSection({
                   <Link
                     to="/devices/$id/settings"
                     params={{ id: deviceId }}
+                    // `recordingEnabled` is recordingConfig.video.enabled, and
+                    // that switch lives on the Media sub-tab.
+                    search={{ tab: "media" }}
                     className="underline underline-offset-2 hover:text-foreground"
                   >
                     &quot;Record on device&quot;

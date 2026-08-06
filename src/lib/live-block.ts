@@ -1,3 +1,4 @@
+import type { SettingsTab } from "@/lib/device-settings-tabs"
 import {
   BatteryWarningIcon,
   CirclePauseIcon,
@@ -80,7 +81,12 @@ export interface UnavailableStreamDescriptor {
   /** Extra muted line — currently the clamped "Paused for 2m". */
   note?: string
   /** Optional call to action. `to` is a destination key, not a URL. */
-  action?: { label: string; to: "settings" }
+  /**
+   * Where the operator can act on this. `tab` deep-links into the settings
+   * sub-tab that actually holds the relevant control — without it the link
+   * lands on General and the operator has to hunt for it.
+   */
+  action?: { label: string; to: "settings"; tab?: SettingsTab }
 }
 
 /** The `recording.liveBlock` object as it arrives from the device. */
@@ -120,7 +126,7 @@ export const LIVE_BLOCK_DESCRIPTORS: Record<
     description:
       "Live streaming was dropped first to protect recording, which is still " +
       "running. It returns once the supply recovers.",
-    action: { label: "Open device settings", to: "settings" },
+    action: { label: "Open power settings", to: "settings", tab: "power" },
   },
   thermal: {
     icon: ThermometerSunIcon,
@@ -128,7 +134,7 @@ export const LIVE_BLOCK_DESCRIPTORS: Record<
     description:
       "Live streaming stops so the device can cool down; recording keeps " +
       "running. It resumes once the device has cooled — minutes, not seconds.",
-    action: { label: "Open device settings", to: "settings" },
+    action: { label: "Open power settings", to: "settings", tab: "power" },
   },
 }
 
@@ -167,7 +173,7 @@ export function disabledCameraDescriptor(
   return {
     icon: VideoOffIcon,
     title: `${label} is turned off`,
-    action: { label: "Open device settings", to: "settings" },
+    action: { label: "Open camera settings", to: "settings", tab: "media" },
   }
 }
 
@@ -295,7 +301,7 @@ export function resolveLiveBlock(input: ResolveLiveBlockInput): LiveBlockState {
       action:
         base.action ??
         (parked
-          ? { label: "Open device settings", to: "settings" }
+          ? { label: "Open power settings", to: "settings", tab: "power" }
           : undefined),
     },
   }

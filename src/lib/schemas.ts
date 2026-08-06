@@ -173,10 +173,11 @@ export const recordingConfigSchema = z.object({
       railLowSecs: z.number().optional(),
       escalateDwellSecs: z.number().optional(),
       escalateDutyPct: z.number().optional(),
-      // Thermal arm (power_management_improvements plan, Phase 1). No UI yet —
-      // these are here so the settings page ROUND-TRIPS them: it re-PUTs the
-      // parsed object wholesale, so a key zod strips on read is a key deleted
-      // on the next save.
+      // Thermal arm (power_management_improvements plan, Phase 1) — edited on
+      // the Power settings tab. Every key of this namespace must be listed
+      // here, edited or not, because the settings page ROUND-TRIPS it: it
+      // re-PUTs the parsed object wholesale, so a key zod strips on read is a
+      // key deleted on the next save.
       cpuTempC: z.number().optional(),
       cpuTempRestoreC: z.number().optional(),
       cpuTempSecs: z.number().optional(),
@@ -238,10 +239,11 @@ export const getDeviceResponseSchema = z.object({
   device: deviceSchema,
 })
 
-// Settings form: editable device fields. Empty name is allowed and sent as null.
+// Settings form: the editable identity field. Empty name is allowed and sent
+// as null. `status` deliberately absent — it is machine-managed (telemetry
+// ingest / LWT / the offline sweeper) and the settings page only displays it.
 export const updateDeviceSchema = z.object({
   name: z.string().max(80, "Name is too long"),
-  status: deviceStatusSchema,
 })
 
 // --- IoT identity (settings): GET /devices/{id}/identity, non-secret metadata ---

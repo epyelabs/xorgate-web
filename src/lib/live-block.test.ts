@@ -215,8 +215,9 @@ describe("resolveLiveBlock — a parked shed", () => {
     if (!state.blocked) return
     expect(state.descriptor.description).toContain("will not resume")
     expect(state.descriptor.action).toEqual({
-      label: "Open device settings",
+      label: "Open power settings",
       to: "settings",
+      tab: "power",
     })
   })
 

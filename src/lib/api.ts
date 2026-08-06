@@ -301,7 +301,7 @@ export interface RecordingConfig {
     railLowSecs?: number
     escalateDwellSecs?: number
     escalateDutyPct?: number
-    /** Thermal arm (power_management_improvements Phase 1) — no UI yet; kept so saves round-trip. */
+    /** Thermal arm (power_management_improvements Phase 1); edited on the Power settings tab. */
     cpuTempC?: number
     cpuTempRestoreC?: number
     cpuTempSecs?: number

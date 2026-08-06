@@ -120,9 +120,20 @@ const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
 // On-device recording (offline recording plan, Phase 5). Display defaults
 // mirror the device agent's RECORDING_DEFAULTS (device src/recording/config.ts)
 // so a device with recordingConfig null renders exactly what it is doing.
+// `1080p30-4mbps` is NOT recommended and must not read as "best": it is the
+// only preset whose bridge branch runs videorate (30→15) and videoscale
+// (1080→720) both non-passthrough, and that pair deadlocks the capture
+// pipeline before the first frame — bench-measured 2026-08-06 at roughly 1 spawn
+// in 4, recording nothing and blacking out live view. The device-side watchdog
+// now catches and retries it, but a retry can stall again, so the honest
+// operator-facing signal is "experimental". See plans/1080p30fps_bug/PROGRESS.md;
+// the pipeline fix (videoscale BEFORE videorate, ~+22 % of one core) is open.
 const VIDEO_PRESET_OPTIONS: { value: VideoPresetName; label: string }[] = [
-  { value: "1080p30-4mbps", label: "1080p 30 fps · 4 Mbps (best, highest CPU)" },
-  { value: "1080p15-2mbps", label: "1080p 15 fps · 2 Mbps (default)" },
+  {
+    value: "1080p30-4mbps",
+    label: "1080p 30 fps · 4 Mbps (experimental, highest CPU)",
+  },
+  { value: "1080p15-2mbps", label: "1080p 15 fps · 2 Mbps (default, recommended)" },
   { value: "720p30-2mbps", label: "720p 30 fps · 2 Mbps (smoother motion)" },
   { value: "720p15-2mbps", label: "720p 15 fps · 2 Mbps (lower CPU)" },
   {

@@ -9,6 +9,7 @@ import {
   Trash2Icon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +54,16 @@ import { RunNowDialog } from "./-components/run-now-dialog"
 const RUNS_PAGE_SIZES = [25, 50, 100]
 const RUNS_DEFAULT_SIZE = 25
 
+// The two lists are sub-tabs rather than stacked sections so each one can own
+// the full tab height. Local state, not the URL: unlike the device tabs above,
+// there's nothing here worth linking to.
+//
+// Runs lead (and default), matching the device tab bar's observation-before-
+// configuration order: workflows get attached once and watched many times. A
+// fresh device lands on an empty runs list, but "Attach workflow" is pinned to
+// the tab bar on both sub-tabs, so the next action is still in reach.
+type SubTab = "attached" | "runs"
+
 export const Route = createFileRoute("/devices/$id/workflows")({
   beforeLoad: requireAuth,
   component: DeviceWorkflowsPage,
@@ -63,6 +74,7 @@ function DeviceWorkflowsPage() {
   const [attachments, setAttachments] = useState<
     DeviceWorkflowAttachment[] | null
   >(null)
+  const [subTab, setSubTab] = useState<SubTab>("runs")
   const [attachOpen, setAttachOpen] = useState(false)
   const [runTarget, setRunTarget] = useState<DeviceWorkflowAttachment | null>(
     null
@@ -361,93 +373,108 @@ function DeviceWorkflowsPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex flex-col gap-0.5">
-            <h2 className="font-heading text-sm font-medium">
-              Attached workflows
-            </h2>
-          </div>
+    // min-h-0/flex-1 chain: the active sub-tab's table owns the leftover height
+    // and scrolls its own rows, so the page itself never grows.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <Tabs
+        value={subTab}
+        onValueChange={(v) => setSubTab(v as SubTab)}
+        className="min-h-0 flex-1 gap-4"
+      >
+        {/* Segmented (default) variant, deliberately NOT `line`: the device tab
+            bar directly above is a line tab bar, and a second underlined row
+            under it reads as one confused hierarchy. The filled pill says
+            "nested control" instead. "Attach workflow" is the tab's primary
+            action, not the attached list's, so it stays put on both sub-tabs —
+            and sitting here keeps it out of the table's scroll area. */}
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="runs">Recent runs</TabsTrigger>
+            <TabsTrigger value="attached">Attached workflows</TabsTrigger>
+          </TabsList>
           <Button size="sm" onClick={() => setAttachOpen(true)}>
             <PlusIcon />
             Attach workflow
           </Button>
         </div>
-        <DataTable
-          card
-          columns={attachmentColumns}
-          rows={attachments ?? []}
-          getRowKey={(a) => a.id}
-          loading={attachments === null}
-          skeletonRows={3}
-          empty={<AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />}
-        />
-      </section>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h2 className="font-heading text-sm font-medium">Recent runs</h2>
-        </div>
-        <DataTable
-          card
-          columns={runColumns}
-          rows={visibleRuns}
-          getRowKey={(run) => run.id}
-          loading={runsData === null}
-          isFiltered={runsFiltered}
-          sort={{ columnId: "startedAt", dir: runsOrder }}
-          onToggleSort={() => {
-            setRunsOrder((o) => (o === "asc" ? "desc" : "asc"))
-            setRunsPage(1)
-          }}
-          toolbar={
-            <DataTableToolbar
-              filters={
-                <DateRangeFilter
-                  value={runsRange}
-                  onChange={(v) => {
-                    setRunsRange(v)
-                    setRunsPage(1)
-                  }}
-                />
-              }
-              search={{
-                value: runsQuery,
-                onChange: setRunsQuery,
-                placeholder: "Filter by workflow…",
-              }}
-              searchAlign="right"
-            />
-          }
-          empty={
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No workflow runs on this device yet.
-            </p>
-          }
-          filteredEmpty={
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No workflow runs match these filters.
-            </p>
-          }
-          pagination={{
-            page: runsPage,
-            pageSize: runsSize,
-            total: runsData?.total ?? 0,
-            rowsOnPage: visibleRuns.length,
-            pageSizes: RUNS_PAGE_SIZES,
-            onPageChange: setRunsPage,
-            onPageSizeChange: (s) => {
-              setRunsSize(s)
+        <TabsContent value="runs" className="flex min-h-0 flex-col">
+          <DataTable
+            card
+            fillHeight
+            columns={runColumns}
+            rows={visibleRuns}
+            getRowKey={(run) => run.id}
+            loading={runsData === null}
+            isFiltered={runsFiltered}
+            sort={{ columnId: "startedAt", dir: runsOrder }}
+            onToggleSort={() => {
+              setRunsOrder((o) => (o === "asc" ? "desc" : "asc"))
               setRunsPage(1)
-            },
-          }}
-          exportCsv={{
-            filename: `workflow-runs-${id}.csv`,
-            getRows: getRunsExportRows,
-          }}
-        />
-      </section>
+            }}
+            toolbar={
+              <DataTableToolbar
+                filters={
+                  <DateRangeFilter
+                    value={runsRange}
+                    onChange={(v) => {
+                      setRunsRange(v)
+                      setRunsPage(1)
+                    }}
+                  />
+                }
+                search={{
+                  value: runsQuery,
+                  onChange: setRunsQuery,
+                  placeholder: "Filter by workflow…",
+                }}
+                searchAlign="right"
+              />
+            }
+            empty={
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No workflow runs on this device yet.
+              </p>
+            }
+            filteredEmpty={
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No workflow runs match these filters.
+              </p>
+            }
+            pagination={{
+              page: runsPage,
+              pageSize: runsSize,
+              total: runsData?.total ?? 0,
+              rowsOnPage: visibleRuns.length,
+              pageSizes: RUNS_PAGE_SIZES,
+              onPageChange: setRunsPage,
+              onPageSizeChange: (s) => {
+                setRunsSize(s)
+                setRunsPage(1)
+              },
+            }}
+            exportCsv={{
+              filename: `workflow-runs-${id}.csv`,
+              getRows: getRunsExportRows,
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="attached" className="flex min-h-0 flex-col">
+          <DataTable
+            card
+            fillHeight
+            columns={attachmentColumns}
+            rows={attachments ?? []}
+            getRowKey={(a) => a.id}
+            loading={attachments === null}
+            skeletonRows={3}
+            empty={
+              <AttachmentsEmptyState onAttach={() => setAttachOpen(true)} />
+            }
+          />
+        </TabsContent>
+      </Tabs>
 
       <AttachWorkflowSheet
         deviceId={id}

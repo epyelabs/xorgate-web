@@ -143,8 +143,11 @@ function formatTimestamp(iso: string): string {
   return Number.isNaN(parsed.getTime()) ? iso : dateTimeFormat.format(parsed)
 }
 
+// Sticky because the card fills the viewport and the rows scroll underneath
+// (DataTable's `fillHeight` look, hand-rolled here — this table's expandable
+// run/session rows don't fit the shared column model).
 const HEAD =
-  "text-[10px] tracking-[0.14em] uppercase text-muted-foreground"
+  "text-[10px] tracking-[0.14em] uppercase text-muted-foreground sticky top-0 z-20 bg-card"
 
 // Sessions recorded ON the device (offline recording plan), grouped into
 // RECORDING RUNS (composite replays plan, R9): one drive with N cameras
@@ -526,12 +529,14 @@ export function DeviceSessionsCard({
   )
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
-      <CardContent className="flex flex-col p-0">
+    // h-full + min-h-0/flex-1 chain: the card fills the tab's height and the
+    // ROWS scroll inside it, instead of the table growing the whole page.
+    <Card className="flex h-full flex-col gap-0 overflow-hidden py-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         {/* Filters run SERVER-side and select whole RUNS (Phase 3, Q1 option
             b): a run matching on one camera or overlapping the date range comes
             back intact, so no note has to apologise for clipped rows. */}
-        <div className="flex flex-col gap-2 border-b border-border px-4 pt-4 pb-3">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border px-4 pt-4 pb-3">
           <DataTableToolbar
             filters={
               <>
@@ -574,15 +579,17 @@ export function DeviceSessionsCard({
           ) : null}
         </div>
         {loadError && (runs ?? []).length === 0 ? (
-          <p className="px-4 py-6 text-sm text-destructive">{loadError}</p>
+          <p className="min-h-0 flex-1 px-4 py-6 text-sm text-destructive">
+            {loadError}
+          </p>
         ) : loading ? (
-          <div className="flex flex-col gap-2 px-4 py-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-4">
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-6 w-full" />
             <Skeleton className="h-6 w-full" />
           </div>
         ) : (runs ?? []).length === 0 && isFiltered ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 py-6 text-center">
             <p className="text-sm text-muted-foreground">
               No recordings match these filters.
             </p>
@@ -610,15 +617,15 @@ export function DeviceSessionsCard({
             </Button>
           </div>
         ) : (runs ?? []).length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="flex min-h-0 flex-1 items-center justify-center py-6 text-center text-sm text-muted-foreground">
             No on-device recordings yet. Turn on &quot;Record on device&quot; in
             Settings to capture drives even while offline.
           </p>
         ) : (
-          <Table>
+          <Table containerClassName="min-h-0 flex-1 overflow-auto">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8" />
+                <TableHead className="w-8 sticky top-0 z-20 bg-card" />
                 <TableHead className={HEAD}>Started</TableHead>
                 <TableHead className={`${HEAD} text-right`}>Duration</TableHead>
                 <TableHead className={HEAD}>Cameras</TableHead>
@@ -932,7 +939,7 @@ export function DeviceSessionsCard({
             `total` is the server's run count over the whole filtered set, so
             every page but the last holds exactly `size` rows. */}
         {total > 0 ? (
-          <div className="border-t border-border px-3 py-3">
+          <div className="shrink-0 border-t border-border px-3 py-3">
             <DataTablePagination
               page={page}
               pageSize={size}

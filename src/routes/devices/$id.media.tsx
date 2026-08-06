@@ -66,7 +66,9 @@ function DeviceMediaPage() {
   // search, pagination and CSV export now drive this card instead — server-side
   // (decision H), with run clustering applied to whatever the page returns.
   return (
-    <div className="flex flex-col gap-4">
+    // Same height contract as Telemetry History: claim the tab's height so the
+    // card can bound its own scroll area rather than growing the page.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       <DeviceSessionsCard deviceId={id} search={search} onSearchChange={update} />
     </div>
   )

@@ -5,6 +5,7 @@ import {
   configStateExplanation,
   hasPending,
   parseReportedConfig,
+  reportedAgentMode,
   tabAttentionCounts,
 } from "./device-config-status"
 
@@ -191,5 +192,34 @@ describe("tabAttentionCounts", () => {
       })
     )
     expect(tabAttentionCounts(status)).toEqual({})
+  })
+})
+
+describe("reportedAgentMode", () => {
+  it("reads the run mode the device reported", () => {
+    expect(
+      reportedAgentMode(
+        device({ reportedConfig: report({ effective: { agent: { mode: "sim" } } }) })
+      )
+    ).toBe("sim")
+  })
+
+  it("is null when the device has never reported, or reported no mode", () => {
+    expect(reportedAgentMode(null)).toBeNull()
+    expect(reportedAgentMode(device())).toBeNull()
+    expect(reportedAgentMode(device({ reportedConfig: report() }))).toBeNull()
+    expect(
+      reportedAgentMode(device({ reportedConfig: report({ effective: { agent: { mode: 7 } } }) }))
+    ).toBeNull()
+  })
+
+  it("never becomes a namespace verdict — the cloud cannot set it", () => {
+    const status = computeConfigStatus(
+      device({
+        configRev: 5,
+        reportedConfig: report({ rev: 5, effective: { agent: { mode: "real" } } }),
+      })
+    )
+    expect(status).not.toHaveProperty("agent")
   })
 })

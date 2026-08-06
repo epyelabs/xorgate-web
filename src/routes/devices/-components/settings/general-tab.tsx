@@ -25,6 +25,7 @@ import {
   type Device,
   type DeviceIdentity,
 } from "@/lib/api"
+import { reportedAgentMode } from "@/lib/device-config-status"
 import { getDeviceModelResponseSchema, updateDeviceSchema } from "@/lib/schemas"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
@@ -48,6 +49,7 @@ export function GeneralTab({
 }) {
   const navigate = useNavigate()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const agentMode = reportedAgentMode(device)
 
   // Kept as a string so partial input never fights the user; re-seeded whenever
   // the device object changes, which is also how a failed save snaps back.
@@ -174,6 +176,24 @@ export function GeneralTab({
                 label="Firmware Ver"
                 value={device.firmwareVersion ?? "—"}
                 mono
+              />
+              {/* Reported by the device, never set from here: a box left in
+                  `sim` publishes synthetic data, so it has to be visible — but
+                  switching a fielded device to sim remotely would silently
+                  replace real data with simulated data. */}
+              <InfoRow
+                label="Agent mode"
+                value={
+                  agentMode === null ? (
+                    "—"
+                  ) : (
+                    <Badge
+                      variant={agentMode === "sim" ? "destructive" : "outline"}
+                    >
+                      {agentMode === "sim" ? "Simulated" : "Real"}
+                    </Badge>
+                  )
+                }
               />
               {/* Status is machine-managed (telemetry ingest / LWT / the
                   offline sweeper) — it is reported here, never set here. */}

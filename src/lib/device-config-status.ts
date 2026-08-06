@@ -109,6 +109,24 @@ export function parseReportedConfig(
   }
 }
 
+/**
+ * The run mode the device says it is in (`sim` / `real`), or null when it has
+ * never reported one (an older agent, or a device that has never connected).
+ *
+ * Reported-only by design (design.md §3, Q4): a device in `sim` publishes
+ * synthetic data, so an operator needs to SEE it — but flipping a fielded
+ * device into sim from the cloud would silently replace real data with
+ * simulated data, so there is deliberately no cloud-writable counterpart and no
+ * per-namespace verdict for it.
+ */
+export function reportedAgentMode(device: Device | null): string | null {
+  const reported = parseReportedConfig(device?.reportedConfig)
+  const agent = reported?.effective.agent
+  if (!agent || typeof agent !== "object") return null
+  const mode = (agent as Record<string, unknown>).mode
+  return typeof mode === "string" && mode.length > 0 ? mode : null
+}
+
 function emptyStatus(state: ConfigState): DeviceConfigStatus {
   return Object.fromEntries(
     CONFIG_NAMESPACES.map((ns) => [ns, { state }])

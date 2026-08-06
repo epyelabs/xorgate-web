@@ -1,36 +1,45 @@
 // Device config defaults + namespace builders, in ONE place.
 //
-// ⚠️ TEMPORARY BY DESIGN. Every default in this file is a hand-copy of the
-// device agent's own defaults (device/xorgate-device-agent: RECORDING_DEFAULTS
-// in src/recording/config.ts, and the settings.json parser). A device with a
-// null config renders what it is actually doing only for as long as the two
-// copies agree — and they have drifted before (the thermal-shed keys shipped
-// missing from three of five places).
+// Every default here now comes from `config-contract.json` — the artifact the
+// backend's config registry generates (`npm run contract:generate` in
+// backend/xorgate-core-service) and commits into all three packages. The
+// backend test regenerates and diffs it, and the device agent contract-tests
+// its own constants against the same file, so "what the UI shows for an
+// unconfigured device" and "what the device actually does" cannot drift apart
+// without a test failing. Before this they were hand-copies, and the
+// thermal-shed keys shipped missing from three of five places.
 //
-// Phase 2 of the "improve device settings management" plan replaces this module
-// with the generated `config-contract.json` artifact emitted by the backend
-// config registry (defaults + bounds + enums, imported here, contract-tested on
-// the device). Until then: this file is the single scatter site. Do NOT
-// re-inline a default anywhere else — add it here.
+// Do NOT re-inline a default anywhere else: change it in the backend registry
+// and regenerate.
 
+import contract from "@/lib/config-contract.json"
 import type { ImuMount, ImuView, RecordingConfig, VideoPresetName } from "@/lib/api"
 
 export const GIB = 1024 ** 3
 
-// Defaults shown when the device has no stored IMU settings yet. The camera
-// numbers mirror the orientation view's built-in 3/4 angle.
-export const DEFAULT_IMU_MOUNT: ImuMount = {
-  enabled: false,
-  rollDeg: 0,
-  pitchDeg: 0,
-  yawDeg: 0,
-}
-export const DEFAULT_IMU_VIEW: ImuView = { azimuthDeg: 45, elevationDeg: 24 }
+const RECORDING = contract.namespaces.recording.defaults
+const SHED = RECORDING.powerShedding
+const VIDEO = RECORDING.video
+
+// Defaults shown when the device has no stored settings yet.
+export const DEFAULT_IMU_MOUNT: ImuMount = contract.namespaces.imuMount.defaults
+export const DEFAULT_IMU_VIEW: ImuView = contract.uiPrefs.defaults.imuView
 
 // Device defaults for the namespaces the UI does not own a column for.
-export const DEFAULT_LTE_GPS_FIX_RESET_POLICY = "defer"
-export const DEFAULT_LTE_DEADZONE_PROFILE = "balanced"
-export const DEFAULT_TIME_SYNC_OFFLINE_SOURCES = true
+export const DEFAULT_LTE_GPS_FIX_RESET_POLICY =
+  contract.namespaces.lteRecovery.defaults.gpsFixResetPolicy
+export const DEFAULT_LTE_DEADZONE_PROFILE =
+  contract.namespaces.lteRecovery.defaults.deadZoneProfile
+export const DEFAULT_TIME_SYNC_OFFLINE_SOURCES =
+  contract.namespaces.timeSync.defaults.offlineSources
+
+// The contract publishes plain JSON, so string defaults widen to `string`. The
+// backend's own contract test asserts every default is a member of its schema's
+// enum, which is the guarantee these two casts stand on.
+const DEFAULT_PRESET = VIDEO.preset as VideoPresetName
+const DEFAULT_BOOT_DEFER = VIDEO.bootDefer as "auto" | "always" | "off"
+const DEFAULT_GPS_GATE = VIDEO.gpsGate as "auto" | "always" | "off"
+const DEFAULT_UPLOAD_MODE = RECORDING.upload.mode as "auto" | "off"
 
 export interface ResolvedRecording {
   telemetryEnabled: boolean
@@ -52,9 +61,7 @@ export interface ResolvedRecording {
   maxBytes: number
   minFreeBytes: number | undefined
   powerSheddingEnabled: boolean
-  // Thermal arm thresholds (power_management_improvements plan). Defaults
-  // mirror the device agent's RECORDING_DEFAULTS, so an untouched device shows
-  // what it is actually doing rather than a blank control.
+  // Thermal arm thresholds (power_management_improvements plan).
   cpuTempC: number
   cpuTempRestoreC: number
   cpuTempSecs: number
@@ -66,32 +73,37 @@ export interface ResolvedRecording {
 
 export function resolveRecording(cfg: RecordingConfig | null): ResolvedRecording {
   return {
-    telemetryEnabled: cfg?.telemetry?.enabled ?? false,
-    rateHz: cfg?.telemetry?.rateHz ?? 10,
-    videoEnabled: cfg?.video?.enabled ?? false,
-    preset: cfg?.video?.preset ?? "1080p15-2mbps",
-    segmentSeconds: cfg?.video?.segmentSeconds ?? 60,
-    bootDefer: cfg?.video?.bootDefer ?? "auto",
-    bootDeferMaxSecs: cfg?.video?.bootDeferMaxSecs ?? 90,
+    telemetryEnabled: cfg?.telemetry?.enabled ?? RECORDING.telemetry.enabled,
+    rateHz: cfg?.telemetry?.rateHz ?? RECORDING.telemetry.rateHz,
+    videoEnabled: cfg?.video?.enabled ?? VIDEO.enabled,
+    preset: cfg?.video?.preset ?? DEFAULT_PRESET,
+    segmentSeconds: cfg?.video?.segmentSeconds ?? VIDEO.segmentSeconds,
+    bootDefer: cfg?.video?.bootDefer ?? DEFAULT_BOOT_DEFER,
+    bootDeferMaxSecs: cfg?.video?.bootDeferMaxSecs ?? VIDEO.bootDeferMaxSecs,
+    // Deliberately NOT defaulted: the UI doesn't edit these two, and
+    // buildRecordingConfig only re-sends them when they are already stored.
+    // Defaulting them here would materialize them into every saved config.
     bootDeferMinBudgetMa: cfg?.video?.bootDeferMinBudgetMa,
-    gpsGate: cfg?.video?.gpsGate ?? "auto",
-    gpsGateMaxSecs: cfg?.video?.gpsGateMaxSecs ?? 600,
-    gpsGateNoProgressSecs: cfg?.video?.gpsGateNoProgressSecs ?? 120,
+    gpsGate: cfg?.video?.gpsGate ?? DEFAULT_GPS_GATE,
+    gpsGateMaxSecs: cfg?.video?.gpsGateMaxSecs ?? VIDEO.gpsGateMaxSecs,
+    gpsGateNoProgressSecs:
+      cfg?.video?.gpsGateNoProgressSecs ?? VIDEO.gpsGateNoProgressSecs,
     spawnStaggerSecs: cfg?.video?.spawnStaggerSecs,
-    cameras: cfg?.video?.cameras ?? {},
-    uploadMode: cfg?.upload?.mode ?? "auto",
-    maxBytes: cfg?.retention?.maxBytes ?? 10 * GIB,
+    cameras: cfg?.video?.cameras ?? VIDEO.cameras,
+    uploadMode: cfg?.upload?.mode ?? DEFAULT_UPLOAD_MODE,
+    maxBytes: cfg?.retention?.maxBytes ?? RECORDING.retention.maxBytes,
     minFreeBytes: cfg?.retention?.minFreeBytes,
-    powerSheddingEnabled: cfg?.powerShedding?.enabled ?? true,
-    cpuTempC: cfg?.powerShedding?.cpuTempC ?? 80,
-    cpuTempRestoreC: cfg?.powerShedding?.cpuTempRestoreC ?? 70,
-    cpuTempSecs: cfg?.powerShedding?.cpuTempSecs ?? 15,
+    powerSheddingEnabled: cfg?.powerShedding?.enabled ?? SHED.enabled,
+    cpuTempC: cfg?.powerShedding?.cpuTempC ?? SHED.cpuTempC,
+    cpuTempRestoreC: cfg?.powerShedding?.cpuTempRestoreC ?? SHED.cpuTempRestoreC,
+    cpuTempSecs: cfg?.powerShedding?.cpuTempSecs ?? SHED.cpuTempSecs,
     powerShedding: cfg?.powerShedding,
   }
 }
 
-// The PUT always sends the complete namespace so the stored config (and the
-// retained copy the device converges on) is self-contained after first touch.
+// A save always sends the complete namespace so the stored config (and the
+// retained copy the device converges on) is self-contained after first touch —
+// the backend replaces a namespace whole, exactly as the device does.
 export function buildRecordingConfig(r: ResolvedRecording): RecordingConfig {
   return {
     telemetry: { enabled: r.telemetryEnabled, rateHz: r.rateHz },

@@ -10,6 +10,10 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    /* config-contract.json — the generated device-config contract (defaults,
+       bounds, enums) emitted by the backend registry and imported by
+       lib/device-config-defaults.ts. */
+    "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,

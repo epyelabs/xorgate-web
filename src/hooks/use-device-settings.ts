@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ApiError, getDevice, updateDevice, type Device } from "@/lib/api"
+import {
+  ApiError,
+  getDevice,
+  patchDeviceConfig,
+  patchDeviceUiPrefs,
+  updateDevice,
+  type ActiveStreamsViewType,
+  type Device,
+  type DeviceConfigPatch,
+  type DeviceUiPrefsPatch,
+  type ImuMount,
+  type ImuView,
+  type LteRecoveryConfig,
+  type RecordingConfig,
+  type TimeSyncConfig,
+} from "@/lib/api"
 import { getDeviceResponseSchema } from "@/lib/schemas"
 import {
   buildRecordingConfig,
@@ -21,12 +36,51 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
 // rolls the whole object back to the last server-confirmed value and toasts.
 // There is no hand-maintained baseline copy to forget to update.
 //
-// Phase 2 of the "improve device settings management" plan swaps the transport
-// underneath (`PATCH /devices/{id}/config`) — the control-facing API here is
-// meant to survive that unchanged.
+// Phase 2 swapped the transport underneath without touching a single tab: a
+// patch is still keyed by DEVICE FIELD (`recordingConfig`, `imuView`, `name`),
+// and this hook routes each key to the endpoint that owns it —
+// `PATCH /devices/{id}/config` for anything delivered to the device,
+// `PATCH /devices/{id}/ui-prefs` for cloud-only prefs, `PUT /devices/{id}` for
+// metadata. Tabs still READ the dual-written top-level fields; when the
+// follow-up migration drops those columns, the reads move to `device.config`
+// and this mapping is what tells you where each one goes.
 
-/** Update payload accepted by `PUT /devices/{id}` (see api.ts `updateDevice`). */
-export type DeviceSettingsPatch = NonNullable<Parameters<typeof updateDevice>[1]>
+/**
+ * Patch keys are device fields, not namespaces — that indirection is what let
+ * the transport change land in this file alone.
+ */
+export interface DeviceSettingsPatch {
+  name?: string | null
+  firmwareVersion?: string | null
+  gnssAntBias?: boolean
+  imuMount?: ImuMount | null
+  recordingConfig?: RecordingConfig | null
+  lteRecoveryConfig?: LteRecoveryConfig | null
+  timeSyncConfig?: TimeSyncConfig | null
+  activeStreamsViewType?: ActiveStreamsViewType
+  imuView?: ImuView | null
+}
+
+/** Device field -> config namespace (`PATCH /devices/{id}/config`). */
+const CONFIG_FIELDS = {
+  gnssAntBias: "gnssAntBias",
+  imuMount: "imuMount",
+  recordingConfig: "recording",
+  lteRecoveryConfig: "lteRecovery",
+  timeSyncConfig: "timeSync",
+} as const
+
+/** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
+const UI_PREF_FIELDS = {
+  activeStreamsViewType: "activeStreamsViewType",
+  imuView: "imuView",
+} as const
+
+type ConfigField = keyof typeof CONFIG_FIELDS
+type UiPrefField = keyof typeof UI_PREF_FIELDS
+
+const isConfigField = (k: string): k is ConfigField => k in CONFIG_FIELDS
+const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
 
 /** Structural equality — the single change-detection strategy for the page. */
 export function deepEqual(a: unknown, b: unknown): boolean {
@@ -153,6 +207,22 @@ export function useDeviceSettings(id: string): DeviceSettings {
       // already stored) — don't hit the API.
       if (keys.every((k) => deepEqual(current[k], next[k]))) return
 
+      // Mirror the optimistic edit into the consolidated document too, so the
+      // two views of the same setting never disagree mid-flight.
+      next.config = { ...current.config }
+      next.uiPrefs = { ...current.uiPrefs }
+      for (const [field, value] of Object.entries(updates)) {
+        if (isConfigField(field)) {
+          const ns = CONFIG_FIELDS[field]
+          if (value === null) delete next.config[ns]
+          else (next.config as Record<string, unknown>)[ns] = value
+        } else if (isUiPrefField(field)) {
+          const pref = UI_PREF_FIELDS[field]
+          if (value === null) delete next.uiPrefs[pref]
+          else (next.uiPrefs as Record<string, unknown>)[pref] = value
+        }
+      }
+
       applyDevice(next)
       const generation = generationRef.current
       bumpPending(key, 1)
@@ -164,7 +234,34 @@ export function useDeviceSettings(id: string): DeviceSettings {
           return
         }
         try {
-          const { device: updated } = await updateDevice(id, updates)
+          // Split the patch by owning endpoint. In practice a control touches
+          // one key, but a mixed patch stays correct: the requests run in
+          // order and the last response is the freshest device row.
+          const configPatch: DeviceConfigPatch = {}
+          const uiPrefsPatch: DeviceUiPrefsPatch = {}
+          const metaPatch: { name?: string | null; firmwareVersion?: string | null } = {}
+          for (const [field, value] of Object.entries(updates)) {
+            if (isConfigField(field)) {
+              // `null` means "revert this namespace to device defaults".
+              ;(configPatch as Record<string, unknown>)[CONFIG_FIELDS[field]] = value
+            } else if (isUiPrefField(field)) {
+              ;(uiPrefsPatch as Record<string, unknown>)[UI_PREF_FIELDS[field]] = value
+            } else {
+              ;(metaPatch as Record<string, unknown>)[field] = value
+            }
+          }
+
+          let updated: Device | null = null
+          if (Object.keys(metaPatch).length > 0) {
+            updated = (await updateDevice(id, metaPatch)).device
+          }
+          if (Object.keys(configPatch).length > 0) {
+            updated = (await patchDeviceConfig(id, configPatch)).device
+          }
+          if (Object.keys(uiPrefsPatch).length > 0) {
+            updated = (await patchDeviceUiPrefs(id, uiPrefsPatch)).device
+          }
+          if (updated === null) throw new Error("Nothing to save")
           serverRef.current = updated
           // Re-seed only the fields this save owns: later queued edits are
           // already optimistically applied and must survive.
@@ -175,6 +272,14 @@ export function useDeviceSettings(id: string): DeviceSettings {
           merged.status = updated.status
           merged.lastSeenAt = updated.lastSeenAt
           merged.updatedAt = updated.updatedAt
+          // The consolidated document comes back wholesale: it is the server's
+          // view of every namespace, and re-seeding it keeps it from drifting
+          // behind the dual-written top-level fields the tabs read. A still
+          // queued edit re-seeds it again when it lands.
+          merged.config = updated.config
+          merged.configRev = updated.configRev
+          merged.configUpdatedAt = updated.configUpdatedAt
+          merged.uiPrefs = updated.uiPrefs
           applyDevice(merged)
           if (keys.includes("name")) {
             // The layout header refreshes on next navigation; the breadcrumb

@@ -331,6 +331,24 @@ export interface TimeSyncConfig {
   maxStepsPerBoot?: number
 }
 
+// The consolidated device config document (backend `devices.config`), one key
+// per wire namespace. An ABSENT namespace means the device uses its own
+// defaults — the same semantics the retained MQTT message has always had.
+export interface DeviceConfigDocument {
+  gnssAntBias?: boolean
+  imuMount?: ImuMount
+  recording?: RecordingConfig
+  lteRecovery?: LteRecoveryConfig
+  timeSync?: TimeSyncConfig
+}
+
+// Cloud-only presentation prefs (backend `devices.ui_prefs`). Never delivered
+// to the device and never bumps configRev.
+export interface DeviceUiPrefs {
+  activeStreamsViewType?: ActiveStreamsViewType
+  imuView?: ImuView
+}
+
 export interface Device {
   id: string
   workspaceId: string
@@ -339,6 +357,23 @@ export interface Device {
   name: string | null
   firmwareVersion: string | null
   status: DeviceStatus
+  /** Everything delivered to the device, in one document. */
+  config: DeviceConfigDocument
+  /**
+   * Monotonic config revision, bumped on every config write and carried on the
+   * retained MQTT message as `rev`. Phase 3 compares it with the device's
+   * reported rev to compute pending/applied.
+   */
+  configRev: number
+  configUpdatedAt: string | null
+  uiPrefs: DeviceUiPrefs
+  /** Last device report of what it actually applied (Phase 3). */
+  reportedConfig: Record<string, unknown> | null
+  reportedAt: string | null
+  // ⚠️ TRANSITION WINDOW: the pre-consolidation top-level fields. The backend
+  // dual-writes them, and the settings tabs still READ them (that is what kept
+  // the Phase 2 adapter to one file). A follow-up migration drops the columns;
+  // move the reads onto `config`/`uiPrefs` before then.
   gnssAntBias: boolean
   activeStreamsViewType: ActiveStreamsViewType
   imuMount: ImuMount | null
@@ -376,26 +411,56 @@ export async function getDevice(id: string): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`)
 }
 
-// Update editable device fields (name / status / firmwareVersion). Maps to the
-// backend PUT /devices/{id}; only provided keys are changed. `name: null` clears it.
+// Update device METADATA. Maps to the backend PUT /devices/{id}; only provided
+// keys are changed, `name: null` clears it. Device config no longer travels
+// here — it goes through patchDeviceConfig / patchDeviceUiPrefs below. `status`
+// and `lastSeenAt` are machine-managed and rejected 400 by the API.
 export async function updateDevice(
   id: string,
   updates: {
     name?: string | null
-    status?: DeviceStatus
     firmwareVersion?: string | null
-    gnssAntBias?: boolean
-    activeStreamsViewType?: ActiveStreamsViewType
-    imuMount?: ImuMount | null
-    imuView?: ImuView | null
-    recordingConfig?: RecordingConfig | null
-    lteRecoveryConfig?: LteRecoveryConfig | null
-    timeSyncConfig?: TimeSyncConfig | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {
     method: "PUT",
     body: JSON.stringify(updates),
+  })
+}
+
+// Write one or more config namespaces. Each present namespace is validated and
+// replaced WHOLE (the device merges the same way, so a partial namespace would
+// drop the keys it omits), the whole document is published to the device as a
+// retained MQTT message, and configRev is bumped. `null` reverts a namespace to
+// the device's own defaults. All-or-nothing: an invalid namespace 400s and
+// nothing is committed.
+export type DeviceConfigPatch = {
+  [K in keyof DeviceConfigDocument]?: DeviceConfigDocument[K] | null
+}
+
+export async function patchDeviceConfig(
+  id: string,
+  patch: DeviceConfigPatch
+): Promise<{ device: Device }> {
+  return apiRequest(`/devices/${id}/config`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+// Write cloud-only presentation prefs. Nothing here reaches the device and
+// configRev is not bumped. `null` resets a pref to its default.
+export type DeviceUiPrefsPatch = {
+  [K in keyof DeviceUiPrefs]?: DeviceUiPrefs[K] | null
+}
+
+export async function patchDeviceUiPrefs(
+  id: string,
+  patch: DeviceUiPrefsPatch
+): Promise<{ device: Device }> {
+  return apiRequest(`/devices/${id}/ui-prefs`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   })
 }
 

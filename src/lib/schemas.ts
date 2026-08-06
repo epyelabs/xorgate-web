@@ -206,6 +206,24 @@ export const timeSyncConfigSchema = z.object({
   maxStepsPerBoot: z.number().optional().catch(undefined),
 })
 
+// The consolidated config document (backend `devices.config`). Every namespace
+// is optional — absent means "device defaults". Same per-namespace validators
+// as the legacy top-level fields, so a value parses identically whichever way
+// it is read during the transition window.
+export const deviceConfigDocumentSchema = z.object({
+  gnssAntBias: z.boolean().optional().catch(undefined),
+  imuMount: imuMountSchema.optional().catch(undefined),
+  recording: recordingConfigSchema.optional().catch(undefined),
+  lteRecovery: lteRecoveryConfigSchema.optional().catch(undefined),
+  timeSync: timeSyncConfigSchema.optional().catch(undefined),
+})
+
+// Cloud-only presentation prefs (backend `devices.ui_prefs`).
+export const deviceUiPrefsSchema = z.object({
+  activeStreamsViewType: z.enum(["card", "map"]).optional().catch(undefined),
+  imuView: imuViewSchema.optional().catch(undefined),
+})
+
 export const deviceSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -214,6 +232,15 @@ export const deviceSchema = z.object({
   name: z.string().nullable(),
   firmwareVersion: z.string().nullable(),
   status: deviceStatusSchema,
+  // .catch({}) tolerates a backend older than the config consolidation.
+  config: deviceConfigDocumentSchema.catch({}),
+  configRev: z.number().catch(0),
+  configUpdatedAt: z.string().nullable().catch(null),
+  uiPrefs: deviceUiPrefsSchema.catch({}),
+  // Filled by the reported plane (Phase 3); passed through unparsed until the
+  // UI actually renders it.
+  reportedConfig: z.record(z.string(), z.unknown()).nullable().catch(null),
+  reportedAt: z.string().nullable().catch(null),
   // Tolerate an older backend that doesn't return the field yet.
   gnssAntBias: z.boolean().catch(false),
   // .catch keeps an older client forward-compatible when new view types ship.

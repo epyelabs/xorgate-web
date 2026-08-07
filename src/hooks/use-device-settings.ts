@@ -27,6 +27,11 @@ import {
   hasPending,
   type DeviceConfigStatus,
 } from "@/lib/device-config-status"
+// Moved to lib/ so device-config-status.ts can use the same one — a lib
+// importing this hook (which imports that lib) would be a cycle. Re-exported
+// because the change-detection helper is part of this module's surface.
+import { deepEqual } from "@/lib/deep-equal"
+export { deepEqual }
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven
@@ -95,31 +100,6 @@ type UiPrefField = keyof typeof UI_PREF_FIELDS
 
 const isConfigField = (k: string): k is ConfigField => k in CONFIG_FIELDS
 const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
-
-/** Structural equality — the single change-detection strategy for the page. */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (
-    a === null ||
-    b === null ||
-    typeof a !== "object" ||
-    typeof b !== "object"
-  ) {
-    return false
-  }
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((v, i) => deepEqual(v, b[i]))
-  }
-  const ao = a as Record<string, unknown>
-  const bo = b as Record<string, unknown>
-  const ak = Object.keys(ao)
-  if (ak.length !== Object.keys(bo).length) return false
-  return ak.every(
-    (k) =>
-      Object.prototype.hasOwnProperty.call(bo, k) && deepEqual(ao[k], bo[k])
-  )
-}
 
 export interface DeviceSettings {
   /** Optimistic device object — the source of truth for every control. */

@@ -12,6 +12,8 @@
 
 import type { Device } from "./api"
 import type { SettingsTab } from "./device-settings-tabs"
+import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
+import { deepEqual } from "./deep-equal"
 
 /** Namespaces of the device-delivered config document, in registry order. */
 export const CONFIG_NAMESPACES = [
@@ -39,6 +41,16 @@ export type ConfigState =
   | "rejected"
   /** The cloud manages nothing here; the device is on its own defaults. */
   | "unset"
+  /**
+   * The cloud manages nothing here, but the device is NOT on its defaults —
+   * so this page is showing defaults the device is not running, and neither
+   * side has said anything is wrong (settings_sync_hardening, finding 2).
+   *
+   * COMPUTED here, like `pending` and unlike every other state: the device
+   * cannot report a verdict on a namespace the cloud never sent it, and that
+   * silence is precisely the problem.
+   */
+  | "diverged"
 
 export interface NamespaceStatus {
   state: ConfigState
@@ -127,6 +139,53 @@ export function reportedAgentMode(device: Device | null): string | null {
   return typeof mode === "string" && mode.length > 0 ? mode : null
 }
 
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v)
+
+/**
+ * Resolve a stored namespace over its defaults: a key the device does not hold
+ * takes the default's value, recursively. Non-objects replace whole.
+ */
+function resolveOverDefaults(defaults: unknown, value: unknown): unknown {
+  if (!isPlainObject(defaults) || !isPlainObject(value)) return value
+  const out: Record<string, unknown> = { ...defaults }
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = k in defaults ? resolveOverDefaults(defaults[k], v) : v
+  }
+  return out
+}
+
+/**
+ * Is the device holding something other than this namespace's shipped default?
+ *
+ * Defaults come from the committed contract artifact (via
+ * `device-config-defaults`), never a hand-copy — that drift is what the
+ * registry exists to stop.
+ *
+ * Two things this is deliberately NOT:
+ *
+ * - not `JSON.stringify` equality. The device re-serializes settings.json in
+ *   its own key order, so identical documents stringify differently.
+ * - not a bare deep-equal against the defaults. `effective` is the RAW stored
+ *   namespace, not a resolved one, so a namespace the device holds only part
+ *   of (an older agent, a targeted `xorgate set`) would read as divergence
+ *   while every key it does hold matches. Resolving it over the defaults first
+ *   applies the same absent-means-defaults convention both sides already use,
+ *   and asks the honest question: does anything the device holds actually move
+ *   a value off its default?
+ *
+ * `undefined` — the device holds no value at all — is agreement by that same
+ * convention, not divergence.
+ */
+function divergesFromDefaults(ns: ConfigNamespace, effective: unknown): boolean {
+  if (effective === undefined) return false
+  const defaults = CONFIG_NAMESPACE_DEFAULTS[ns]
+  // A namespace this build's contract artifact does not know: say nothing
+  // rather than badge a device over an artifact we cannot compare against.
+  if (defaults === undefined) return false
+  return !deepEqual(resolveOverDefaults(defaults, effective), defaults)
+}
+
 function emptyStatus(state: ConfigState): DeviceConfigStatus {
   return Object.fromEntries(
     CONFIG_NAMESPACES.map((ns) => [ns, { state }])
@@ -165,8 +224,23 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
         ]
       }
       // The device is level with us and said nothing about this namespace,
-      // which means the cloud never sent it: the device is on its defaults.
-      return [ns, { state: ns in config ? "applied" : "unset", effective }]
+      // which means the cloud never sent it — and that is ALL it means. It
+      // does not mean the device is on its defaults, which is what this branch
+      // used to assume. `PATCH {ns: null}` deletes the key cloud-side, so the
+      // namespace stops being published; an omitted namespace has always meant
+      // "leave the local value alone", so the device keeps what it had and
+      // never issues a verdict on it either. Result before this check: the
+      // page showed defaults with no badge while the device ran something
+      // else (settings_sync_hardening, finding 2 / phase-6 scenario B11b).
+      //
+      // `!= null` rather than `ns in config`: a namespace stored as an
+      // explicit cleared marker reads as "the cloud manages nothing here",
+      // exactly like an absent one.
+      if (config[ns] != null) return [ns, { state: "applied", effective }]
+      return [
+        ns,
+        { state: divergesFromDefaults(ns, effective) ? "diverged" : "unset", effective },
+      ]
     })
   ) as DeviceConfigStatus
 }
@@ -185,11 +259,24 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   timeSync: ["system"],
 }
 
-/** States worth pulling an operator's eye to a tab they are not looking at. */
+/**
+ * States worth pulling an operator's eye to a tab they are not looking at.
+ *
+ * `adjusted` is excluded on purpose (settings plan, Phase 3): clamping is
+ * normal, permanent, and already visible on the card itself, so counting it
+ * would put a badge on a tab forever.
+ *
+ * `diverged` IS counted, and the reason is the exact inverse of that argument:
+ * the card shows the DEFAULTS confidently, so there is nothing on it to catch
+ * the eye, and without a count nobody has a reason to open the tab at all. It
+ * is also rare and always actionable — save the card and the two sides
+ * converge.
+ */
 const ATTENTION_STATES: ReadonlySet<ConfigState> = new Set<ConfigState>([
   "pending",
   "queued",
   "rejected",
+  "diverged",
 ])
 
 /** Per-tab count of namespaces needing attention, for the tab trigger badges. */
@@ -220,6 +307,9 @@ export const CONFIG_STATE_LABELS: Record<ConfigState, string> = {
   adjusted: "Adjusted",
   rejected: "Rejected",
   unset: "",
+  // Not "unset". An operator has to be able to act on this, and the thing to
+  // act on is that the device and this page disagree.
+  diverged: "Device differs",
 }
 
 /**
@@ -244,6 +334,11 @@ export function configStateExplanation(status: NamespaceStatus): string | null {
       )
     case "rejected":
       return status.reason ?? "The device could not use the value saved here."
+    case "diverged":
+      return (
+        "Nothing is saved here, so this card is showing the defaults — but the device " +
+        "reports it is running a different value. Save this card to bring the device in line."
+      )
     default:
       return null
   }

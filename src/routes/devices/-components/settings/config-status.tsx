@@ -43,7 +43,19 @@ const BADGE_VARIANTS: Record<
   },
   rejected: { variant: "destructive", icon: <XCircleIcon /> },
   unset: { variant: "outline", icon: null },
+  // Amber, like `adjusted`: both are "the two sides disagree", which is a
+  // warning to act on rather than a failure. Reserve destructive for a value
+  // the device actually refused.
+  diverged: {
+    variant: "outline",
+    className:
+      "border-amber-500/40 text-amber-700 dark:border-amber-400/40 dark:text-amber-400",
+    icon: <AlertTriangleIcon />,
+  },
 }
+
+/** Disagreement, not failure — the amber treatment for the card callout. */
+const AMBER_STATES = new Set<NamespaceStatus["state"]>(["adjusted", "diverged"])
 
 /**
  * What the device says about this namespace, in a word. Rendered in the card
@@ -88,7 +100,7 @@ export function ConfigStatusCallout({
   const tone =
     status.state === "rejected"
       ? "border-destructive/40 text-destructive"
-      : status.state === "adjusted"
+      : AMBER_STATES.has(status.state)
         ? "border-amber-500/40 text-amber-700 dark:border-amber-400/40 dark:text-amber-400"
         : undefined
   return (
@@ -96,7 +108,7 @@ export function ConfigStatusCallout({
       icon={
         status.state === "rejected" ? (
           <XCircleIcon />
-        ) : status.state === "adjusted" ? (
+        ) : AMBER_STATES.has(status.state) ? (
           <AlertTriangleIcon />
         ) : undefined
       }

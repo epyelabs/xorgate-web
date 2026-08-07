@@ -154,6 +154,125 @@ describe("computeConfigStatus", () => {
     )
     expect(status.timeSync.state).toBe("applied")
   })
+
+  it("treats an explicitly cleared namespace as unmanaged, not applied", () => {
+    // Part (b) stores a revert as a cleared marker rather than deleting the
+    // key; `ns in config` would read that as "the cloud manages this".
+    const status = computeConfigStatus(
+      device({
+        configRev: 5,
+        // Cast: the parsed `Device["config"]` type does not admit null (the API
+        // strips the marker on read), so this asserts the runtime guard holds
+        // for a document that reaches the browser unstripped anyway.
+        config: { timeSync: null } as unknown as Device["config"],
+        reportedConfig: report({ rev: 5 }),
+      })
+    )
+    expect(status.timeSync.state).toBe("unset")
+  })
+})
+
+// settings_sync_hardening, finding 2. The cloud managing nothing for a
+// namespace says nothing about what the device is holding — before this, the
+// page showed defaults with no badge while the device ran something else.
+describe("computeConfigStatus — divergence from device defaults", () => {
+  const level = (config: Record<string, unknown>, effective: Record<string, unknown>) =>
+    computeConfigStatus(
+      device({ configRev: 5, config, reportedConfig: report({ rev: 5, effective }) })
+    )
+
+  it("stays unset when the cloud manages nothing and the device is on defaults", () => {
+    // imuMount's shipped default, spelled out exactly.
+    const status = level({}, { imuMount: { enabled: false, rollDeg: 0, pitchDeg: 0, yawDeg: 0 } })
+    expect(status.imuMount.state).toBe("unset")
+    expect(configStateExplanation(status.imuMount)).toBeNull()
+  })
+
+  it("stays unset when the device holds nothing at all", () => {
+    // Absent-means-defaults, the convention both sides share.
+    expect(level({}, {}).imuMount.state).toBe("unset")
+  })
+
+  it("diverges when the cloud manages nothing and the device holds another value", () => {
+    // B11b live: `PATCH {"imuMount": null}` empties the cloud while
+    // settings.json keeps 90/0/90, and the device — never sent the namespace —
+    // reports no verdict for it either.
+    const status = level({}, { imuMount: { enabled: true, rollDeg: 90, pitchDeg: 0, yawDeg: 90 } })
+    expect(status.imuMount.state).toBe("diverged")
+    expect(status.imuMount.effective).toEqual({
+      enabled: true,
+      rollDeg: 90,
+      pitchDeg: 0,
+      yawDeg: 90,
+    })
+    expect(configStateExplanation(status.imuMount)).toMatch(/running a different value/)
+  })
+
+  it("compares structurally, not by serialization", () => {
+    // The device re-serializes settings.json in its own key order;
+    // JSON.stringify equality would call this a divergence.
+    const status = level({}, { imuMount: { yawDeg: 0, pitchDeg: 0, rollDeg: 0, enabled: false } })
+    expect(status.imuMount.state).toBe("unset")
+  })
+
+  it("resolves a partially-held namespace over the defaults before comparing", () => {
+    // `effective` is the RAW stored namespace, not a resolved one. Every key
+    // the device holds matches the default, so nothing has moved — badging
+    // this would be a false alarm on any device with a partial settings.json.
+    const status = level({}, { timeSync: { offlineSources: true } })
+    expect(status.timeSync.state).toBe("unset")
+  })
+
+  it("diverges on a single moved key deep inside a partially-held namespace", () => {
+    const status = level({}, { recording: { telemetry: { enabled: true } } })
+    expect(status.recording.state).toBe("diverged")
+  })
+
+  it("diverges on a key the defaults do not carry", () => {
+    // `cameras` defaults to `{}` — an explicit per-camera choice is a value
+    // the device is holding that this page is not showing.
+    const status = level({}, { recording: { video: { cameras: { cam1: false } } } })
+    expect(status.recording.state).toBe("diverged")
+  })
+
+  it("never overrides a verdict the device actually gave", () => {
+    // Divergence is only ever computed for the silence case; anything the
+    // device reported comes straight through, as it always has.
+    const status = computeConfigStatus(
+      device({
+        configRev: 5,
+        config: {},
+        reportedConfig: report({
+          rev: 5,
+          effective: { imuMount: { enabled: true, rollDeg: 90, pitchDeg: 0, yawDeg: 90 } },
+          status: { imuMount: { state: "applied" } },
+        }),
+      })
+    )
+    expect(status.imuMount.state).toBe("applied")
+  })
+
+  it("never outranks pending — an unreached revision still wins", () => {
+    const status = computeConfigStatus(
+      device({
+        configRev: 6,
+        status: "online",
+        config: {},
+        reportedConfig: report({
+          rev: 5,
+          effective: { imuMount: { enabled: true, rollDeg: 90, pitchDeg: 0, yawDeg: 90 } },
+        }),
+      })
+    )
+    expect(status.imuMount.state).toBe("pending")
+  })
+
+  it("badges the tabs that edit a diverged namespace", () => {
+    const status = level({}, { imuMount: { enabled: true, rollDeg: 90, pitchDeg: 0, yawDeg: 90 } })
+    // Unlike `adjusted`, the card itself shows the defaults and looks fine —
+    // without a count there is no reason to open the tab.
+    expect(tabAttentionCounts(status)).toEqual({ telemetry: 1 })
+  })
 })
 
 describe("tabAttentionCounts", () => {

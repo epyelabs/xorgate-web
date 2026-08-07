@@ -17,6 +17,22 @@ import type { ImuMount, ImuView, RecordingConfig, VideoPresetName } from "@/lib/
 
 export const GIB = 1024 ** 3
 
+/**
+ * Every namespace's device defaults, keyed by WIRE name — the exact values the
+ * device resolves when a key is absent from settings.json, straight off the
+ * contract artifact.
+ *
+ * Separate from the named constants below because one caller
+ * (`device-config-status.ts`) needs to ask the question generically: "is the
+ * value this device reports as in force anything other than the default?".
+ * Hand-copying a default to answer that is the drift the registry exists to
+ * prevent.
+ */
+export const CONFIG_NAMESPACE_DEFAULTS: Readonly<Record<string, unknown>> =
+  Object.fromEntries(
+    Object.entries(contract.namespaces).map(([ns, spec]) => [ns, spec.defaults])
+  )
+
 const RECORDING = contract.namespaces.recording.defaults
 const SHED = RECORDING.powerShedding
 const VIDEO = RECORDING.video

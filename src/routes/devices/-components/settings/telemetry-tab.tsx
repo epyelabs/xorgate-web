@@ -250,6 +250,10 @@ export function TelemetryTab({
                 automatically; applies live within a couple of seconds.
               </FieldDescription>
             </Field>
+            {/* The one card that carried a badge but no callout. Harmless while
+                the badge could only say "In force", but a `diverged` badge has
+                to tell the operator what to DO about it. */}
+            <ConfigStatusCallout status={configStatus.imuMount} />
           </FieldGroup>
         </CardContent>
       </Card>

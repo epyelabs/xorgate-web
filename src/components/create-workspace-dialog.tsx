@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +20,8 @@ import { createWorkspaceSchema } from "@/lib/schemas"
 import { slugify } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
 import { useWorkspaceStore } from "@/store/workspace"
+import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
+import { shouldLeaveOnContextSwitch } from "@/lib/context-scope"
 
 export function CreateWorkspaceDialog({
   open,
@@ -27,6 +30,8 @@ export function CreateWorkspaceDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const navigate = useNavigate()
+  const pathname = useLocation({ select: (l) => l.pathname })
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [description, setDescription] = useState("")
@@ -70,6 +75,11 @@ export function CreateWorkspaceDialog({
       toast.success(`Workspace "${workspace.name}" created`)
       reset()
       onOpenChange(false)
+      // Creating switches the active workspace, so the page behind the dialog
+      // is stranded on the one just left if it was a detail page.
+      if (shouldLeaveOnContextSwitch(pathname, "workspace")) {
+        void navigate({ to: DEFAULT_AUTHED_ROUTE })
+      }
     } catch (err) {
       const message =
         err instanceof ApiError

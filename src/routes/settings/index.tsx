@@ -60,6 +60,19 @@ function OrganizationSettingsPage() {
     organizations.find((o) => o.id === currentOrganizationId) ?? null
   const orgName = activeOrg?.name ?? ""
 
+  // The field has to be controlled: `defaultValue` is read once at mount, so
+  // switching organizations (or the /me response landing a beat after the first
+  // render) would leave the previous name sitting in the box. Re-seeding keys
+  // off the name rather than the org id so both cases are covered, and only
+  // when the upstream value actually changes — typing is never clobbered.
+  // Adjust-state-during-render, as in the workflow-instances list.
+  const [nameDraft, setNameDraft] = useState(orgName)
+  const [seenOrgName, setSeenOrgName] = useState(orgName)
+  if (seenOrgName !== orgName) {
+    setSeenOrgName(orgName)
+    setNameDraft(orgName)
+  }
+
   const [createOpen, setCreateOpen] = useState(false)
   const [editing, setEditing] = useState<Workspace | null>(null)
   const [deleting, setDeleting] = useState<Workspace | null>(null)
@@ -156,7 +169,8 @@ function OrganizationSettingsPage() {
                 <Label htmlFor="org-name">Organization name</Label>
                 <Input
                   id="org-name"
-                  defaultValue={orgName}
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
                   placeholder="Acme Inc."
                 />
               </div>

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,10 +22,14 @@ import {
 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWorkspaceStore } from "@/store/workspace"
+import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
+import { shouldLeaveOnContextSwitch } from "@/lib/context-scope"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
 
 export function WorkspaceSwitcher() {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
+  const pathname = useLocation({ select: (l) => l.pathname })
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
@@ -93,7 +98,16 @@ export function WorkspaceSwitcher() {
                 return (
                   <DropdownMenuItem
                     key={workspace.id}
-                    onClick={() => setCurrentWorkspace(workspace.id)}
+                    onClick={() => {
+                      if (isActive) return
+                      // Same reasoning as the organization switcher, minus the
+                      // organization-scoped pages — a workspace switch leaves
+                      // those (workflow templates, members, billing) intact.
+                      if (shouldLeaveOnContextSwitch(pathname, "workspace")) {
+                        void navigate({ to: DEFAULT_AUTHED_ROUTE })
+                      }
+                      setCurrentWorkspace(workspace.id)
+                    }}
                     className="gap-2 p-2"
                   >
                     <div className="flex size-6 items-center justify-center rounded-md border">

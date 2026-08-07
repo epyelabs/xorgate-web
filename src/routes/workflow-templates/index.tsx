@@ -24,6 +24,7 @@ import {
   type TemplateStatus,
   type WorkflowTemplateSummary,
 } from "@/lib/workflow-schemas"
+import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
 
@@ -54,6 +55,7 @@ function initials(name: string): string {
 }
 
 interface TemplatesData {
+  organizationId: string | null
   templates: WorkflowTemplateSummary[]
   total: number
 }
@@ -69,6 +71,9 @@ function WorkflowTemplatesListPage() {
   const [size, setSize] = useState(DEFAULT_SIZE)
   const [sortBy, setSortBy] = useState<SortKey>("updatedAt")
   const [order, setOrder] = useState<"asc" | "desc">("desc")
+  const currentOrganizationId = useWorkspaceStore(
+    (s) => s.currentOrganizationId
+  )
 
   const status = statusFilter === "any" ? undefined : statusFilter
 
@@ -90,6 +95,7 @@ function WorkflowTemplatesListPage() {
         if (cancelled) return
         setError(null)
         setData({
+          organizationId: currentOrganizationId,
           templates: parsed.data.templates,
           total: parsed.data.page?.total ?? parsed.data.templates.length,
         })
@@ -97,16 +103,18 @@ function WorkflowTemplatesListPage() {
         const message = (err as Error).message
         if (cancelled) return
         setError(message)
-        setData({ templates: [], total: 0 })
+        setData({ organizationId: currentOrganizationId, templates: [], total: 0 })
         toast.error(message)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [reloadNonce, page, size, sortBy, order, status])
+  }, [currentOrganizationId, reloadNonce, page, size, sortBy, order, status])
 
-  const isLoading = data === null
+  // Switching organization leaves the user here, so the previous org's
+  // templates must read as loading until the refetch under the new one lands.
+  const isLoading = !data || data.organizationId !== currentOrganizationId
 
   // Client-side name/description search over the current page.
   const q = query.trim().toLowerCase()

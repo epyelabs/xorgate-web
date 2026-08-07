@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,10 +23,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
+import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
+import { shouldLeaveOnContextSwitch } from "@/lib/context-scope"
 import { CreateOrganizationDialog } from "@/components/create-organization-dialog"
 
 export function OrganizationSwitcher() {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
+  const pathname = useLocation({ select: (l) => l.pathname })
   const organizations = useAuthStore((s) => s.organizations)
   const isAuthLoading = useAuthStore((s) => s.isLoading)
   const currentOrganizationId = useWorkspaceStore(
@@ -95,6 +100,13 @@ export function OrganizationSwitcher() {
                   <DropdownMenuItem
                     key={org.id}
                     onClick={() => {
+                      if (isActive) return
+                      // Leave a stranded detail page before the switch lands,
+                      // so it never renders against the organization it no
+                      // longer belongs to. List pages just refetch — those stay.
+                      if (shouldLeaveOnContextSwitch(pathname, "organization")) {
+                        void navigate({ to: DEFAULT_AUTHED_ROUTE })
+                      }
                       void setCurrentOrganization(org.id)
                     }}
                     className="gap-2 p-2"

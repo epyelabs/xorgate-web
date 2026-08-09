@@ -41,17 +41,17 @@ import { SettingsCallout } from "./callout"
  * and equally impossible to reach from a device that has simply never reported.
  */
 
-const TONE: Record<SimDisplay["tone"], { className: string; icon: React.ReactNode }> = {
-  ok: {
-    className: "text-emerald-700 dark:text-emerald-400",
-    icon: <CheckCircleIcon />,
-  },
-  warn: {
-    className: "text-amber-700 dark:text-amber-400",
-    icon: <CircleDashedIcon />,
-  },
-  danger: { className: "text-destructive", icon: <AlertTriangleIcon /> },
-  muted: { className: "text-muted-foreground", icon: <CircleHelpIcon /> },
+/**
+ * Tone follows `ConfigStatusBadge`'s restraint, which is the settings page's
+ * established idiom: a healthy value gets **muted text and a coloured icon**,
+ * never coloured text. Colour on the words is reserved for the states an
+ * operator has to act on — which is what makes "No SIM detected" carry.
+ */
+const TONE: Record<SimDisplay["tone"], { text?: string; icon: React.ReactNode }> = {
+  ok: { icon: <CheckCircleIcon className="text-emerald-600 dark:text-emerald-400" /> },
+  warn: { text: "text-amber-700 dark:text-amber-400", icon: <CircleDashedIcon /> },
+  danger: { text: "text-destructive", icon: <AlertTriangleIcon /> },
+  muted: { text: "text-muted-foreground", icon: <CircleHelpIcon /> },
 }
 
 export function SimCard({ device }: { device: Device }) {
@@ -70,14 +70,20 @@ export function SimCard({ device }: { device: Device }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm lg:grid-cols-4">
+        {/* No `text-*` here on purpose: Card sets the body scale to
+            `text-xs/relaxed` and every FieldLabel/FieldDescription on this tab
+            inherits it. Setting a size would put this card a full step off the
+            rest of the page — it did, and it is what made it look foreign.
+            Width is capped so four short values cluster instead of stretching
+            across a wide monitor as four islands. */}
+        <dl className="grid max-w-4xl grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
           <InfoRow
             label="Status"
             value={
               <span
                 className={cn(
                   "flex items-center gap-1.5 font-medium",
-                  tone.className,
+                  tone.text,
                   "[&_svg]:size-3.5 [&_svg]:shrink-0",
                 )}
               >
@@ -92,9 +98,11 @@ export function SimCard({ device }: { device: Device }) {
               a fault when it is just a carrier that does not publish it.
               Shown in full — it is the value an operator copies to text the
               device's SIM or match a carrier invoice; the ICCID carries the
-              masking. */}
+              masking. Not mono: it is a number to read, not a serial to scan
+              character by character, and mono's wide digits made "+1 437…"
+              straggle next to its neighbours. */}
           {sim?.msisdn !== undefined && (
-            <InfoRow label="Phone number" value={formatMsisdn(sim.msisdn)} mono />
+            <InfoRow label="Phone number" value={formatMsisdn(sim.msisdn)} />
           )}
           {/* Masked by default: an ICCID identifies a subscriber, not just a
               piece of hardware, and it now lives in the DB, the API and this
@@ -107,14 +115,14 @@ export function SimCard({ device }: { device: Device }) {
               sim?.iccid === undefined ? (
                 "—"
               ) : (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-baseline gap-2">
                   <span className="truncate">
                     {revealed ? groupIccid(sim.iccid) : maskIccid(sim.iccid)}
                   </span>
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto px-1 py-0 font-sans text-xs"
+                    variant="link"
+                    size="xs"
+                    className="h-auto shrink-0 px-0 font-sans"
                     onClick={() => setRevealed((v) => !v)}
                   >
                     {revealed ? "Hide" : "Reveal"}

@@ -30,6 +30,7 @@ import {
   DEFAULT_LTE_GPS_FIX_RESET_POLICY,
 } from "@/lib/device-config-defaults"
 import { SimCard } from "./sim-card"
+import { ApnCard } from "./apn-card"
 
 const GNSS_KEY = "device-gnss-ant-bias"
 const GPS_FIX_RESET_KEY = "device-lte-gps-fix-reset-policy"
@@ -60,11 +61,15 @@ export function ConnectivityTab({
   configStatus,
   isPending,
   commit,
+  refreshReport,
+  refreshing,
 }: {
   device: Device
   configStatus: DeviceConfigStatus
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
+  refreshReport: () => void
+  refreshing: boolean
 }) {
   const lteRecovery = device.lteRecoveryConfig
 
@@ -80,7 +85,16 @@ export function ConnectivityTab({
       {/* First on the tab: whether there is a SIM at all is the most basic fact
           about connectivity, and it is the one nothing else here can tell you.
           Read-only — you cannot set an ICCID, so there is no badge and no save. */}
-      <SimCard device={device} />
+      <SimCard device={device} onRefresh={refreshReport} refreshing={refreshing} />
+
+      {/* Below the SIM it identifies: the APN is the writable half of the same
+          plan, and the one that can strand a device — see apn-card.tsx. */}
+      <ApnCard
+        device={device}
+        configStatus={configStatus}
+        isPending={isPending}
+        commit={commit}
+      />
 
       <Card>
         <CardHeader>

@@ -4,6 +4,7 @@ import {
   CheckCircleIcon,
   CircleDashedIcon,
   CircleHelpIcon,
+  RefreshCwIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -56,7 +57,16 @@ const TONE: Record<SimDisplay["tone"], { text?: string; icon: React.ReactNode }>
   muted: { text: "text-muted-foreground", icon: <CircleHelpIcon /> },
 }
 
-export function SimCard({ device }: { device: Device }) {
+export function SimCard({
+  device,
+  onRefresh,
+  refreshing = false,
+}: {
+  device: Device
+  /** Phase 2 §4d: ask the device to re-probe + re-report now. */
+  onRefresh?: () => void
+  refreshing?: boolean
+}) {
   const [revealed, setRevealed] = useState(false)
   const sim = reportedSim(device)
   const display = simDisplay(sim)
@@ -77,11 +87,29 @@ export function SimCard({ device }: { device: Device }) {
             the card on a slow cadence and reports on a slower one, so a reading
             can legitimately be tens of minutes old without anything being
             wrong; saying so is better than implying it is live. */}
-        {checked !== null && (
-          <CardAction>
-            <span className="text-muted-foreground font-normal" title={checked.exact}>
-              Read {checked.relative}
-            </span>
+        {(checked !== null || onRefresh !== undefined) && (
+          <CardAction className="flex items-center gap-1.5">
+            {checked !== null && (
+              <span className="text-muted-foreground font-normal" title={checked.exact}>
+                Read {checked.relative}
+              </span>
+            )}
+            {/* §4d: the freshness stamp says whether a refresh is even needed;
+                the button sits beside it because they answer the same question.
+                One click covers the whole report (SIM, APN, uplink), and the
+                device rate-limits itself, so hammering it is harmless. */}
+            {onRefresh !== undefined && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Re-read from the device now"
+                aria-label="Refresh device state"
+                disabled={refreshing || device.status !== "online"}
+                onClick={onRefresh}
+              >
+                <RefreshCwIcon className={cn(refreshing && "animate-spin")} />
+              </Button>
+            )}
           </CardAction>
         )}
       </CardHeader>

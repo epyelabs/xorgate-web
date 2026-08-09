@@ -386,6 +386,26 @@
         },
         "additionalProperties": false
       }
+    },
+    "cellular": {
+      "applyClass": "modem-poll",
+      "kind": "object",
+      "description": "Cellular data-context settings (`cellular` namespace). `apn` empty or absent leaves the modem's stored APN untouched (the safe default). A non-empty APN is applied by the modem daemon with apply-and-confirm rollback: real traffic must flow over the modem interface within a bounded window or the previous APN is restored automatically. Read live from settings.json by the modem daemon — never restart it to apply a setting.",
+      "defaults": {
+        "apn": ""
+      },
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "apn": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9.-]*$",
+            "description": "Access Point Name for the cellular data context. EMPTY or ABSENT leaves the modem's stored APN untouched — the safe default for every existing device. A change is applied with confirm-and-rollback: the device proves real data flows over the new APN within a bounded window, or restores the previous one by itself."
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "uiPrefs": {

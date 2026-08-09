@@ -29,6 +29,7 @@ import {
   DEFAULT_LTE_DEADZONE_PROFILE,
   DEFAULT_LTE_GPS_FIX_RESET_POLICY,
 } from "@/lib/device-config-defaults"
+import { SimCard } from "./sim-card"
 
 const GNSS_KEY = "device-gnss-ant-bias"
 const GPS_FIX_RESET_KEY = "device-lte-gps-fix-reset-policy"
@@ -76,6 +77,11 @@ export function ConnectivityTab({
 
   return (
     <div className="flex w-full flex-col gap-4">
+      {/* First on the tab: whether there is a SIM at all is the most basic fact
+          about connectivity, and it is the one nothing else here can tell you.
+          Read-only — you cannot set an ICCID, so there is no badge and no save. */}
+      <SimCard device={device} />
+
       <Card>
         <CardHeader>
           <CardTitle>GPS antenna</CardTitle>

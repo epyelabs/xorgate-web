@@ -331,6 +331,15 @@ export interface TimeSyncConfig {
   maxStepsPerBoot?: number
 }
 
+// Cellular data context (manage_sim_card_info plan, Phase 2). `apn` empty or
+// absent leaves the modem's stored APN untouched — the safe default for every
+// fielded device. A non-empty APN is applied by the modem daemon with
+// confirm-and-rollback; the device reports the APPLIED value back in
+// `reportedConfig.effective.apn`.
+export interface CellularConfig {
+  apn?: string
+}
+
 // The consolidated device config document (backend `devices.config`), one key
 // per wire namespace. An ABSENT namespace means the device uses its own
 // defaults — the same semantics the retained MQTT message has always had.
@@ -340,6 +349,7 @@ export interface DeviceConfigDocument {
   recording?: RecordingConfig
   lteRecovery?: LteRecoveryConfig
   timeSync?: TimeSyncConfig
+  cellular?: CellularConfig
 }
 
 // Cloud-only presentation prefs (backend `devices.ui_prefs`). Never delivered
@@ -471,7 +481,7 @@ export async function deleteDevice(id: string): Promise<void> {
 
 export interface DeviceCommandAccepted {
   requestId: string
-  command: "reboot" | "power_off"
+  command: "reboot" | "power_off" | "refresh"
   /** Epoch ms after which the device refuses the command. */
   expiresAt: number
 }
@@ -486,6 +496,16 @@ export async function rebootDevice(id: string): Promise<DeviceCommandAccepted> {
 
 export async function powerOffDevice(id: string): Promise<DeviceCommandAccepted> {
   return apiRequest(`/devices/${id}/power-off`, { method: "POST" })
+}
+
+// READ-ONLY refresh (manage_sim_card_info plan, Phase 2 §4d): the device
+// re-probes SIM identity / applied APN / antenna bias and publishes a fresh
+// config report now instead of on its hourly heartbeat. Ordinary member
+// access. 202 = delivered to the broker; the outcome is a fresh
+// `reportedAt` on the device row (~a few seconds for the report-now half,
+// up to ~45 s for re-probed values). The device rate-limits to ~1 per 30 s.
+export async function refreshDeviceState(id: string): Promise<DeviceCommandAccepted> {
+  return apiRequest(`/devices/${id}/refresh-state`, { method: "POST" })
 }
 
 export interface IoCapabilities {

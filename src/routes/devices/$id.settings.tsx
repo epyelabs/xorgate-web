@@ -62,6 +62,8 @@ function DeviceSettingsPage() {
     isPending,
     commit,
     commitRecording,
+    refreshReport,
+    refreshing,
   } = useDeviceSettings(id)
 
   // Pending/queued/rejected namespaces, counted per tab (Phase 3). The point is
@@ -204,6 +206,8 @@ function DeviceSettingsPage() {
                 configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
+                refreshReport={refreshReport}
+                refreshing={refreshing}
               />
             </TabsContent>
             <TabsContent value="power">

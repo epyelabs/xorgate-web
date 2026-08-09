@@ -283,7 +283,7 @@ describe("tabAttentionCounts", () => {
       device({ configRev: 6, status: "online", reportedConfig: report({ rev: 5 }) })
     )
     expect(tabAttentionCounts(status)).toEqual({
-      connectivity: 2, // gnssAntBias + lteRecovery
+      connectivity: 3, // gnssAntBias + lteRecovery + cellular
       telemetry: 2, // imuMount + recording
       media: 1,
       power: 1,

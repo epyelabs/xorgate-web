@@ -5,8 +5,10 @@ import {
   getDevice,
   patchDeviceConfig,
   patchDeviceUiPrefs,
+  refreshDeviceState,
   updateDevice,
   type ActiveStreamsViewType,
+  type CellularConfig,
   type Device,
   type DeviceConfigPatch,
   type DeviceUiPrefsPatch,
@@ -67,6 +69,12 @@ export interface DeviceSettingsPatch {
   recordingConfig?: RecordingConfig | null
   lteRecoveryConfig?: LteRecoveryConfig | null
   timeSyncConfig?: TimeSyncConfig | null
+  /**
+   * `cellular` has NO legacy device column (it postdates the consolidation) —
+   * this key exists only to route through CONFIG_FIELDS; read the value from
+   * `device.config.cellular`, never from a top-level field.
+   */
+  cellularConfig?: CellularConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -87,6 +95,7 @@ const CONFIG_FIELDS = {
   recordingConfig: "recording",
   lteRecoveryConfig: "lteRecovery",
   timeSyncConfig: "timeSync",
+  cellularConfig: "cellular",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
@@ -124,6 +133,12 @@ export interface DeviceSettings {
   commit: (key: string, patch: DeviceSettingsPatch) => void
   /** Same, for the `recording` namespace — always PUT whole (see design §3). */
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
+  /**
+   * Ask the device to re-probe and re-report NOW (Phase 2 §4d), then fold the
+   * fresh report into the page. True while the round trip is in flight.
+   */
+  refreshReport: () => void
+  refreshing: boolean
 }
 
 export function useDeviceSettings(id: string): DeviceSettings {
@@ -385,6 +400,61 @@ export function useDeviceSettings(id: string): DeviceSettings {
     [pending]
   )
 
+  // On-demand device refresh (Phase 2 §4d). The command is fire-and-forget on
+  // the wire, so the round trip is observed the only honest way there is: poll
+  // until `reportedAt` advances. Two waves are expected — the device reports
+  // immediately (current values) and again ~45 s later once the modem daemon
+  // has honoured the re-probe — so polling continues briefly after the first
+  // advance to catch the fresher second report.
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshingRef = useRef(false)
+  const refreshReport = useCallback(() => {
+    if (refreshingRef.current || optimisticRef.current === null) return
+    const before = optimisticRef.current.reportedAt
+    refreshingRef.current = true
+    setRefreshing(true)
+    void (async () => {
+      try {
+        await refreshDeviceState(id)
+        let advances = 0
+        let lastSeen = before
+        // 18 × 5 s = 90 s: covers the immediate report and the re-probe wave.
+        for (let tick = 0; tick < 18; tick++) {
+          await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
+          const raw = await getDevice(id)
+          const parsed = getDeviceResponseSchema.safeParse(raw)
+          if (!parsed.success) continue
+          const fetched = parsed.data.device
+          if (fetched.reportedAt === lastSeen) continue
+          lastSeen = fetched.reportedAt
+          advances += 1
+          serverRef.current = fetched
+          // Merge only the server-owned reported fields — same rule as the
+          // pending poll above; the rest is live form state.
+          applyDevice({
+            ...(optimisticRef.current ?? fetched),
+            status: fetched.status,
+            lastSeenAt: fetched.lastSeenAt,
+            configRev: fetched.configRev,
+            reportedConfig: fetched.reportedConfig,
+            reportedAt: fetched.reportedAt,
+          })
+          if (advances >= 2) return
+        }
+        if (advances === 0) {
+          toast.info(
+            "The device accepted the refresh but has not re-reported yet — give it a minute."
+          )
+        }
+      } catch (err) {
+        toast.error((err as Error).message)
+      } finally {
+        refreshingRef.current = false
+        setRefreshing(false)
+      }
+    })()
+  }, [id, applyDevice])
+
   return {
     device,
     recording: resolveRecording(device?.recordingConfig ?? null),
@@ -394,5 +464,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     isPending,
     commit,
     commitRecording,
+    refreshReport,
+    refreshing,
   }
 }

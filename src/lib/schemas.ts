@@ -206,6 +206,13 @@ export const timeSyncConfigSchema = z.object({
   maxStepsPerBoot: z.number().optional().catch(undefined),
 })
 
+// Cellular data context (manage_sim_card_info plan, Phase 2). Kept permissive
+// on read (.catch drops, never throws in a render); the backend registry is
+// the writer-side validator.
+export const cellularConfigSchema = z.object({
+  apn: z.string().optional().catch(undefined),
+})
+
 // The consolidated config document (backend `devices.config`). Every namespace
 // is optional — absent means "device defaults". Same per-namespace validators
 // as the legacy top-level fields, so a value parses identically whichever way
@@ -216,6 +223,7 @@ export const deviceConfigDocumentSchema = z.object({
   recording: recordingConfigSchema.optional().catch(undefined),
   lteRecovery: lteRecoveryConfigSchema.optional().catch(undefined),
   timeSync: timeSyncConfigSchema.optional().catch(undefined),
+  cellular: cellularConfigSchema.optional().catch(undefined),
 })
 
 // Cloud-only presentation prefs (backend `devices.ui_prefs`).

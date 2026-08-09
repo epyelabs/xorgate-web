@@ -216,6 +216,42 @@ export function simDisplay(sim: ReportedSim | null): SimDisplay {
   }
 }
 
+/**
+ * How old the reading is, as "4 minutes ago". Null when there is nothing
+ * trustworthy to say.
+ *
+ * `checked_at` is the right clock to show even though it is not the only one.
+ * Two delays sit between the modem and this page: the daemon probes the card on
+ * its own slow cadence (~10 min), and the device only reports to the cloud on
+ * connect, on a config change, or hourly. Because the device stamps
+ * `checked_at` BEFORE it reports, `now - checked_at` bounds both — it is the
+ * oldest link in the chain, so it is the honest single number.
+ *
+ * Guarded against a bad device clock, which is not hypothetical here: a modem
+ * that has never been NITZ'd serves 1980, and the agent ships a whole clock
+ * stepper because of it. A stamp in the future or absurdly far back gets no
+ * relative phrasing — the caller falls back to the raw value.
+ */
+export function simCheckedAgo(
+  sim: ReportedSim | null,
+  now: number = Date.now(),
+): { relative: string; exact: string } | null {
+  if (sim?.checkedAt === undefined) return null
+  const ms = Date.parse(sim.checkedAt)
+  if (!Number.isFinite(ms)) return null
+  const age = now - ms
+  // Small negative ages are ordinary clock skew, not a broken clock.
+  if (age < -60_000 || age > 30 * 24 * 3600_000) return null
+  const exact = new Date(ms).toLocaleString()
+  const mins = Math.max(0, Math.round(age / 60_000))
+  if (mins < 1) return { relative: "just now", exact }
+  if (mins < 60) return { relative: `${mins} minute${mins === 1 ? "" : "s"} ago`, exact }
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return { relative: `${hours} hour${hours === 1 ? "" : "s"} ago`, exact }
+  const days = Math.round(hours / 24)
+  return { relative: `${days} day${days === 1 ? "" : "s"} ago`, exact }
+}
+
 /** "Public Mobile · LTE", or just the carrier, or null. */
 export function simCarrierLabel(sim: ReportedSim | null): string | null {
   if (sim === null || sim.carrier === undefined) return null

@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -20,6 +21,7 @@ import {
   maskIccid,
   reportedSim,
   simCarrierLabel,
+  simCheckedAgo,
   simDisplay,
   type SimDisplay,
 } from "@/lib/device-sim"
@@ -60,6 +62,7 @@ export function SimCard({ device }: { device: Device }) {
   const display = simDisplay(sim)
   const tone = TONE[display.tone]
   const carrier = simCarrierLabel(sim)
+  const checked = simCheckedAgo(sim)
 
   return (
     <Card>
@@ -68,6 +71,19 @@ export function SimCard({ device }: { device: Device }) {
         <CardDescription>
           The SIM currently in the device, as the modem reports it. Read-only.
         </CardDescription>
+        {/* Freshness belongs on the title row, in the slot the sibling cards use
+            for their status badge — this card has no badge, and "how old is
+            this" is the analogous thing to know at a glance. The device reads
+            the card on a slow cadence and reports on a slower one, so a reading
+            can legitimately be tens of minutes old without anything being
+            wrong; saying so is better than implying it is live. */}
+        {checked !== null && (
+          <CardAction>
+            <span className="text-muted-foreground font-normal" title={checked.exact}>
+              Read {checked.relative}
+            </span>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {/* No `text-*` here on purpose: Card sets the body scale to

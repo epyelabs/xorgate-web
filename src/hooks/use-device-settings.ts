@@ -109,7 +109,7 @@ export interface DeviceSettings {
   /**
    * Desired-vs-reported verdict per config namespace (Phase 3). Refreshed by
    * the poll below while anything is pending, so a control settles from
-   * "Applying…" to "In force" without the operator reloading the page.
+   * "Applying…" to "Synced" without the operator reloading the page.
    */
   configStatus: DeviceConfigStatus
   error: string | null

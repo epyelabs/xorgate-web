@@ -30,10 +30,12 @@ const BADGE_VARIANTS: Record<
   "no-report": { variant: "outline", icon: <CloudOffIcon /> },
   pending: { variant: "secondary", icon: <LoaderIcon className="animate-spin" /> },
   queued: { variant: "outline", icon: <CloudOffIcon /> },
+  // Muted text, green tick: the badge stays quiet on a page where most cards
+  // are settled, but the tick still reads as "good" at a glance.
   applied: {
     variant: "outline",
     className: "text-muted-foreground",
-    icon: <CheckIcon />,
+    icon: <CheckIcon className="text-emerald-600 dark:text-emerald-400" />,
   },
   adjusted: {
     variant: "outline",

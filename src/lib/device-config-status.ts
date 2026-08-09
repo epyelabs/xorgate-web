@@ -303,7 +303,7 @@ export const CONFIG_STATE_LABELS: Record<ConfigState, string> = {
   "no-report": "No report yet",
   pending: "Applying…",
   queued: "Waiting for device",
-  applied: "In force",
+  applied: "Synced",
   adjusted: "Adjusted",
   rejected: "Rejected",
   unset: "",

@@ -7,6 +7,7 @@ import {
   reportedSim,
   reportedUplink,
   simCarrierLabel,
+  simCheckedAgo,
   simDisplay,
 } from "./device-sim"
 
@@ -170,6 +171,44 @@ describe("simDisplay — one case per state", () => {
     const d = of({ present: 1, state: "ready", iccid: "8912230000507537488" })
     expect(d.state).toBe("present")
     expect(d.label).toBe("SIM present")
+  })
+})
+
+describe("simCheckedAgo — how fresh is this reading", () => {
+  const at = (iso: string) => reportedSim(deviceWith({ sim: { ...READY, checked_at: iso } }))
+  const NOW = Date.parse("2026-08-09T12:00:00Z")
+
+  it("phrases recent readings in minutes", () => {
+    expect(simCheckedAgo(at("2026-08-09T11:56:00Z"), NOW)?.relative).toBe("4 minutes ago")
+    expect(simCheckedAgo(at("2026-08-09T11:59:00Z"), NOW)?.relative).toBe("1 minute ago")
+    expect(simCheckedAgo(at("2026-08-09T11:59:50Z"), NOW)?.relative).toBe("just now")
+  })
+
+  it("rolls up to hours and days", () => {
+    expect(simCheckedAgo(at("2026-08-09T09:00:00Z"), NOW)?.relative).toBe("3 hours ago")
+    expect(simCheckedAgo(at("2026-08-07T12:00:00Z"), NOW)?.relative).toBe("2 days ago")
+  })
+
+  it("carries the exact time for a tooltip", () => {
+    expect(simCheckedAgo(at("2026-08-09T11:56:00Z"), NOW)?.exact).toContain("2026")
+  })
+
+  it("says nothing when the device clock is clearly wrong", () => {
+    // Not hypothetical: a modem that has never been NITZ'd serves 1980, which is
+    // why the agent ships a clock stepper at all. "46 years ago" is noise.
+    expect(simCheckedAgo(at("1980-01-06T00:00:00Z"), NOW)).toBeNull()
+    expect(simCheckedAgo(at("2027-01-01T00:00:00Z"), NOW)).toBeNull()
+  })
+
+  it("tolerates ordinary clock skew rather than blanking", () => {
+    // A few seconds into the future is two clocks disagreeing, not a fault.
+    expect(simCheckedAgo(at("2026-08-09T12:00:20Z"), NOW)?.relative).toBe("just now")
+  })
+
+  it("says nothing when there is no timestamp or it is unparseable", () => {
+    expect(simCheckedAgo(null, NOW)).toBeNull()
+    expect(simCheckedAgo(reportedSim(deviceWith({ sim: { state: "ready" } })), NOW)).toBeNull()
+    expect(simCheckedAgo(at("not a date"), NOW)).toBeNull()
   })
 })
 

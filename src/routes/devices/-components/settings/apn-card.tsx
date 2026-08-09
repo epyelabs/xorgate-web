@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { AlertTriangleIcon, CircleDashedIcon } from "lucide-react"
+import { useRef, useState } from "react"
+import { AlertTriangleIcon, CircleDashedIcon, PencilIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -46,6 +46,11 @@ const APN_KEY = "device-cellular-apn"
  * as a valid input — lives in `lib/device-apn.ts`, where the tests are; this
  * component renders and gates.
  *
+ * The field is read-only until Edit is clicked. It is a value an operator comes
+ * here to *read* far more often than to change, and one wrong keystroke away
+ * from stranding the device, so typing in it has to be a decision rather than
+ * something a stray click can start.
+ *
  * The one rule that shapes the whole card: a wrong APN can strand an LTE-only
  * device permanently, so a save is never a quiet control. It is an explicit
  * button behind a confirmation whose weight scales with the risk — plain when
@@ -71,8 +76,10 @@ export function ApnCard({
 
   const desired = device.config.cellular?.apn ?? ""
   const [draft, setDraft] = useState(desired)
+  const [editing, setEditing] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [typedName, setTypedName] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const deviceName = device.name ?? device.serial
   const inputError = apnInputError(draft)
@@ -81,9 +88,22 @@ export function ApnCard({
   const blocked = gate.kind === "blocked"
   const pending = isPending(APN_KEY)
 
+  function startEditing() {
+    setEditing(true)
+    // Focus survives the readOnly flip — the element is the same node either
+    // way, so the operator can type straight after clicking Edit.
+    inputRef.current?.focus()
+  }
+
+  function cancelEditing() {
+    setDraft(desired)
+    setEditing(false)
+  }
+
   function confirmSave() {
     setDialogOpen(false)
     setTypedName("")
+    setEditing(false)
     commit(APN_KEY, { cellularConfig: { apn: draft } })
   }
 
@@ -92,8 +112,8 @@ export function ApnCard({
       <CardHeader>
         <CardTitle>Access Point Name (APN)</CardTitle>
         <CardDescription>
-          The carrier gateway the cellular data connection dials through. Wrong
-          for the installed SIM&apos;s carrier means no data.
+          The carrier gateway in which the cellular data connection dials
+          through.
         </CardDescription>
         <CardAction>
           <ConfigStatusBadge status={configStatus.cellular} />
@@ -106,27 +126,63 @@ export function ApnCard({
             <div className="flex max-w-md items-center gap-2">
               <Input
                 id={APN_KEY}
+                ref={inputRef}
                 value={draft}
                 placeholder={apn?.applied ?? "as stored in the modem"}
                 autoComplete="off"
                 spellCheck={false}
+                readOnly={!editing}
                 disabled={blocked || pending}
                 aria-invalid={inputError !== null}
+                className={cn(
+                  !editing && "cursor-default text-muted-foreground"
+                )}
                 onChange={(e) => setDraft(e.target.value.trim())}
               />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={blocked || pending || !dirty || inputError !== null}
-                onClick={() => setDialogOpen(true)}
-              >
-                Save
-              </Button>
+              {/* Read-only until Edit is clicked; Save only exists once the
+                  operator has said they mean to change it. Cancel restores the
+                  stored value so leaving edit mode never leaves a half-typed
+                  APN sitting in the field looking authoritative. */}
+              {editing ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      blocked || pending || !dirty || inputError !== null
+                    }
+                    onClick={() => setDialogOpen(true)}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    onClick={cancelEditing}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  title="Edit the APN"
+                  aria-label="Edit the APN"
+                  disabled={blocked || pending}
+                  onClick={startEditing}
+                >
+                  <PencilIcon />
+                </Button>
+              )}
             </div>
-            {inputError !== null && <p className="text-destructive">{inputError}</p>}
+            {inputError !== null && (
+              <p className="text-destructive">{inputError}</p>
+            )}
             <FieldDescription>
               In use now:{" "}
-              <span className="text-foreground font-medium">
+              <span className="font-medium text-foreground">
                 {apn?.applied ?? "unknown"}
               </span>
               . Leave the field empty to keep the APN stored in the modem
@@ -138,10 +194,15 @@ export function ApnCard({
           {note !== null && (
             <SettingsCallout
               icon={
-                note.tone === "danger" ? <AlertTriangleIcon /> : <CircleDashedIcon />
+                note.tone === "danger" ? (
+                  <AlertTriangleIcon />
+                ) : (
+                  <CircleDashedIcon />
+                )
               }
               className={cn(
-                note.tone === "danger" && "border-destructive/40 text-destructive",
+                note.tone === "danger" &&
+                  "border-destructive/40 text-destructive",
                 note.tone === "warn" &&
                   "border-amber-500/40 text-amber-700 dark:border-amber-400/40 dark:text-amber-400"
               )}
@@ -160,7 +221,9 @@ export function ApnCard({
           {/* The machinery note is strictly fresher and more specific than the
               status verdict (which restates it a report later) — showing both
               stacks two callouts saying the same thing. */}
-          {note === null && <ConfigStatusCallout status={configStatus.cellular} />}
+          {note === null && (
+            <ConfigStatusCallout status={configStatus.cellular} />
+          )}
         </FieldGroup>
       </CardContent>
 
@@ -189,7 +252,7 @@ export function ApnCard({
                 </span>
               ) : gate.kind === "danger" ? (
                 <span>
-                  <span className="text-foreground font-medium">
+                  <span className="font-medium text-foreground">
                     {gate.message}
                   </span>{" "}
                   Changing the APN to &quot;{draft}&quot; will drop its
@@ -227,8 +290,12 @@ export function ApnCard({
               Cancel
             </Button>
             <Button
-              variant={gate.kind === "danger" && !clearing ? "destructive" : "default"}
-              disabled={gate.kind === "danger" && !clearing && typedName !== deviceName}
+              variant={
+                gate.kind === "danger" && !clearing ? "destructive" : "default"
+              }
+              disabled={
+                gate.kind === "danger" && !clearing && typedName !== deviceName
+              }
               onClick={confirmSave}
             >
               {clearing ? "Keep the modem's APN" : `Apply "${draft}"`}

@@ -82,20 +82,6 @@ export function ConnectivityTab({
 
   return (
     <div className="flex w-full flex-col gap-4">
-      {/* First on the tab: whether there is a SIM at all is the most basic fact
-          about connectivity, and it is the one nothing else here can tell you.
-          Read-only — you cannot set an ICCID, so there is no badge and no save. */}
-      <SimCard device={device} onRefresh={refreshReport} refreshing={refreshing} />
-
-      {/* Below the SIM it identifies: the APN is the writable half of the same
-          plan, and the one that can strand a device — see apn-card.tsx. */}
-      <ApnCard
-        device={device}
-        configStatus={configStatus}
-        isPending={isPending}
-        commit={commit}
-      />
-
       <Card>
         <CardHeader>
           <CardTitle>GPS antenna</CardTitle>
@@ -132,6 +118,26 @@ export function ConnectivityTab({
           </FieldGroup>
         </CardContent>
       </Card>
+
+      {/* The SIM and the APN are two halves of one question — which carrier is
+          this device on, and is it dialling that carrier's gateway — so they sit
+          side by side and are read together. They stack below `lg`, where a
+          half-width card would squeeze the SIM's four values. */}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        {/* Whether there is a SIM at all is the most basic fact about
+            connectivity, and the one nothing else here can tell you. Read-only —
+            you cannot set an ICCID, so there is no badge and no save. */}
+        <SimCard device={device} onRefresh={refreshReport} refreshing={refreshing} />
+
+        {/* Beside the SIM it identifies: the APN is the writable half of the
+            same plan, and the one that can strand a device — see apn-card.tsx. */}
+        <ApnCard
+          device={device}
+          configStatus={configStatus}
+          isPending={isPending}
+          commit={commit}
+        />
+      </div>
 
       <Card>
         <CardHeader>

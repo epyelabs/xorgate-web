@@ -119,8 +119,11 @@ export function SimCard({
             inherits it. Setting a size would put this card a full step off the
             rest of the page — it did, and it is what made it look foreign.
             Width is capped so four short values cluster instead of stretching
-            across a wide monitor as four islands. */}
-        <dl className="grid max-w-4xl grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            across a wide monitor as four islands. Back to two columns at `lg`,
+            where the connectivity tab pairs this card with the APN and the card
+            itself is only half the page — four columns there squeeze the ICCID
+            and its Reveal button onto separate lines. */}
+        <dl className="grid max-w-4xl grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-2">
           <InfoRow
             label="Status"
             value={

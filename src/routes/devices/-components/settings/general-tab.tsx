@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DownloadIcon } from "lucide-react"
+import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import {
   deleteDevice,
   getDeviceModel,
@@ -34,7 +34,6 @@ import {
   type ReportedAgentBuild,
 } from "@/lib/device-config-status"
 import { getDeviceModelResponseSchema, updateDeviceSchema } from "@/lib/schemas"
-import { cn } from "@/lib/utils"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
 import { UpdateDeviceDialog } from "../update-device-dialog"
@@ -273,9 +272,16 @@ export function GeneralTab({
                       disabled={!canUpdate}
                       onClick={() => setUpdateOpen(true)}
                     >
-                      <DownloadIcon
-                        className={cn(updatingAgent && "animate-spin")}
-                      />
+                      {/* Download at rest (the action is "install this build"),
+                          but a spinning download arrow reads as nonsense — so
+                          the in-flight state switches to the refresh glyph,
+                          which is what spins everywhere else in the app (see
+                          the SIM card's refresh). */}
+                      {updatingAgent ? (
+                        <RefreshCwIcon className="animate-spin" />
+                      ) : (
+                        <DownloadIcon />
+                      )}
                     </Button>
                     {updateAvailable && (
                       <span

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   ApiError,
+  apiErrorMessage,
   getDevice,
   patchDeviceConfig,
   patchDeviceUiPrefs,
@@ -147,7 +148,7 @@ export interface DeviceSettings {
    * row until its reported build changes (or it comes back on the same one).
    * True for the whole round trip, which can run to several minutes.
    */
-  updateAgent: () => void
+  updateAgent: (expectedVersion?: string | null) => void
   updatingAgent: boolean
 }
 
@@ -476,7 +477,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
   // build, so that is exactly what this waits for.
   const [updatingAgent, setUpdatingAgent] = useState(false)
   const updatingAgentRef = useRef(false)
-  const updateAgent = useCallback(() => {
+  const updateAgent = useCallback((expectedVersion?: string | null) => {
     if (updatingAgentRef.current || optimisticRef.current === null) return
     const before = reportedAgentBuild(optimisticRef.current)?.version ?? null
     updatingAgentRef.current = true
@@ -517,15 +518,22 @@ export function useDeviceSettings(id: string): DeviceSettings {
             return
           }
           // Back online on the same build. Before it has dropped offline this
-          // is just "the updater has not restarted it yet"; AFTER, it means
-          // the install failed and rolled back — or the device was already on
-          // the latest build and this was an idempotent reinstall.
+          // is just "the updater has not restarted it yet"; AFTER, it is the
+          // outcome — and which outcome depends on what was being installed.
           if (sawOffline) {
-            toast.info(
-              "The device came back on the same build. If you expected a new " +
-                "version, the update may have failed and rolled back — check " +
-                "`journalctl -u xorgate-updater` on the device."
-            )
+            if (expectedVersion !== null && expectedVersion === before) {
+              // The operator confirmed a reinstall of the version already
+              // installed, so an unchanged build IS the success case. Saying
+              // "may have failed" here would alarm them about the exact thing
+              // the dialog told them was harmless.
+              toast.success(`Reinstalled ${before}`)
+            } else {
+              toast.info(
+                "The device came back on the same build. If you expected a new " +
+                  "version, the update may have failed and rolled back — check " +
+                  "`journalctl -u xorgate-updater` on the device."
+              )
+            }
             return
           }
         }
@@ -534,7 +542,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
             "(`journalctl -u xorgate-updater`) before retrying."
         )
       } catch (err) {
-        toast.error((err as Error).message)
+        // apiErrorMessage, not err.message: an ApiError carries the raw
+        // response body, so a 403/409 would otherwise toast a JSON envelope
+        // instead of "Requires one of: owner, admin."
+        toast.error(apiErrorMessage(err))
       } finally {
         updatingAgentRef.current = false
         setUpdatingAgent(false)

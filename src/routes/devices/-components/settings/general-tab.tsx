@@ -67,8 +67,12 @@ export function GeneralTab({
   identityLoaded: boolean
   isPending: (key: string) => boolean
   commit: (key: string, patch: { name?: string | null }) => void
-  /** Ask the device to install the latest published agent build. */
-  updateAgent: () => void
+  /**
+   * Ask the device to install the latest published agent build. The version
+   * we expect afterwards (when known) lets the hook tell a deliberate
+   * reinstall apart from an update that silently rolled back.
+   */
+  updateAgent: (expectedVersion?: string | null) => void
   updatingAgent: boolean
 }) {
   const navigate = useNavigate()
@@ -411,7 +415,7 @@ export function GeneralTab({
         installed={installedBuild}
         latest={latestBuild}
         onConfirm={() => {
-          updateAgent()
+          updateAgent(latestBuild?.version ?? null)
           setUpdateOpen(false)
         }}
       />

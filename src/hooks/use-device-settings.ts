@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   ApiError,
+  apiErrorMessage,
   getDevice,
   patchDeviceConfig,
   patchDeviceUiPrefs,
   refreshDeviceState,
   updateDevice,
+  updateDeviceAgent,
   type ActiveStreamsViewType,
   type CellularConfig,
   type Device,
@@ -27,6 +29,7 @@ import {
 import {
   computeConfigStatus,
   hasPending,
+  reportedAgentBuild,
   type DeviceConfigStatus,
 } from "@/lib/device-config-status"
 // Moved to lib/ so device-config-status.ts can use the same one — a lib
@@ -63,7 +66,6 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
  */
 export interface DeviceSettingsPatch {
   name?: string | null
-  firmwareVersion?: string | null
   gnssAntBias?: boolean
   imuMount?: ImuMount | null
   recordingConfig?: RecordingConfig | null
@@ -86,6 +88,8 @@ export interface DeviceSettingsPatch {
  * round trip — past that the device is not answering and polling is noise.
  */
 const REPORT_POLL_MS = 5000
+/** 6 minutes at REPORT_POLL_MS — a device update is download + npm ci + restart. */
+const AGENT_UPDATE_POLL_TICKS = 72
 const REPORT_POLL_MAX_TICKS = 24
 
 /** Device field -> config namespace (`PATCH /devices/{id}/config`). */
@@ -139,6 +143,13 @@ export interface DeviceSettings {
    */
   refreshReport: () => void
   refreshing: boolean
+  /**
+   * Ask the device to install the latest published agent build, then poll the
+   * row until its reported build changes (or it comes back on the same one).
+   * True for the whole round trip, which can run to several minutes.
+   */
+  updateAgent: (expectedVersion?: string | null) => void
+  updatingAgent: boolean
 }
 
 export function useDeviceSettings(id: string): DeviceSettings {
@@ -309,7 +320,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
           // order and the last response is the freshest device row.
           const configPatch: DeviceConfigPatch = {}
           const uiPrefsPatch: DeviceUiPrefsPatch = {}
-          const metaPatch: { name?: string | null; firmwareVersion?: string | null } = {}
+          const metaPatch: { name?: string | null } = {}
           for (const [field, value] of Object.entries(updates)) {
             if (isConfigField(field)) {
               // `null` means "revert this namespace to device defaults".
@@ -455,6 +466,93 @@ export function useDeviceSettings(id: string): DeviceSettings {
     })()
   }, [id, applyDevice])
 
+  // Remote agent update (device_update_management, Phase 4). Lives here rather
+  // than in the tab component for the same reason `refreshReport` does: the
+  // outcome is a change in the DEVICE row, so the poll must feed the one
+  // `applyDevice` merge everything else reads from — two pollers writing
+  // different copies of the device is how a row goes stale under the operator.
+  //
+  // There is no status flip that means "done". The update takes the agent down
+  // and brings it back, and the only evidence it worked is a changed reported
+  // build, so that is exactly what this waits for.
+  const [updatingAgent, setUpdatingAgent] = useState(false)
+  const updatingAgentRef = useRef(false)
+  const updateAgent = useCallback((expectedVersion?: string | null) => {
+    if (updatingAgentRef.current || optimisticRef.current === null) return
+    const before = reportedAgentBuild(optimisticRef.current)?.version ?? null
+    updatingAgentRef.current = true
+    setUpdatingAgent(true)
+    void (async () => {
+      try {
+        await updateDeviceAgent(id)
+        toast.success("Update command sent — the device will restart shortly")
+        let sawOffline = false
+        // 72 × 5 s = 6 min: the download + `npm ci` alone can take minutes on
+        // a CM5 over LTE, and the plan budgets for that rather than declaring
+        // failure while the device is still working.
+        for (let tick = 0; tick < AGENT_UPDATE_POLL_TICKS; tick++) {
+          await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
+          const raw = await getDevice(id)
+          const parsed = getDeviceResponseSchema.safeParse(raw)
+          if (!parsed.success) continue
+          const fetched = parsed.data.device
+          serverRef.current = fetched
+          // Same merge rule as every other poll here: server-owned fields
+          // only, never the live form state.
+          applyDevice({
+            ...(optimisticRef.current ?? fetched),
+            status: fetched.status,
+            lastSeenAt: fetched.lastSeenAt,
+            configRev: fetched.configRev,
+            agentVersion: fetched.agentVersion,
+            reportedConfig: fetched.reportedConfig,
+            reportedAt: fetched.reportedAt,
+          })
+          if (fetched.status !== "online") {
+            sawOffline = true
+            continue
+          }
+          const now = reportedAgentBuild(fetched)?.version ?? null
+          if (now !== null && now !== before) {
+            toast.success(`Updated to ${now}`)
+            return
+          }
+          // Back online on the same build. Before it has dropped offline this
+          // is just "the updater has not restarted it yet"; AFTER, it is the
+          // outcome — and which outcome depends on what was being installed.
+          if (sawOffline) {
+            if (expectedVersion !== null && expectedVersion === before) {
+              // The operator confirmed a reinstall of the version already
+              // installed, so an unchanged build IS the success case. Saying
+              // "may have failed" here would alarm them about the exact thing
+              // the dialog told them was harmless.
+              toast.success(`Reinstalled ${before}`)
+            } else {
+              toast.info(
+                "The device came back on the same build. If you expected a new " +
+                  "version, the update may have failed and rolled back — check " +
+                  "`journalctl -u xorgate-updater` on the device."
+              )
+            }
+            return
+          }
+        }
+        toast.error(
+          "The device has not come back with a new build yet. Check the device " +
+            "(`journalctl -u xorgate-updater`) before retrying."
+        )
+      } catch (err) {
+        // apiErrorMessage, not err.message: an ApiError carries the raw
+        // response body, so a 403/409 would otherwise toast a JSON envelope
+        // instead of "Requires one of: owner, admin."
+        toast.error(apiErrorMessage(err))
+      } finally {
+        updatingAgentRef.current = false
+        setUpdatingAgent(false)
+      }
+    })()
+  }, [id, applyDevice])
+
   return {
     device,
     recording: resolveRecording(device?.recordingConfig ?? null),
@@ -466,5 +564,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     commitRecording,
     refreshReport,
     refreshing,
+    updateAgent,
+    updatingAgent,
   }
 }

@@ -267,11 +267,14 @@ function DevicesListPage() {
       csvValue: (device) => device.status,
     },
     {
-      id: "firmware",
-      header: "Firmware",
+      id: "agentVersion",
+      header: "Agent version",
       cellClassName: "text-muted-foreground tabular-nums",
-      cell: (device) => device.firmwareVersion ?? "—",
-      csvValue: (device) => device.firmwareVersion ?? "",
+      // Mirrored cloud-side from the device's own report, so a device that has
+      // never connected (or runs an agent older than the build manifest) reads
+      // "—" rather than a value someone typed.
+      cell: (device) => device.agentVersion ?? "—",
+      csvValue: (device) => device.agentVersion ?? "",
     },
     {
       id: "model",

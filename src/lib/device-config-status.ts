@@ -140,6 +140,46 @@ export function reportedAgentMode(device: Device | null): string | null {
   return typeof mode === "string" && mode.length > 0 ? mode : null
 }
 
+/** The agent build a device says it is running (device_update_management). */
+export interface ReportedAgentBuild {
+  /** CI short sha (dev), release tag (prod), or the package version locally. */
+  version: string
+  /** "dev" | "prod" from CI, "bench"/"local" for a hand-deployed tree. */
+  channel: string | null
+  builtAt: string | null
+  packageVersion: string | null
+}
+
+/**
+ * Parse `reportedConfig.effective.agent.build`, or null when the device has
+ * never reported one (an agent older than the build manifest, or a device that
+ * has never connected).
+ *
+ * Reported-only, like [reportedAgentMode] — there is no cloud-writable
+ * counterpart, and the cloud's `device.agentVersion` is a mirror of this very
+ * value, kept as the fallback for a row whose report has aged out. Defensive
+ * because `effective` is an opaque device-authored document: only `version`
+ * must be a non-empty string; everything else degrades to null.
+ */
+export function reportedAgentBuild(device: Device | null): ReportedAgentBuild | null {
+  const reported = parseReportedConfig(device?.reportedConfig)
+  const agent = reported?.effective.agent
+  if (!isPlainObject(agent)) return null
+  const build = agent.build
+  if (!isPlainObject(build)) return null
+  const version = typeof build.version === "string" ? build.version.trim() : ""
+  if (version.length === 0) return null
+  return {
+    version,
+    channel: optionalString(build.channel),
+    builtAt: optionalString(build.builtAt),
+    packageVersion: optionalString(build.packageVersion),
+  }
+}
+
+const optionalString = (v: unknown): string | null =>
+  typeof v === "string" && v.trim().length > 0 ? v.trim() : null
+
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v)
 

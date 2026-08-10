@@ -5,6 +5,7 @@ import {
   configStateExplanation,
   hasPending,
   parseReportedConfig,
+  reportedAgentBuild,
   reportedAgentMode,
   tabAttentionCounts,
 } from "./device-config-status"
@@ -340,5 +341,63 @@ describe("reportedAgentMode", () => {
       })
     )
     expect(status).not.toHaveProperty("agent")
+  })
+})
+
+describe("reportedAgentBuild", () => {
+  const build = {
+    version: "a1b2c3d",
+    channel: "dev",
+    builtAt: "2026-08-10T14:00:00Z",
+    packageVersion: "0.2.0",
+  }
+
+  it("reads the build the device reported", () => {
+    expect(
+      reportedAgentBuild(
+        device({ reportedConfig: report({ effective: { agent: { mode: "real", build } } }) })
+      )
+    ).toEqual(build)
+  })
+
+  it("is null for a device that reports no build — an agent older than the manifest", () => {
+    expect(reportedAgentBuild(null)).toBeNull()
+    expect(reportedAgentBuild(device())).toBeNull()
+    expect(reportedAgentBuild(device({ reportedConfig: report() }))).toBeNull()
+    expect(
+      reportedAgentBuild(
+        device({ reportedConfig: report({ effective: { agent: { mode: "real" } } }) })
+      )
+    ).toBeNull()
+  })
+
+  it("survives a malformed report rather than throwing — `effective` is device-authored", () => {
+    const cases = [
+      { agent: "real" },
+      { agent: { mode: "real", build: "a1b2c3d" } },
+      { agent: { mode: "real", build: ["a1b2c3d"] } },
+      { agent: { mode: "real", build: { version: 42 } } },
+      { agent: { mode: "real", build: { version: "  " } } },
+    ]
+    for (const effective of cases) {
+      expect(reportedAgentBuild(device({ reportedConfig: report({ effective }) }))).toBeNull()
+    }
+  })
+
+  it("keeps the version but degrades the optional fields it cannot trust", () => {
+    expect(
+      reportedAgentBuild(
+        device({
+          reportedConfig: report({
+            effective: { agent: { build: { version: " a1b2c3d ", channel: 7, builtAt: null } } },
+          }),
+        })
+      )
+    ).toEqual({
+      version: "a1b2c3d",
+      channel: null,
+      builtAt: null,
+      packageVersion: null,
+    })
   })
 })

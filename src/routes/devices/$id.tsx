@@ -344,8 +344,8 @@ function DeviceLayout() {
             <Skeleton className="h-4 w-96 max-w-full" />
           ) : (
             <p className="text-xs text-muted-foreground">
-              Serial {device.serial} · Model {device.deviceModelId} · fw{" "}
-              {device.firmwareVersion ?? "-"} · Last seen{" "}
+              Serial {device.serial} · Model {device.deviceModelId} · agent{" "}
+              {device.agentVersion ?? "-"} · Last seen{" "}
               {formatTimestamp(device.lastSeenAt)}
             </p>
           )} */}

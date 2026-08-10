@@ -238,7 +238,12 @@ export const deviceSchema = z.object({
   deviceModelId: z.string(),
   serial: z.string(),
   name: z.string().nullable(),
-  firmwareVersion: z.string().nullable(),
+  // The installed agent build, mirrored cloud-side from the device's own
+  // report. `.catch(null)` because the backend served this as `firmwareVersion`
+  // until the device_update_management plan renamed it — an older backend
+  // simply has no such key, and a missing version must not fail the whole
+  // device parse.
+  agentVersion: z.string().nullable().catch(null),
   status: deviceStatusSchema,
   // .catch({}) tolerates a backend older than the config consolidation.
   config: deviceConfigDocumentSchema.catch({}),
@@ -342,6 +347,18 @@ export const deviceModelSchema = z.object({
 
 export const getDeviceModelResponseSchema = z.object({
   device_model: deviceModelSchema,
+})
+
+// `GET /device-dist/latest` — the newest agent build published for this stage.
+// Only `version` is required; the rest are decoration in the update dialog, so
+// they `.catch(null)` rather than fail the parse and lose the version itself.
+export const latestAgentBuildResponseSchema = z.object({
+  latest: z.object({
+    version: z.string().min(1),
+    channel: z.string().nullable().catch(null),
+    builtAt: z.string().nullable().catch(null),
+    packageVersion: z.string().nullable().catch(null),
+  }),
 })
 
 // --- Live telemetry payload (P2): matches the device §1.3 contract over MQTT ---

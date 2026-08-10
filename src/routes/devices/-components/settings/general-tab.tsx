@@ -19,17 +19,36 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DownloadIcon } from "lucide-react"
 import {
   deleteDevice,
   getDeviceModel,
+  getLatestAgentBuild,
   type Device,
   type DeviceIdentity,
+  type LatestAgentBuild,
 } from "@/lib/api"
-import { reportedAgentMode } from "@/lib/device-config-status"
+import {
+  reportedAgentBuild,
+  reportedAgentMode,
+  type ReportedAgentBuild,
+} from "@/lib/device-config-status"
 import { getDeviceModelResponseSchema, updateDeviceSchema } from "@/lib/schemas"
+import { cn } from "@/lib/utils"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
+import { UpdateDeviceDialog } from "../update-device-dialog"
 import { formatTimestamp } from "./shared"
+
+/** Built date + channel + package version — the detail the row has no room for. */
+function buildTooltip(build: ReportedAgentBuild | null): string | undefined {
+  if (build === null) return undefined
+  const parts = [`Build ${build.version}`]
+  if (build.channel) parts.push(`channel ${build.channel}`)
+  if (build.packageVersion) parts.push(`agent ${build.packageVersion}`)
+  if (build.builtAt) parts.push(`built ${formatTimestamp(build.builtAt)}`)
+  return parts.join(" · ")
+}
 
 const NAME_KEY = "device-name"
 const MAX_NAME_LENGTH = 80
@@ -40,16 +59,64 @@ export function GeneralTab({
   identityLoaded,
   isPending,
   commit,
+  updateAgent,
+  updatingAgent,
 }: {
   device: Device
   identity: DeviceIdentity | null
   identityLoaded: boolean
   isPending: (key: string) => boolean
   commit: (key: string, patch: { name?: string | null }) => void
+  /** Ask the device to install the latest published agent build. */
+  updateAgent: () => void
+  updatingAgent: boolean
 }) {
   const navigate = useNavigate()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [updateOpen, setUpdateOpen] = useState(false)
   const agentMode = reportedAgentMode(device)
+
+  const installedBuild = reportedAgentBuild(device)
+  // A hand-deployed tree is honest about being one; worth surfacing, because
+  // "why doesn't this match the sha CI published" has exactly this answer.
+  const localBuild =
+    installedBuild?.channel === "local" || installedBuild?.channel === "bench"
+
+  // What a device update would install. Fetched once per mount; a stage with no
+  // published manifest (404 -> null) simply shows no "update available" dot —
+  // the action stays available, since a reinstall is always valid.
+  const [latestBuild, setLatestBuild] = useState<LatestAgentBuild | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const latest = await getLatestAgentBuild()
+        if (!cancelled) setLatestBuild(latest)
+      } catch {
+        // Leave it unknown — this is decoration, not the action itself.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // String equality only: shas have no order, and a dev sha and a prod release
+  // tag are not comparable at all.
+  const installedVersion = installedBuild?.version ?? device.agentVersion ?? null
+  const updateAvailable =
+    latestBuild !== null &&
+    installedVersion !== null &&
+    latestBuild.version !== installedVersion
+
+  const canUpdate = device.status === "online" && !updatingAgent
+  const updateHint = updatingAgent
+    ? "Update in progress…"
+    : device.status !== "online"
+      ? "The device must be online to be updated"
+      : updateAvailable
+        ? `Update available: ${latestBuild?.version}`
+        : "Install the latest agent build"
 
   // Kept as a string so partial input never fights the user; re-seeded whenever
   // the device object changes, which is also how a failed save snaps back.
@@ -172,10 +239,49 @@ export function GeneralTab({
                 mono={modelName === null && modelSettled}
               />
               <InfoRow label="Device ID" value={device.id} mono />
+              {/* The build the agent reports running, with the mirrored column
+                  as the fallback for a device whose report we don't hold.
+                  Read-only like the rest of this card — the only write is the
+                  update action beside it, which asks the DEVICE to change it
+                  rather than writing a value here. */}
               <InfoRow
-                label="Firmware Ver"
-                value={device.firmwareVersion ?? "—"}
+                label="Agent version"
+                value={
+                  <>
+                    {installedBuild?.version ?? device.agentVersion ?? "—"}
+                    {localBuild && (
+                      <span className="text-muted-foreground font-sans">
+                        {" "}
+                        ({installedBuild?.channel})
+                      </span>
+                    )}
+                  </>
+                }
+                title={buildTooltip(installedBuild)}
                 mono
+                action={
+                  <span title={updateHint}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      title={undefined}
+                      aria-label="Update device agent"
+                      disabled={!canUpdate}
+                      onClick={() => setUpdateOpen(true)}
+                    >
+                      <DownloadIcon
+                        className={cn(updatingAgent && "animate-spin")}
+                      />
+                    </Button>
+                    {updateAvailable && (
+                      <span
+                        aria-label="Update available"
+                        title={`Update available: ${latestBuild?.version}`}
+                        className="bg-primary inline-block size-1.5 rounded-full align-top"
+                      />
+                    )}
+                  </span>
+                }
               />
               {/* Reported by the device, never set from here: a box left in
                   `sim` publishes synthetic data, so it has to be visible — but
@@ -292,6 +398,22 @@ export function GeneralTab({
         onOpenChange={setDeleteOpen}
         deviceName={device.name ?? device.serial}
         onConfirm={handleDelete}
+      />
+
+      {/* Fire-and-forget like reboot: the dialog closes as soon as the command
+          reaches the broker. The hook then polls the device row for a changed
+          reported build and toasts the outcome — success, came-back-unchanged,
+          or timed out. */}
+      <UpdateDeviceDialog
+        open={updateOpen}
+        onOpenChange={setUpdateOpen}
+        deviceName={device.name ?? device.serial}
+        installed={installedBuild}
+        latest={latestBuild}
+        onConfirm={() => {
+          updateAgent()
+          setUpdateOpen(false)
+        }}
       />
     </div>
   )

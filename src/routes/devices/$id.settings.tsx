@@ -64,6 +64,8 @@ function DeviceSettingsPage() {
     commitRecording,
     refreshReport,
     refreshing,
+    updateAgent,
+    updatingAgent,
   } = useDeviceSettings(id)
 
   // Pending/queued/rejected namespaces, counted per tab (Phase 3). The point is
@@ -170,6 +172,8 @@ function DeviceSettingsPage() {
                 identityLoaded={identityLoaded}
                 isPending={isPending}
                 commit={commit}
+                updateAgent={updateAgent}
+                updatingAgent={updatingAgent}
               />
             </TabsContent>
             <TabsContent value="interface">

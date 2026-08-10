@@ -1,4 +1,5 @@
 import { getIdToken } from "./cognito"
+import { latestAgentBuildResponseSchema } from "./schemas"
 
 const API_URL = import.meta.env.VITE_API_BASE_URL as string
 
@@ -365,7 +366,12 @@ export interface Device {
   deviceModelId: string
   serial: string
   name: string | null
-  firmwareVersion: string | null
+  /**
+   * Installed xorgate-device-agent build (CI short sha on dev, release tag on
+   * prod). Read-only: the backend mirrors it from the device's config report,
+   * and there is no write path. null until the device reports a build.
+   */
+  agentVersion: string | null
   status: DeviceStatus
   /** Everything delivered to the device, in one document. */
   config: DeviceConfigDocument
@@ -429,7 +435,6 @@ export async function updateDevice(
   id: string,
   updates: {
     name?: string | null
-    firmwareVersion?: string | null
   }
 ): Promise<{ device: Device }> {
   return apiRequest(`/devices/${id}`, {
@@ -481,7 +486,7 @@ export async function deleteDevice(id: string): Promise<void> {
 
 export interface DeviceCommandAccepted {
   requestId: string
-  command: "reboot" | "power_off" | "refresh"
+  command: "reboot" | "power_off" | "refresh" | "update"
   /** Epoch ms after which the device refuses the command. */
   expiresAt: number
 }
@@ -506,6 +511,45 @@ export async function powerOffDevice(id: string): Promise<DeviceCommandAccepted>
 // up to ~45 s for re-probed values). The device rate-limits to ~1 per 30 s.
 export async function refreshDeviceState(id: string): Promise<DeviceCommandAccepted> {
   return apiRequest(`/devices/${id}/refresh-state`, { method: "POST" })
+}
+
+// Install the latest published agent build (device_update_management, Phase 3).
+// Owner/admin, device must be online (409 otherwise). Latest-only — there is no
+// version parameter, by design.
+//
+// 202 means the command reached the broker, and unlike reboot there is no
+// status flip to wait on that means "done": the device drops offline for a
+// minute or two, comes back, and the ONLY evidence of success is a changed
+// build in its next report. Poll `getDevice` and compare
+// `reportedAgentBuild(device)?.version` (or `device.agentVersion`) with what it
+// was before. Pressing twice is harmless — the device-side one-shot coalesces.
+export async function updateDeviceAgent(id: string): Promise<DeviceCommandAccepted> {
+  return apiRequest(`/devices/${id}/update`, { method: "POST" })
+}
+
+/** The newest build published for this stage, from `GET /device-dist/latest`. */
+export interface LatestAgentBuild {
+  version: string
+  channel: string | null
+  builtAt: string | null
+  packageVersion: string | null
+}
+
+// What a device update would install. Returns null when the stage has no
+// published manifest yet (404) — "latest unknown", not an error: the update
+// action still works, it just cannot advertise that an update is available.
+// Compare with the installed version by STRING EQUALITY only; shas do not
+// order.
+export async function getLatestAgentBuild(): Promise<LatestAgentBuild | null> {
+  let raw: unknown
+  try {
+    raw = await apiRequest<unknown>("/device-dist/latest")
+  } catch (err) {
+    if ((err as ApiError).status === 404) return null
+    throw err
+  }
+  const parsed = latestAgentBuildResponseSchema.safeParse(raw)
+  return parsed.success ? parsed.data.latest : null
 }
 
 export interface IoCapabilities {

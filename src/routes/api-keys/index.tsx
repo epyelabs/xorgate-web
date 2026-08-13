@@ -54,6 +54,21 @@ const SCOPE_LABEL: Record<ApiKey["scope"], string> = {
   client: "Client",
 }
 
+const ROLE_LABEL: Record<ApiKey["role"], string> = {
+  owner: "Owner",
+  admin: "Admin",
+  member: "Member",
+  viewer: "Viewer",
+}
+
+// A key is dead in two different ways, and the table says which.
+function keyState(key: ApiKey): "revoked" | "expired" | "active" {
+  if (key.revokedAt) return "revoked"
+  if (key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now())
+    return "expired"
+  return "active"
+}
+
 interface ApiKeysData {
   organizationId: string | null
   keys: ApiKey[]
@@ -103,9 +118,57 @@ function ApiKeysPage() {
       cell: (key) => key.name,
     },
     {
+      id: "keyPrefix",
+      header: "Key",
+      cellClassName: "font-mono text-xs text-muted-foreground",
+      // Only the hash was ever stored, so keys minted before this column
+      // existed genuinely cannot show one. Say unknown rather than pretend.
+      cell: (key) =>
+        key.keyPrefix ? (
+          `${key.keyPrefix}\u2026`
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-default italic">Unknown</span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Minted before key prefixes were recorded. Only the hash was
+              stored, so this cannot be recovered.
+            </TooltipContent>
+          </Tooltip>
+        ),
+    },
+    {
+      id: "role",
+      header: "Role",
+      cell: (key) => <Badge variant="outline">{ROLE_LABEL[key.role]}</Badge>,
+    },
+    {
       id: "scope",
       header: "Scope",
       cell: (key) => <Badge variant="secondary">{SCOPE_LABEL[key.scope]}</Badge>,
+    },
+    {
+      id: "expiresAt",
+      header: "Status",
+      cell: (key) => {
+        const state = keyState(key)
+        if (state === "revoked")
+          return <Badge variant="destructive">Revoked</Badge>
+        if (state === "expired")
+          return <Badge variant="destructive">Expired</Badge>
+        if (!key.expiresAt) return <Badge variant="secondary">Active</Badge>
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="cursor-default">
+                Expires {formatDate(key.expiresAt)}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>{formatTimestamp(key.expiresAt)}</TooltipContent>
+          </Tooltip>
+        )
+      },
     },
     {
       id: "lastUsedAt",
@@ -157,6 +220,8 @@ function ApiKeysPage() {
             <h1 className="text-2xl font-semibold tracking-tight">API Keys</h1>
             <p className="text-sm text-muted-foreground">
               Keys that authenticate programmatic access to this organization.
+              Send one as an <code>Authorization: Bearer</code> credential; it
+              acts inside this organization at the role shown.
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">

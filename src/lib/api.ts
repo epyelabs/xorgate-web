@@ -129,6 +129,13 @@ export interface ApiKey {
   organizationId: string
   name: string
   scope: ApiKeyScope
+  // The role the key acts with, using the same gates as a membership role.
+  role: MembershipRole
+  // First 8 characters of the plaintext, for identifying a key someone holds.
+  // Null on keys minted before the column existed, and unrecoverable for them:
+  // only the hash was ever stored. Show it as unknown, not as a guess.
+  keyPrefix: string | null
+  expiresAt: string | null
   lastUsedAt: string | null
   revokedAt: string | null
   createdAt: string

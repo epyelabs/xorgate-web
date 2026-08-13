@@ -28,6 +28,29 @@ function toHex(bytes: Uint8Array): string {
 }
 
 /**
+ * MQTT client id for a browser connection.
+ *
+ * The browser IoT policy scopes `iot:Connect` to
+ * `client/${cognito-identity.amazonaws.com:sub}*`, so the id MUST begin with the
+ * caller's own Cognito identity id or the broker refuses the CONNECT. Before
+ * that fix the policy allowed `client/*`, and since deviceId = thing name = MQTT
+ * client id, any authenticated user could connect as a device and knock it off
+ * the broker (MQTT displaces the older session on a client-id collision).
+ *
+ * `identityId` comes from `POST /iot/attach-policy`, which every connect path
+ * already awaits. The random suffix matters: two tabs of the same user resolve
+ * to the SAME identity id, and a single tab already opens several connections
+ * (telemetry feed, workflow-run progress, webcam ingest), so a bare identity id
+ * would make our own connections displace each other.
+ *
+ * `role` is a short human-readable hint ("web", "sim", "ingest") that survives
+ * into CloudWatch and the broker's client-id, purely for debugging.
+ */
+export function browserClientId(identityId: string, role: string): string {
+  return `${identityId}-${role}-${crypto.randomUUID()}`
+}
+
+/**
  * Build a SigV4 query-presigned WSS URL for AWS IoT Core's MQTT-over-WebSocket
  * endpoint, following the IoT-specific signing rule:
  *

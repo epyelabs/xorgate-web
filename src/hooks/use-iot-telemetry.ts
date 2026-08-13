@@ -3,7 +3,7 @@ import mqtt from "mqtt"
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
 import { getIdToken } from "@/lib/cognito"
 import { attachIotPolicy } from "@/lib/api"
-import { presignIotWssUrl } from "@/lib/iot-wss"
+import { browserClientId, presignIotWssUrl } from "@/lib/iot-wss"
 import { telemetryPayloadSchema, type TelemetryPayload } from "@/lib/schemas"
 
 const REGION = import.meta.env.VITE_AWS_REGION as string
@@ -160,7 +160,9 @@ class TelemetryFeed {
       this.setStatus("connecting")
       // AWS IoT authorizes Cognito identities via an attached IoT policy, not
       // the IAM role — ensure it's attached before connecting (idempotent).
-      await attachIotPolicy()
+      // The response's identityId is also what the client id must start with:
+      // the policy scopes iot:Connect to this identity (see browserClientId).
+      const { identityId } = await attachIotPolicy()
       if (this.stopped) return
       const idToken = await getIdToken()
       if (!idToken) throw new Error("Not authenticated")
@@ -179,7 +181,7 @@ class TelemetryFeed {
       const next = mqtt.connect(url, {
         protocolVersion: 5,
         reconnectPeriod: 0, // we reconnect manually (presigned URL is single-use-ish)
-        clientId: `web-${crypto.randomUUID()}`,
+        clientId: browserClientId(identityId, "web"),
         // mqtt.js rebuilds the ws URL from host/path only and DROPS the query
         // string — which would strip the SigV4 params and get us a 403 from IoT.
         // transformWsUrl forces the full presigned URL onto the WebSocket.

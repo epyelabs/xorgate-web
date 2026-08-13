@@ -3,7 +3,7 @@ import mqtt from "mqtt"
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
 import { getIdToken } from "@/lib/cognito"
 import { attachIotPolicy } from "@/lib/api"
-import { presignIotWssUrl } from "@/lib/iot-wss"
+import { browserClientId, presignIotWssUrl } from "@/lib/iot-wss"
 
 const REGION = import.meta.env.VITE_AWS_REGION as string
 const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string
@@ -143,8 +143,9 @@ export function useWebcamIngest(args: {
         if (cancelled) return
         setStream(media)
 
-        // Same identity/policy/presign dance as use-sim-progress.
-        await attachIotPolicy()
+        // Same identity/policy/presign dance as use-sim-progress; the
+        // identityId is what the client id must start with (browserClientId).
+        const { identityId } = await attachIotPolicy()
         const idToken = await getIdToken()
         if (!idToken) throw new Error("Not authenticated")
         const creds = await fromCognitoIdentityPool({
@@ -161,7 +162,7 @@ export function useWebcamIngest(args: {
         client = mqtt.connect(url, {
           protocolVersion: 5,
           reconnectPeriod: 0,
-          clientId: `web-ingest-${crypto.randomUUID()}`,
+          clientId: browserClientId(identityId, "ingest"),
           transformWsUrl: () => url,
         })
         client.on("error", (err) => {

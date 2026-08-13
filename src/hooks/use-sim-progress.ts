@@ -3,7 +3,7 @@ import mqtt from "mqtt"
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
 import { getIdToken } from "@/lib/cognito"
 import { attachIotPolicy } from "@/lib/api"
-import { presignIotWssUrl } from "@/lib/iot-wss"
+import { browserClientId, presignIotWssUrl } from "@/lib/iot-wss"
 import {
   simEventPayloadSchema,
   simPreviewPayloadSchema,
@@ -179,8 +179,9 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
       try {
         patch({ connection: "connecting" })
         // AWS IoT authorizes Cognito identities via an attached IoT policy;
-        // idempotent, same dance as the live-telemetry pages.
-        await attachIotPolicy()
+        // idempotent, same dance as the live-telemetry pages. The identityId it
+        // returns is what the client id must start with (see browserClientId).
+        const { identityId } = await attachIotPolicy()
         if (cancelled) return
         const creds = await freshCreds()
         if (cancelled) return
@@ -190,7 +191,7 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
         const next = mqtt.connect(url, {
           protocolVersion: 5,
           reconnectPeriod: 0, // manual reconnect (presigned URL is single-use-ish)
-          clientId: `web-sim-${crypto.randomUUID()}`,
+          clientId: browserClientId(identityId, "sim"),
           // mqtt.js drops the query string when it rebuilds the ws URL, which
           // would strip the SigV4 params; force the presigned URL through.
           transformWsUrl: () => url,

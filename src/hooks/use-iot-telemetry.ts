@@ -155,7 +155,25 @@ class TelemetryFeed {
 
   private async open(): Promise<void> {
     if (this.stopped) return
-    const topic = `xorgate/devices/${this.deviceId}/telemetry`
+    // BOTH telemetry planes, because the fleet crosses between them one device
+    // at a time (platform-auth Phase 4). A device publishes to the unscoped
+    // topic until the cloud tells it which organization and workspace it is in,
+    // and to the tenant-scoped one after — the switch happens per device, on
+    // its own next config delivery, so at any moment some of the fleet is on
+    // each. Subscribing to both is what makes that invisible here.
+    //
+    // The `+` wildcards stand in for the org and workspace, which this hook has
+    // no reason to know: it is asking for one device's telemetry, and the
+    // device id is the last segment either way. Exposure is unchanged — the
+    // browser policy has always allowed any authenticated user any device's
+    // telemetry, and narrowing THAT is a separate decision (phase file 4.3),
+    // deliberately not taken here.
+    //
+    // Drop the legacy filter once no device publishes to it.
+    const topics = [
+      `xorgate/devices/${this.deviceId}/telemetry`,
+      `xorgate/orgs/+/ws/+/devices/${this.deviceId}/telemetry`,
+    ]
     try {
       this.setStatus("connecting")
       // AWS IoT authorizes Cognito identities via an attached IoT policy, not
@@ -193,7 +211,7 @@ class TelemetryFeed {
         if (this.stopped) return
         this.backoff = 1000
         this.setStatus("connected", null)
-        next.subscribe(topic, { qos: 0 })
+        for (const t of topics) next.subscribe(t, { qos: 0 })
       })
 
       next.on("message", (_t, payload) => {

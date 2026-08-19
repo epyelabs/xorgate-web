@@ -196,7 +196,7 @@ export function LiveVideoGrid({
       try {
         const raw = await getKvsChannels(deviceId)
         const parsed = getKvsChannelsResponseSchema.safeParse(raw)
-        if (!parsed.success) throw new Error("Unexpected kvs-channels response")
+        if (!parsed.success) throw new Error("Unexpected video-channels response")
         if (!cancelled) setChannels(parsed.data.channels)
       } catch (err) {
         if (!cancelled) setLoadError((err as Error).message)
@@ -242,14 +242,14 @@ export function LiveVideoGrid({
           })
           return tile.kind === "player" ? (
             <LiveVideoTile
-              key={ch.channelArn}
+              key={ch.channelRef}
               channel={ch}
               label={labelFor(ch.streamKey)}
               recordingOnDevice={recordingOnDevice}
             />
           ) : (
             <UnavailableStreamTile
-              key={ch.channelArn}
+              key={ch.channelRef}
               deviceId={deviceId}
               descriptor={tile.descriptor}
             />

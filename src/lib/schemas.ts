@@ -432,11 +432,14 @@ export const telemetryPayloadSchema = z.object({
     .catch(undefined),
 })
 
-// --- Live video (P3): KVS signaling channels from GET /devices/{id}/kvs-channels ---
+// --- Live video (P3): channels from GET /v1/devices/{id}/video-channels ---
+// `channelRef` is the public name for what the backend stores as channel_arn;
+// treat it as opaque. The old `channelArn` field stopped being sent on
+// 2026-08-19 when the unversioned paths were deleted.
 export const kvsChannelSchema = z.object({
   streamKey: z.string(),
   channelName: z.string(),
-  channelArn: z.string(),
+  channelRef: z.string(),
   region: z.string(),
 })
 

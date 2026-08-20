@@ -61,7 +61,9 @@ export type KvsStatus =
 
 export interface KvsChannelInput {
   channelName: string
-  channelArn: string
+  // Opaque handle from the API. This hook is the ONE place that knows it is a
+  // KVS channel ARN, because it is the boundary where the AWS SDK is called.
+  channelRef: string
   region: string
 }
 
@@ -263,7 +265,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         const endpointRes = await withTimeout(
           kvClient.send(
             new GetSignalingChannelEndpointCommand({
-              ChannelARN: channel.channelArn,
+              ChannelARN: channel.channelRef,
               SingleMasterChannelEndpointConfiguration: {
                 Protocols: ["WSS", "HTTPS"],
                 Role: Role.VIEWER,
@@ -292,7 +294,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         })
         const iceRes = await withTimeout(
           signalingChannelsClient.send(
-            new GetIceServerConfigCommand({ ChannelARN: channel.channelArn })
+            new GetIceServerConfigCommand({ ChannelARN: channel.channelRef })
           ),
           SETUP_STEP_TIMEOUT_MS,
           "ICE server config"
@@ -315,7 +317,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
         // and a stale id from a half-closed prior session can be refused.
         const clientId = crypto.randomUUID()
         signaling = new SignalingClient({
-          channelARN: channel.channelArn,
+          channelARN: channel.channelRef,
           channelEndpoint: endpoints.WSS,
           role: Role.VIEWER,
           region,
@@ -493,7 +495,7 @@ export function useKvsViewer(channel: KvsChannelInput | null): UseKvsViewer {
       teardown()
       if (videoRef.current) videoRef.current.srcObject = null
     }
-  }, [channel?.channelArn, channel?.region])
+  }, [channel?.channelRef, channel?.region])
 
   return { videoRef, status, error, stats }
 }

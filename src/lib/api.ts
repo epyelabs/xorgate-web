@@ -1,7 +1,12 @@
 import { getIdToken } from "./cognito"
 import { latestAgentBuildResponseSchema } from "./schemas"
 
-const API_URL = import.meta.env.VITE_API_BASE_URL as string
+// The API is served under `/v1` and nothing else; the unversioned paths were
+// deleted on 2026-08-19. The version is appended HERE rather than baked into
+// VITE_API_BASE_URL so that pointing this build at another deployment cannot
+// silently drop it — the same reason the SDK owns the segment (design note
+// N6a). Keep the env var a bare origin.
+const API_URL = `${(import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, "")}/v1`
 
 let currentOrgIdGetter: () => string | null = () => null
 let currentWorkspaceIdGetter: () => string | null = () => null
@@ -597,15 +602,16 @@ export async function getDeviceModel(
   return apiRequest(`/device-models/${id}`)
 }
 
-// Attaches the browser IoT policy to the caller's Cognito identity. Required
+// Grants the caller's Cognito identity access to the live plane. Required
 // before MQTT-over-WSS: AWS IoT authorizes Cognito identities via an attached
 // IoT policy, not the IAM role. Idempotent.
+// Renamed from POST /iot/attach-policy, which no longer exists.
 export async function attachIotPolicy(): Promise<{
   attached: boolean
   identityId: string
   policyName: string
 }> {
-  return apiRequest("/iot/attach-policy", { method: "POST" })
+  return apiRequest("/live/access", { method: "POST" })
 }
 
 // --- IoT identity (settings): non-secret X.509 identity metadata for a device ---
@@ -626,11 +632,14 @@ export async function getDeviceIdentity(
   return apiRequest(`/devices/${deviceId}/identity`)
 }
 
-// --- Live video (P3): KVS WebRTC signaling channels for the browser viewer ---
+// --- Live video (P3): channels for the browser viewer ---
+// `channelRef` is opaque on the wire (N11). It happens to be a KVS channel ARN,
+// which is why use-kvs-viewer hands it straight to the AWS SDK as ChannelARN,
+// but nothing outside that boundary should assume the shape.
 export interface KvsChannel {
   streamKey: string
   channelName: string
-  channelArn: string
+  channelRef: string
   region: string
 }
 
@@ -641,7 +650,7 @@ export interface KvsChannel {
 export async function getKvsChannels(
   deviceId: string
 ): Promise<{ channels: KvsChannel[] }> {
-  return apiRequest(`/devices/${deviceId}/kvs-channels`)
+  return apiRequest(`/devices/${deviceId}/video-channels`)
 }
 
 // --- Telemetry history (P4): reads over telemetry_readings + device_latest ---

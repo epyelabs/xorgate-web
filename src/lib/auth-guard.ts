@@ -26,10 +26,14 @@ export function sanitizeRedirect(value: unknown): string | undefined {
 // Where a signed-in user lands when no specific destination was requested.
 export const DEFAULT_AUTHED_ROUTE = "/devices"
 
-// beforeLoad guard for every private route: unauthenticated visitors are sent
-// to /login?redirect=<where they were headed>, so signing in resumes the trip
-// instead of dumping them on the default page.
-export async function requireAuth({
+// Where a signed-in user with no organization is sent instead.
+export const ONBOARDING_ROUTE = "/onboarding"
+
+// beforeLoad guard for /onboarding, and the shared half of requireAuth:
+// authentication only, with NO organization requirement. Onboarding must use
+// this one rather than requireAuth, or the org check below would bounce the
+// page against itself forever.
+export async function requireAuthOnly({
   location,
 }: {
   location: { href: string }
@@ -41,4 +45,30 @@ export async function requireAuth({
     search: { redirect: location.href },
     replace: true,
   })
+}
+
+// beforeLoad guard for every private route: unauthenticated visitors are sent
+// to /login?redirect=<where they were headed>, so signing in resumes the trip
+// instead of dumping them on the default page.
+//
+// Signed-in users with no organization are sent to /onboarding. Without this a
+// fresh signup landed on /devices and every org-scoped call answered
+// `403 NO_ORGANIZATION`, which surfaced as a bare error screen with no way
+// forward: the only route to creating an organization was the sidebar's
+// organization switcher, which is not a place a new user thinks to look.
+// Checking here rather than per route means the 36 existing `requireAuth`
+// call sites are covered without touching any of them.
+//
+// ensureAuthInitialized() resolves only after initialize() has awaited /me, so
+// `organizations` is settled by this point and not merely still loading. The
+// one soft spot: initialize() swallows a failing /me, so an unreachable API
+// looks the same as a user with no organizations and lands them on onboarding.
+// That is recoverable (the form surfaces the API error) and beats waving them
+// through to a page that cannot work.
+export async function requireAuth(opts: {
+  location: { href: string }
+}): Promise<void> {
+  await requireAuthOnly(opts)
+  if (useAuthStore.getState().organizations.length > 0) return
+  throw redirect({ to: ONBOARDING_ROUTE, replace: true })
 }

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as BillingRouteImport } from './routes/billing'
@@ -36,6 +37,11 @@ import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.ben
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/billing'
     | '/forbidden'
     | '/login'
+    | '/onboarding'
     | '/signup'
     | '/devices/$id'
     | '/workflow-instances/$id'
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/billing'
     | '/forbidden'
     | '/login'
+    | '/onboarding'
     | '/signup'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/billing'
     | '/forbidden'
     | '/login'
+    | '/onboarding'
     | '/signup'
     | '/devices/$id'
     | '/workflow-instances/$id'
@@ -306,6 +318,7 @@ export interface RootRouteChildren {
   BillingRoute: typeof BillingRoute
   ForbiddenRoute: typeof ForbiddenRoute
   LoginRoute: typeof LoginRoute
+  OnboardingRoute: typeof OnboardingRoute
   SignupRoute: typeof SignupRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
@@ -325,6 +338,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -517,6 +537,7 @@ const rootRouteChildren: RootRouteChildren = {
   BillingRoute: BillingRoute,
   ForbiddenRoute: ForbiddenRoute,
   LoginRoute: LoginRoute,
+  OnboardingRoute: OnboardingRoute,
   SignupRoute: SignupRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,

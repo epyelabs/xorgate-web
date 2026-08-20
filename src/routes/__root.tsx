@@ -59,6 +59,7 @@ function resolveCrumbs(
       { label: instanceName ?? "Instance" },
     ]
   }
+  if (pathname === "/onboarding") return [{ label: "Get started" }]
   if (pathname === "/forbidden") return [{ label: "Access denied" }]
   if (pathname === "/settings") return [{ label: "Settings" }]
   if (pathname === "/members") return [{ label: "Members" }]
@@ -93,6 +94,14 @@ function LoadingScreen() {
 
 const AUTH_ROUTES = ["/login", "/signup"]
 
+// Routes a SIGNED-IN user sees without the app chrome. /onboarding is the only
+// one: the sidebar is built out of the organization switcher and org-scoped nav
+// targets, which is exactly what a user who has landed there does not have yet.
+// It deliberately does NOT go in AUTH_ROUTES, because that list means "bounce a
+// signed-in user away from here", and onboarding is only ever for signed-in
+// users.
+const CHROMELESS_AUTHED_ROUTES = ["/onboarding"]
+
 function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -112,6 +121,10 @@ function RootLayout() {
   }
 
   if (!isAuthenticated) {
+    return <Outlet />
+  }
+
+  if (CHROMELESS_AUTHED_ROUTES.includes(location.pathname)) {
     return <Outlet />
   }
 

@@ -11,6 +11,10 @@ import {
   type Organization,
   type Workspace,
 } from "@/lib/api"
+import {
+  registerOrgIdGetter as registerXgOrgIdGetter,
+  registerWorkspaceIdGetter as registerXgWorkspaceIdGetter,
+} from "@/lib/xorgate"
 import { useAuthStore } from "@/store/auth"
 
 interface WorkspaceState {
@@ -165,6 +169,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
 registerOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
 registerWorkspaceIdGetter(() => useWorkspaceStore.getState().currentWorkspaceId)
+registerXgOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
+registerXgWorkspaceIdGetter(
+  () => useWorkspaceStore.getState().currentWorkspaceId
+)
 
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.isAuthenticated && !state.isAuthenticated) {

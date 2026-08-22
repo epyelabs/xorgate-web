@@ -15,8 +15,8 @@ import {
   getDeviceResponseSchema,
 } from "@/lib/schemas"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
-import { useLiveBlock } from "@/hooks/use-live-block"
+import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
+import { xgMessage } from "@/lib/xorgate"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -55,7 +55,7 @@ function DeviceStreamsPage() {
     receivedAt,
     status,
     error: connError,
-  } = useIotTelemetry(id)
+  } = useLiveTelemetry(id)
   // Is the device refusing to run live KVS masters right now, and why? Resolved
   // (with fail-open + staleness) in one place and handed to the grid, which
   // renders a tile instead of mounting a viewer against a parked master.
@@ -174,7 +174,7 @@ function DeviceStreamsPage() {
   return (
     <div className="flex flex-col gap-4">
       {status === "error" && connError ? (
-        <p className="text-sm text-destructive">{connError}</p>
+        <p className="text-sm text-destructive">{xgMessage(connError)}</p>
       ) : null}
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>

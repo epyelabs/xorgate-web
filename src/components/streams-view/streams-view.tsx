@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { LocateFixedIcon } from "lucide-react"
 import type { ActiveStreamsViewType, ImuView, IoCapabilities } from "@/lib/api"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { LatestReading } from "@xorgate/sdk"
 import {
   gpsMetrics,
   imuAccelMetrics,

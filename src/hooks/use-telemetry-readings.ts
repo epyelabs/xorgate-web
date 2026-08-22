@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ApiError, getTelemetryTable } from "@/lib/api"
 import { getTelemetryTableResponseSchema } from "@/lib/schemas"
-import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
+import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 export interface UseTelemetryReadings {
   // Rows in display order (per `order`), keyed by metric for the table.

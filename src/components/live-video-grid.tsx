@@ -1,23 +1,24 @@
-import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { getKvsChannels, type KvsChannel } from "@/lib/api"
-import { getKvsChannelsResponseSchema } from "@/lib/schemas"
-import { selectStreamTile, type LiveBlockState } from "@/lib/live-block"
+import { xgMessage } from "@/lib/xorgate"
+import { selectStreamTile } from "@/lib/live-block"
 import { UnavailableStreamTile } from "@/components/unavailable-stream-tile"
 import {
-  useKvsViewer,
-  type KvsStatus,
-  type KvsStreamStats,
-} from "@/hooks/use-kvs-viewer"
+  useLiveVideo,
+  useVideoChannels,
+  type LiveBlockState,
+  type LiveVideoStatus,
+  type LiveVideoStats,
+  type VideoChannel,
+} from "@xorgate/react"
 
 // Live-status dot shown top-left of each tile, in place of a text badge. Green =
 // connected, amber (pulsing) = transient states (connecting / reconnecting), light
 // gray = waiting for the device, red = error. The label rides along as a tooltip +
 // aria-label so the meaning stays accessible without taking up space.
 const STATUS_META: Record<
-  KvsStatus,
+  LiveVideoStatus,
   { label: string; dot: string; pulse: boolean }
 > = {
   connecting: { label: "Connecting", dot: "bg-amber-400", pulse: true },
@@ -25,6 +26,7 @@ const STATUS_META: Record<
   connected: { label: "Live", dot: "bg-green-500", pulse: false },
   closed: { label: "Reconnecting", dot: "bg-amber-400", pulse: true },
   error: { label: "Error", dot: "bg-red-500", pulse: false },
+  unavailable: { label: "Live video unavailable", dot: "bg-zinc-400", pulse: false },
 }
 
 /**
@@ -72,7 +74,7 @@ const HOVER_REVEAL =
  * one interval). Returns null until at least one part is known, so the chip
  * never appears empty.
  */
-function formatStreamSpec(stats: KvsStreamStats | null): string | null {
+function formatStreamSpec(stats: LiveVideoStats | null): string | null {
   if (!stats) return null
   const parts: string[] = []
   if (stats.height) parts.push(`${stats.height}p`)
@@ -92,13 +94,13 @@ function LiveVideoTile({
   label,
   recordingOnDevice,
 }: {
-  channel: KvsChannel
+  channel: VideoChannel
   label: string
   // On-device video recording is a device-level flag (media.recording.value),
   // not per-camera, so every tile shows the dot while the device is recording.
   recordingOnDevice: boolean
 }) {
-  const { videoRef, status, error, stats } = useKvsViewer(channel)
+  const { videoRef, status, error, stats } = useLiveVideo(channel)
   const meta = STATUS_META[status]
   const spec = formatStreamSpec(stats)
 
@@ -148,7 +150,7 @@ function LiveVideoTile({
           ) : null}
         </div>
         {status === "error" && error ? (
-          <p className="p-2 text-xs text-destructive">{error}</p>
+          <p className="p-2 text-xs text-destructive">{xgMessage(error)}</p>
         ) : null}
       </CardContent>
     </Card>
@@ -185,35 +187,15 @@ export function LiveVideoGrid({
   // which tile to render. Absent = treat as allowed.
   liveBlock?: LiveBlockState
 }) {
-  const [channels, setChannels] = useState<KvsChannel[] | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setChannels(null)
-    setLoadError(null)
-    ;(async () => {
-      try {
-        const raw = await getKvsChannels(deviceId)
-        const parsed = getKvsChannelsResponseSchema.safeParse(raw)
-        if (!parsed.success) throw new Error("Unexpected video-channels response")
-        if (!cancelled) setChannels(parsed.data.channels)
-      } catch (err) {
-        if (!cancelled) setLoadError((err as Error).message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [deviceId])
+  const { data: channels, error: loadError } = useVideoChannels(deviceId)
 
   const labelFor = (streamKey: string) =>
     videoCaps.find((c) => c.key === streamKey)?.label ?? streamKey
 
   let body
   if (loadError) {
-    body = <p className="text-sm text-destructive">{loadError}</p>
-  } else if (channels === null) {
+    body = <p className="text-sm text-destructive">{xgMessage(loadError)}</p>
+  } else if (channels === undefined) {
     body = (
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Skeleton className="aspect-video max-h-[40vh] w-full" />

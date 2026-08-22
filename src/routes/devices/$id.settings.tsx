@@ -22,7 +22,7 @@ import {
 import { tabAttentionCounts } from "@/lib/device-config-status"
 import { Badge } from "@/components/ui/badge"
 import { useDeviceSettings } from "@/hooks/use-device-settings"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import { useLiveTelemetry } from "@xorgate/react"
 import { ConnectivityTab } from "./-components/settings/connectivity-tab"
 import { GeneralTab } from "./-components/settings/general-tab"
 import { InterfaceTab } from "./-components/settings/interface-tab"
@@ -80,7 +80,7 @@ function DeviceSettingsPage() {
     recording: reportedRecording,
     media: reportedMedia,
     latest,
-  } = useIotTelemetry(id)
+  } = useLiveTelemetry(id)
   const cpuTemp = latest["system.cpu_temp"]?.value ?? null
 
   // Read-only sections, fetched independently so a failure here never blocks

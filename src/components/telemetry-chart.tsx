@@ -8,7 +8,7 @@ import {
   YAxis,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
+import type { HistoryPoint } from "@/lib/telemetry-meta"
 import { metricLabel } from "@/lib/telemetry-meta"
 
 const COLORS = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c"]

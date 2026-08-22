@@ -1,4 +1,4 @@
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { LatestReading } from "@xorgate/sdk"
 import {
   formatMetricValue,
   formatUnit,

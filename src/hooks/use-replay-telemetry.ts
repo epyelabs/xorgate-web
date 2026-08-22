@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ApiError, getTelemetry } from "@/lib/api"
 import { getTelemetryResponseSchema } from "@/lib/schemas"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { LatestReading } from "@xorgate/sdk"
 import { useReplayClockState } from "@/hooks/use-replay-clock"
 import type { ReplayClock } from "@/lib/replay/replay-clock"
 import type { ReplayTimeline } from "@/lib/replay/timeline"
@@ -307,11 +307,16 @@ export function useReplayTelemetry(
       const win = windows.get(metricGroup(metric))
       if (win?.bounds && ts >= win.bounds.fromTs && ts <= win.bounds.toTs) {
         const s = win.series.get(metric)
-        return s ? latestWithin(s, ts, stalenessMs(metric)) : null
+        return s ? latestWithin(s, metric, ts, stalenessMs(metric)) : null
       }
       const s = overviewSeries.get(metric)
       if (!s) return null
-      return latestWithin(s, ts, overviewStalenessMs(metric, s.bucketMs ?? 0))
+      return latestWithin(
+        s,
+        metric,
+        ts,
+        overviewStalenessMs(metric, s.bucketMs ?? 0)
+      )
     }
   }, [overview.series, windowVersion])
 

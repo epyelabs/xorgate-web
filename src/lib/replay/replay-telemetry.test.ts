@@ -90,20 +90,21 @@ describe("latestWithin (nearest-sample resolution)", () => {
     unit: "m/s^2",
     bucketMs: null,
   }
-  it("returns the floor sample while fresh", () => {
-    expect(latestWithin(s, T0 + 450, 2500)).toEqual({
+  it("returns the floor sample while fresh, in the interop shape", () => {
+    expect(latestWithin(s, "imu.accel_x", T0 + 450, 2500)).toEqual({
+      metric: "imu.accel_x",
       value: 3,
       unit: "m/s^2",
-      ts: T0 + 400,
+      ts: new Date(T0 + 400).toISOString(),
     })
     // Never reads the future: a sample 50 ms ahead does not count.
-    expect(latestWithin(s, T0 + 199, 2500)?.value).toBe(1)
+    expect(latestWithin(s, "imu.accel_x", T0 + 199, 2500)?.value).toBe(1)
   })
   it("returns null before the first sample and past the cutoff", () => {
-    expect(latestWithin(s, T0 - 1, 2500)).toBeNull()
-    expect(latestWithin(s, T0 + 400 + 2501, 2500)).toBeNull()
+    expect(latestWithin(s, "imu.accel_x", T0 - 1, 2500)).toBeNull()
+    expect(latestWithin(s, "imu.accel_x", T0 + 400 + 2501, 2500)).toBeNull()
     // Exactly at the cutoff is still fresh.
-    expect(latestWithin(s, T0 + 400 + 2500, 2500)?.value).toBe(3)
+    expect(latestWithin(s, "imu.accel_x", T0 + 400 + 2500, 2500)?.value).toBe(3)
   })
 })
 

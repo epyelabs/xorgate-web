@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TelemetryTable } from "@/components/telemetry-table"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import { useLiveTelemetry } from "@xorgate/react"
 import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
 import {
@@ -41,7 +41,7 @@ const RECENT_TELEMETRY_ROWS = 10
 
 function DeviceOverviewPage() {
   const { id } = Route.useParams()
-  const { latest } = useIotTelemetry(id)
+  const { latest } = useLiveTelemetry(id)
 
   const [device, setDevice] = useState<Device | null>(null)
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
@@ -146,7 +146,7 @@ function DeviceOverviewPage() {
               }
             >
               {healthMetrics.map((m) => {
-                const r = latest[m]
+                const r = latest[m as keyof typeof latest]
                 return (
                   <div key={m} className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate text-[10px] tracking-wide text-muted-foreground uppercase">

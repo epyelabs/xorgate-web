@@ -1,5 +1,5 @@
 import type { TelemetryReadingRow } from "@/lib/api"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { LatestReading } from "@xorgate/sdk"
 
 // Pure telemetry math for replay (composite replays plan, Phase 4 / R4): turns
 // flat `{ts, metric, value}` readings into per-metric sorted series and
@@ -103,9 +103,13 @@ export function floorIndex(ts: number[], target: number): number {
   return ans
 }
 
-// Nearest sample ≤ ts within maxAgeMs, in the live hook's LatestReading shape.
+// Nearest sample ≤ ts within maxAgeMs, in the SDK's interop LatestReading
+// shape (the same one the live feed now publishes). Takes the metric name
+// because the interop reading carries it — mirroring the package's version of
+// this helper, which replaces this file when the replay page migrates.
 export function latestWithin(
   series: MetricSeries,
+  metric: string,
   ts: number,
   maxAgeMs: number
 ): LatestReading | null {
@@ -113,9 +117,10 @@ export function latestWithin(
   if (i === -1) return null
   if (ts - series.ts[i] > maxAgeMs) return null
   return {
+    metric: metric as LatestReading["metric"],
     value: series.v[i],
-    unit: series.unit ?? undefined,
-    ts: series.ts[i],
+    unit: series.unit ?? null,
+    ts: new Date(series.ts[i]).toISOString(),
   }
 }
 

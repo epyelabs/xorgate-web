@@ -32,10 +32,8 @@ import {
   DeviceAlertsButton,
   type DeviceAlert,
 } from "./-components/device-alerts"
-import {
-  useIotTelemetry,
-  type LatestReading,
-} from "@/hooks/use-iot-telemetry"
+import { useLiveTelemetry } from "@xorgate/react"
+import type { LatestReading } from "@xorgate/sdk"
 import { decodeThrottleBits } from "@/lib/telemetry-meta"
 import {
   getDeviceModelResponseSchema,
@@ -147,7 +145,7 @@ function DeviceLayout() {
   // dismissal/acknowledgment state lives inside DeviceAlertsButton.
   // (This adds a second MQTT connection on tabs that mount their own feed —
   // acceptable for now; a shared per-device feed is a future refactor.)
-  const { recording, latest } = useIotTelemetry(id)
+  const { recording, latest } = useLiveTelemetry(id)
   const alerts: DeviceAlert[] = []
   if (recording && recording.droppedSegments > 0) {
     alerts.push({

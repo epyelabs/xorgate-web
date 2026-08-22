@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ApiError, getTelemetry } from "@/lib/api"
 import { getTelemetryResponseSchema } from "@/lib/schemas"
-import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
+import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 // Aim for ~this many chart points per metric; the backend buckets server-side.
 const TARGET_POINTS = 500

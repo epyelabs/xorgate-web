@@ -24,9 +24,9 @@ import type { KvsChannel } from "@/lib/api"
 import type { DeviceConfigStatus } from "@/lib/device-config-status"
 import type { ResolvedRecording } from "@/lib/device-config-defaults"
 import type {
-  DeviceMediaStatus,
-  DeviceRecordingStatus,
-} from "@/hooks/use-iot-telemetry"
+  TelemetryMediaStatus as DeviceMediaStatus,
+  TelemetryRecordingStatus as DeviceRecordingStatus,
+} from "@xorgate/react"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { SettingsCallout } from "./callout"
 import { VideoOptions } from "./video-options"

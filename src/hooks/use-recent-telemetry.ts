@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { ApiError, getTelemetryRecent } from "@/lib/api"
 import { getTelemetryResponseSchema } from "@/lib/schemas"
-import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
+import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 export interface UseRecentTelemetry {
   // Pivoted rows ({ts, [metric]: value}) sorted ascending by ts.

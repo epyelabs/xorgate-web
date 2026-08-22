@@ -104,7 +104,24 @@ export const GNSS_HEALTH_LABELS: Record<number, string> = {
   3: "Unhealthy",
 }
 
-export function formatMetricValue(value: number, metric?: string): string {
+/**
+ * Pivoted chart/table row: one point per timestamp, one key per metric.
+ * Lived on the old use-iot-telemetry hook; the REST pivot hooks still build
+ * it, and the package's live `TelemetryPoint` rows are assignment-compatible
+ * where consumed.
+ */
+export interface HistoryPoint {
+  ts: number
+  [metric: string]: number | undefined
+}
+
+export function formatMetricValue(
+  value: number | null | undefined,
+  metric?: string
+): string {
+  // The SDK's interop reading is nullable (a stored row can carry no value);
+  // render the same em dash an absent reading gets.
+  if (value === null || value === undefined) return "—"
   // GNSS health is a coded state, not a quantity — show its name.
   if (metric === "lte.gnss_health") return GNSS_HEALTH_LABELS[value] ?? String(value)
   // Coordinates need full precision — the default rounding mangles lat/lon.

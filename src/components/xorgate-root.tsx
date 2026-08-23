@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 import { XorgateProvider } from "@xorgate/react"
 import { getIdToken } from "@/lib/cognito"
-import { BOUND_FETCH } from "@/lib/xorgate"
 import { useWorkspaceStore } from "@/store/workspace"
 
 // First-party provider config: REST via the same origin the SDK client module
@@ -14,8 +13,6 @@ const XORGATE_CONFIG = {
   identityPoolId: import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string,
   userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID as string,
   realtimeEndpoint: import.meta.env.VITE_IOT_ENDPOINT as string,
-  // TEMPORARY until @xorgate/sdk@0.1.2 — see BOUND_FETCH in lib/xorgate.ts.
-  fetch: BOUND_FETCH,
 }
 
 const XORGATE_AUTH = { getIdToken }

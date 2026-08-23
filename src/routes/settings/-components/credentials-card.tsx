@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { ApiError } from "@/lib/api"
+import { isXorgateError } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import {
   clearOrgCredential,
   listOrgCredentials,
@@ -72,18 +73,10 @@ function formatRotated(iso: string | null): string | null {
 }
 
 function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    try {
-      const body = JSON.parse(err.message) as { error?: { message?: string } }
-      if (body.error?.message) return body.error.message
-    } catch {
-      // fall through
-    }
-    return err.status === 403
-      ? "Only organization owners and admins can manage credentials"
-      : err.message
+  if (isXorgateError(err) && err.status === 403) {
+    return "Only organization owners and admins can manage credentials"
   }
-  return err instanceof Error ? err.message : String(err)
+  return xgMessage(err)
 }
 
 interface RowState {

@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { apiRequest } from "@/lib/api"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { mergeMockFunctionNodes } from "@/lib/code-function-mock"
 import {
   type CatalogNode,
@@ -35,7 +35,9 @@ export const useWorkflowCatalog = create<WorkflowCatalogState>((set, get) => ({
     if (status === "loading" || status === "ready") return
     set({ status: "loading", error: null })
     try {
-      const raw = await apiRequest<unknown>("/workflow-catalog")
+      // Workflows are outside the SDK's modeled surface; xg().request() is
+      // its documented escape hatch (auth + tenancy + /v1 still applied).
+      const raw = await xg().request<unknown>("GET", "/workflow-catalog")
       const parsed = workflowCatalogSchema.safeParse(raw)
       if (!parsed.success) {
         throw new Error("Unexpected /workflow-catalog response shape")
@@ -50,7 +52,7 @@ export const useWorkflowCatalog = create<WorkflowCatalogState>((set, get) => ({
         status: "ready",
       })
     } catch (err) {
-      set({ status: "error", error: (err as Error).message })
+      set({ status: "error", error: xgMessage(err) })
     }
   },
 }))

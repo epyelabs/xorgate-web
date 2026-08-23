@@ -1,4 +1,4 @@
-import type { IoCapabilities } from "@/lib/api"
+import type { IoCapabilities } from "@xorgate/sdk"
 
 // Capability → metric-key helpers shared by the live and history screens
 // (drives which widgets render). Extracted from $id.live.tsx in P4.

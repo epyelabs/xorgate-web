@@ -20,20 +20,20 @@ import {
   formatBytes,
   type DataTableColumn,
 } from "@/components/data-table"
-import type { KvsChannel } from "@/lib/api"
+import type { VideoChannel } from "@xorgate/sdk"
 import type { DeviceConfigStatus } from "@/lib/device-config-status"
 import type { ResolvedRecording } from "@/lib/device-config-defaults"
 import type {
-  DeviceMediaStatus,
-  DeviceRecordingStatus,
-} from "@/hooks/use-iot-telemetry"
+  TelemetryMediaStatus as DeviceMediaStatus,
+  TelemetryRecordingStatus as DeviceRecordingStatus,
+} from "@xorgate/react"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { SettingsCallout } from "./callout"
 import { VideoOptions } from "./video-options"
 
 const VIDEO_KEY = "device-recording-video-enabled"
 
-const kvsChannelColumns: DataTableColumn<KvsChannel>[] = [
+const kvsChannelColumns: DataTableColumn<VideoChannel>[] = [
   {
     id: "stream",
     header: "Stream",
@@ -64,7 +64,7 @@ export function MediaTab({
 }: {
   recording: ResolvedRecording
   configStatus: DeviceConfigStatus
-  channels: KvsChannel[] | null
+  channels: VideoChannel[] | null
   reportedRecording: DeviceRecordingStatus | null
   reportedMedia: DeviceMediaStatus | null
   isPending: (key: string) => boolean

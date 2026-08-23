@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { Device, ImuMount } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
+import type { ImuMount } from "@/lib/xorgate"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import {
   DEFAULT_IMU_MOUNT,
@@ -55,7 +56,7 @@ export function TelemetryTab({
   commit: (key: string, patch: DeviceSettingsPatch) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
-  const mount = device.imuMount ?? DEFAULT_IMU_MOUNT
+  const mount = device.config.imuMount ?? DEFAULT_IMU_MOUNT
   // Angle inputs are strings so partial numeric input ("-", "1.") never fights
   // the user; parsed on commit and re-seeded from the device, which is also how
   // a failed save snaps them back.

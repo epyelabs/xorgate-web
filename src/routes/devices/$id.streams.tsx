@@ -2,21 +2,15 @@ import { useEffect, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
+import type { IoCapabilities } from "@xorgate/sdk"
+import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
 import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
+  xg,
+  xgMessage,
   type ActiveStreamsViewType,
   type ImuView,
-  type IoCapabilities,
-} from "@/lib/api"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
-import { useBreadcrumbStore } from "@/store/breadcrumb"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
-import { useLiveBlock } from "@/hooks/use-live-block"
+} from "@/lib/xorgate"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -55,7 +49,7 @@ function DeviceStreamsPage() {
     receivedAt,
     status,
     error: connError,
-  } = useIotTelemetry(id)
+  } = useLiveTelemetry(id)
   // Is the device refusing to run live KVS masters right now, and why? Resolved
   // (with fail-open + staleness) in one place and handed to the grid, which
   // renders a tile instead of mounting a viewer against a parked master.
@@ -65,33 +59,19 @@ function DeviceStreamsPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const device = await xg().devices.get(id)
         if (cancelled) return
         useBreadcrumbStore
           .getState()
-          .setDeviceName(
-            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
-          )
-        setViewType(parsedDevice.data.device.activeStreamsViewType)
-        setImuView(parsedDevice.data.device.imuView)
-        setCameraEnables(
-          parsedDevice.data.device.recordingConfig?.video?.cameras
-        )
+          .setDeviceName(device.name ?? device.serial)
+        setViewType(device.uiPrefs.activeStreamsViewType ?? "card")
+        setImuView(device.uiPrefs.imuView ?? null)
+        setCameraEnables(device.config.recording?.video?.cameras)
 
-        const rawModel = await getDeviceModel(
-          parsedDevice.data.device.deviceModelId
-        )
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
+        const model = await xg().deviceModels.get(device.deviceModelId)
+        if (!cancelled) setCaps(model.ioCapabilities)
       } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) {
           setLoadError(message)
           toast.error(message)
@@ -174,7 +154,7 @@ function DeviceStreamsPage() {
   return (
     <div className="flex flex-col gap-4">
       {status === "error" && connError ? (
-        <p className="text-sm text-destructive">{connError}</p>
+        <p className="text-sm text-destructive">{xgMessage(connError)}</p>
       ) : null}
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>

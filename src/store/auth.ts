@@ -7,19 +7,15 @@ import {
   getCurrentSession,
   completeNewPassword as cognitoCompleteNewPassword,
 } from "@/lib/cognito"
-import {
-  getMe,
-  type MeUser,
-  type Membership,
-  type Organization,
-} from "@/lib/api"
+import { xgBootstrap } from "@/lib/xorgate"
+import type { Membership, Organization, User } from "@xorgate/sdk"
 
 // login() resolves to "newPasswordRequired" when an admin-created invitee signs
 // in with their temporary password and must set a new one before continuing.
 export type LoginResult = { status: "ok" } | { status: "newPasswordRequired" }
 
 interface AuthState {
-  user: MeUser | null
+  user: User | null
   memberships: Membership[]
   organizations: Organization[]
   isLoading: boolean
@@ -47,7 +43,9 @@ function decodeIdToken(token: string): IdTokenPayload {
 }
 
 async function hydrateFromMe(set: (partial: Partial<AuthState>) => void) {
-  const me = await getMe()
+  // The bootstrap client works with no organization selected, which is
+  // exactly this call's situation on first sign-in.
+  const me = await xgBootstrap().me()
   set({
     user: me.user,
     memberships: me.memberships,
@@ -69,6 +67,7 @@ async function applyIdToken(
       name: null,
       tier: "free",
       role: "user",
+      createdAt: null,
     },
     isAuthenticated: true,
   })
@@ -102,6 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           name: null,
           tier: "free",
           role: "user",
+          createdAt: null,
         },
         isAuthenticated: true,
         isLoading: false,

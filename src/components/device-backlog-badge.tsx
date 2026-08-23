@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { DeviceRecordingStatus } from "@/hooks/use-iot-telemetry"
+import type { TelemetryRecordingStatus as DeviceRecordingStatus } from "@xorgate/react"
 
 // On-device upload-backlog status, driven by the live payload's `recording`
 // block (offline recording plan, Phase 5). Formerly device-recording-indicator,

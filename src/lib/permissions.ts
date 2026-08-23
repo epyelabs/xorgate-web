@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
-import type { MembershipRole } from "@/lib/api"
+import type { MembershipRole } from "@xorgate/sdk"
 
 // Route-level authorization is frontend-only for now: the backend does not
 // enforce per-role access on these endpoints yet, so treat everything here as

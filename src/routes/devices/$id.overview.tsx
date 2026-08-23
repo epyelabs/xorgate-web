@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TelemetryTable } from "@/components/telemetry-table"
-import { useIotTelemetry } from "@/hooks/use-iot-telemetry"
+import { useLiveTelemetry } from "@xorgate/react"
 import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
 import {
@@ -15,17 +15,8 @@ import {
   formatUnit,
   metricLabel,
 } from "@/lib/telemetry-meta"
-import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
-  type Device,
-  type IoCapabilities,
-} from "@/lib/api"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { Device, IoCapabilities } from "@xorgate/sdk"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { RecentSessionsSection } from "./-components/recent-sessions-section"
 
@@ -41,7 +32,7 @@ const RECENT_TELEMETRY_ROWS = 10
 
 function DeviceOverviewPage() {
   const { id } = Route.useParams()
-  const { latest } = useIotTelemetry(id)
+  const { latest } = useLiveTelemetry(id)
 
   const [device, setDevice] = useState<Device | null>(null)
   const [caps, setCaps] = useState<IoCapabilities | null>(null)
@@ -53,26 +44,17 @@ function DeviceOverviewPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const fetched = await xg().devices.get(id)
         if (cancelled) return
-        const fetched = parsedDevice.data.device
         setDevice(fetched)
         useBreadcrumbStore
           .getState()
           .setDeviceName(fetched.name ?? fetched.serial)
 
-        const rawModel = await getDeviceModel(fetched.deviceModelId)
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
+        const model = await xg().deviceModels.get(fetched.deviceModelId)
+        if (!cancelled) setCaps(model.ioCapabilities)
       } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) {
           setLoadError(message)
           toast.error(message)
@@ -146,7 +128,7 @@ function DeviceOverviewPage() {
               }
             >
               {healthMetrics.map((m) => {
-                const r = latest[m]
+                const r = latest[m as keyof typeof latest]
                 return (
                   <div key={m} className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -204,7 +186,7 @@ function DeviceOverviewPage() {
           layout as above. */}
       <RecentSessionsSection
         deviceId={id}
-        recordingEnabled={device?.recordingConfig?.video?.enabled}
+        recordingEnabled={device?.config.recording?.video?.enabled}
       />
     </div>
   )

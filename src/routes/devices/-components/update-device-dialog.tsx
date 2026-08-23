@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { LatestAgentBuild } from "@/lib/api"
+import type { AgentBuild as LatestAgentBuild } from "@xorgate/sdk"
 import type { ReportedAgentBuild } from "@/lib/device-config-status"
 import { formatTimestamp } from "./settings/shared"
 

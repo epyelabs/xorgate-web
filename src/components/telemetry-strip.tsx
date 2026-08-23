@@ -26,8 +26,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { IoCapabilities } from "@/lib/api"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { IoCapabilities } from "@xorgate/sdk"
+import type { LatestReading } from "@xorgate/sdk"
 import {
   gpsMetrics,
   imuAccelMetrics,

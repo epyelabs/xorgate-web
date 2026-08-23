@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import mqtt from "mqtt"
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
-import { getIdToken } from "@/lib/cognito"
-import { attachIotPolicy } from "@/lib/api"
-import { browserClientId, presignIotWssUrl } from "@/lib/iot-wss"
+import { presignIotWssUrl, useLiveCredentials } from "@xorgate/react"
+import { attachLiveAccess, browserClientId } from "@/lib/live-plane"
 import {
   simEventPayloadSchema,
   simPreviewPayloadSchema,
@@ -18,8 +16,6 @@ import {
 } from "@/lib/workflow-sim-schemas"
 
 const REGION = import.meta.env.VITE_AWS_REGION as string
-const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string
-const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID as string
 const IOT_ENDPOINT = import.meta.env.VITE_IOT_ENDPOINT as string
 
 const FLUSH_MS = 200 // coalesce bursts of step/record messages into ≤5 renders/s
@@ -70,8 +66,14 @@ const decoder = new TextDecoder()
 export function useSimProgress(topicPrefix: string | null): SimProgress {
   const [state, setState] = useState<SimProgress>(EMPTY)
 
-  // Buffers mutated on message, flushed to state on a timer (like
-  // use-iot-telemetry) so 10/s record bursts don't render-thrash.
+  // Credentials come from the provider's shared resolver (same cache the live
+  // telemetry/video hooks use), so this hook mints nothing of its own. A
+  // refresh changes the object identity, which re-runs the effect below and
+  // reconnects on a freshly presigned URL.
+  const { credentials, refresh } = useLiveCredentials()
+
+  // Buffers mutated on message, flushed to state on a timer (like the live
+  // telemetry feed) so 10/s record bursts don't render-thrash.
   const bufRef = useRef<SimProgress>(EMPTY)
   const dirtyRef = useRef(false)
 
@@ -94,28 +96,18 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
       dirtyRef.current = true
     }
 
-    if (!IOT_ENDPOINT || !IDENTITY_POOL_ID) {
+    if (!IOT_ENDPOINT) {
       patch({
         connection: "error",
-        connectionError:
-          "Live progress is not configured (set VITE_IOT_ENDPOINT + VITE_COGNITO_IDENTITY_POOL_ID).",
+        connectionError: "Live progress is not configured (set VITE_IOT_ENDPOINT).",
       })
       setState(bufRef.current)
       return
     }
-
-    async function freshCreds() {
-      const idToken = await getIdToken()
-      if (!idToken) throw new Error("Not authenticated")
-      const provider = fromCognitoIdentityPool({
-        identityPoolId: IDENTITY_POOL_ID,
-        logins: {
-          [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-        },
-        clientConfig: { region: REGION },
-      })
-      return provider()
-    }
+    // Credentials still resolving (or the live plane is unavailable): stay in
+    // "connecting"; the effect re-runs when they arrive.
+    if (!credentials) return
+    const creds = credentials
 
     function scheduleReconnect() {
       if (cancelled || reconnectTimer) return
@@ -181,9 +173,7 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
         // AWS IoT authorizes Cognito identities via an attached IoT policy;
         // idempotent, same dance as the live-telemetry pages. The identityId it
         // returns is what the client id must start with (see browserClientId).
-        const { identityId } = await attachIotPolicy()
-        if (cancelled) return
-        const creds = await freshCreds()
+        const { identityId } = await attachLiveAccess()
         if (cancelled) return
         const url = await presignIotWssUrl(IOT_ENDPOINT, REGION, creds)
         if (cancelled) return
@@ -215,6 +205,9 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
             connection: "error",
             connectionError: (err as Error)?.message ?? "mqtt error",
           })
+          // A refusal here is most often an expired credential: ask the shared
+          // resolver for a fresh one (identity change re-runs this effect).
+          void refresh()
           next.end(true)
         })
 
@@ -244,7 +237,7 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       client?.end(true)
     }
-  }, [topicPrefix])
+  }, [topicPrefix, credentials, refresh])
 
   return state
 }

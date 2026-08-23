@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { TelemetryTablePage } from "@/lib/api"
+import type { TelemetryTableColumn, TelemetryTablePage } from "@xorgate/sdk"
 import {
   TELEMETRY_EXPORT_CAP,
   type TelemetryExport,
@@ -25,7 +25,7 @@ const SERVER_TOTAL_CAP = 10_000
 
 // The model-derived column set, as the server would send it: fixed for the whole
 // walk, and independent of what any one page contains.
-const COLUMNS = [
+const COLUMNS: TelemetryTableColumn[] = [
   { key: "imu.accel_x", unit: "m/s^2" },
   { key: "system.cpu_usage", unit: "%" },
 ]
@@ -271,7 +271,7 @@ describe("collectTelemetryForExport", () => {
     // Every request returns one fresh, strictly older timestamp — the cursor
     // always advances, so only MAX_REQUESTS can stop it.
     let ts = Date.parse("2026-08-04T12:00:00.000Z")
-    const fetchPage = async () => {
+    const fetchPage = async (): Promise<TelemetryTablePage> => {
       ts -= 1000
       return {
         columns: [{ key: "imu.accel_x", unit: null }],

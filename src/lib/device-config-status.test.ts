@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Device } from "./api"
+import type { Device } from "@xorgate/sdk"
 import {
   computeConfigStatus,
   configStateExplanation,
@@ -24,7 +24,12 @@ function device(overrides: Partial<Device> = {}): Device {
   } as Device
 }
 
-function report(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+// Cast to the SDK's reportedConfig slot: these fixtures deliberately include
+// malformed shapes (parseReportedConfig's whole job), which the wire type
+// cannot express.
+function report(
+  overrides: Record<string, unknown> = {}
+): NonNullable<Device["reportedConfig"]> {
   return {
     v: 1,
     deviceId: "dev-1",
@@ -34,7 +39,7 @@ function report(overrides: Record<string, unknown> = {}): Record<string, unknown
     effective: {},
     status: {},
     ...overrides,
-  }
+  } as unknown as NonNullable<Device["reportedConfig"]>
 }
 
 describe("parseReportedConfig", () => {

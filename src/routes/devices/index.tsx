@@ -21,8 +21,8 @@ import {
   StatusDot,
   type DataTableColumn,
 } from "@/components/data-table"
-import { listDevices, type Device, type DeviceStatus } from "@/lib/api"
-import { listDevicesResponseSchema } from "@/lib/schemas"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { Device, DeviceStatus } from "@xorgate/sdk"
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
@@ -114,14 +114,13 @@ function DevicesListPage() {
         let offset = 0
         let total = Infinity
         while (offset < total && all.length < FLEET_CAP) {
-          const raw = await listDevices({ limit: FLEET_PAGE, offset })
-          const parsed = listDevicesResponseSchema.safeParse(raw)
-          if (!parsed.success) {
-            throw new Error("Unexpected /devices response shape")
-          }
-          all.push(...parsed.data.devices)
-          total = parsed.data.page?.total ?? parsed.data.devices.length
-          if (parsed.data.devices.length === 0) break
+          const { items, page: pageMeta } = await xg().devices.list({
+            limit: FLEET_PAGE,
+            offset,
+          })
+          all.push(...items)
+          total = pageMeta.total
+          if (items.length === 0) break
           offset += FLEET_PAGE
         }
         if (cancelled) return
@@ -130,7 +129,7 @@ function DevicesListPage() {
         setSelected(new Set())
         setPage(1)
       } catch (err) {
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (cancelled) return
         setError(message)
         setData({ workspaceId: currentWorkspaceId, devices: [] })

@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ApiError, getTelemetryTable } from "@/lib/api"
+import { xg, xgMessage } from "@/lib/xorgate"
 import {
   buildTelemetryCsv,
   collectTelemetryForExport,
@@ -243,7 +243,7 @@ function DeviceTelemetryPage() {
     setExporting(true)
     try {
       const result = await collectTelemetryForExport(
-        (params) => getTelemetryTable(id, params),
+        (params) => xg().telemetry.readings(id, params),
         { order, from: fromIso, to: toIso }
       )
       const csv = buildTelemetryCsv(result, columns)
@@ -254,9 +254,7 @@ function DeviceTelemetryPage() {
         )
       }
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : (err as Error).message
-      toast.error(`Export failed: ${message}`)
+      toast.error(`Export failed: ${xgMessage(err)}`)
     } finally {
       setExporting(false)
     }

@@ -10,11 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  createDeviceRegistration,
-  getDeviceRegistration,
-  type DeviceRegistration,
-} from "@/lib/api"
+import type { DeviceRegistration } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 
 type Phase = "creating" | "pending" | "claimed" | "expired" | "error"
 
@@ -62,13 +59,13 @@ export function ProvisionDeviceDialog({
     setCopied(false)
     ;(async () => {
       try {
-        const r = await createDeviceRegistration()
+        const r = await xg().deviceRegistrations.create()
         if (cancelled) return
         setReg(r)
         setPhase(phaseFromStatus(r.status))
       } catch (err) {
         if (cancelled) return
-        setErrorMsg((err as Error).message || "Failed to create registration")
+        setErrorMsg(xgMessage(err) || "Failed to create registration")
         setPhase("error")
       }
     })()
@@ -85,7 +82,7 @@ export function ProvisionDeviceDialog({
     let cancelled = false
     const id = setInterval(async () => {
       try {
-        const r = await getDeviceRegistration(code)
+        const r = await xg().deviceRegistrations.get(code)
         if (cancelled) return
         setReg(r)
         if (r.status === "claimed" && r.deviceId) {

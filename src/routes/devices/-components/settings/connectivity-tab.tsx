@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { Device, LteRecoveryConfig } from "@/lib/api"
+import type { Device, LteRecoveryConfig } from "@xorgate/sdk"
 import type { DeviceConfigStatus } from "@/lib/device-config-status"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
@@ -71,7 +71,7 @@ export function ConnectivityTab({
   refreshReport: () => void
   refreshing: boolean
 }) {
-  const lteRecovery = device.lteRecoveryConfig
+  const lteRecovery = device.config.lteRecovery ?? null
 
   // Spreading the stored object preserves knobs set out-of-band (xorgate set /
   // API); the backend persists it and delivers it as retained MQTT config,
@@ -105,7 +105,7 @@ export function ConnectivityTab({
               </FieldContent>
               <Switch
                 id={GNSS_KEY}
-                checked={device.gnssAntBias}
+                checked={device.config.gnssAntBias ?? false}
                 disabled={isPending(GNSS_KEY)}
                 onCheckedChange={(next) =>
                   commit(GNSS_KEY, { gnssAntBias: next })

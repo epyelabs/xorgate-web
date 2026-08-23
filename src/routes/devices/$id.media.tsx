@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { type DateRangeMode } from "@/components/data-table"
-import { type MediaSessionStatus } from "@/lib/api"
+import { type MediaSessionStatus } from "@/lib/xorgate"
 import {
   DeviceSessionsCard,
   SESSION_PAGE_SIZES,

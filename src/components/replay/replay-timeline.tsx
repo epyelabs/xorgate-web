@@ -19,16 +19,11 @@ import { formatDateTime } from "@/lib/format-time"
 import { cn } from "@/lib/utils"
 import {
   REPLAY_RATES,
-  type ReplayClock,
-  type ReplayRate,
-} from "@/lib/replay/replay-clock"
-import {
-  nextBoundary,
-  prevBoundary,
   segmentEnd,
+  type ReplayRate,
   type ReplayTimeline as Timeline,
-} from "@/lib/replay/timeline"
-import { useReplayClockState } from "@/hooks/use-replay-clock"
+  type UseReplayPlayer,
+} from "@xorgate/react"
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" })
 
@@ -55,20 +50,18 @@ function coverageRuns(timeline: Timeline): { fromTs: number; toTs: number }[] {
  * playhead's wall-clock readout. Pure follower/commander of the replay clock.
  */
 export function ReplayTimelineBar({
-  clock,
+  player,
   timeline,
 }: {
-  clock: ReplayClock
+  player: UseReplayPlayer
   timeline: Timeline
 }) {
-  const state = useReplayClockState(clock)
   const trackRef = useRef<HTMLDivElement>(null)
   const [hoverTs, setHoverTs] = useState<number | null>(null)
 
   const span = timeline.to - timeline.from
   const runs = useMemo(() => coverageRuns(timeline), [timeline])
 
-  if (!state) return null
   const pct = (ts: number) => ((ts - timeline.from) / span) * 100
 
   const tsAtClientX = (clientX: number): number => {
@@ -89,12 +82,12 @@ export function ReplayTimelineBar({
         className="group relative h-6 cursor-pointer touch-none select-none"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
-          clock.seek(tsAtClientX(e.clientX))
+          player.seek(tsAtClientX(e.clientX))
         }}
         onPointerMove={(e) => {
           setHoverTs(tsAtClientX(e.clientX))
           if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-            clock.seek(tsAtClientX(e.clientX))
+            player.seek(tsAtClientX(e.clientX))
           }
         }}
         onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
@@ -141,7 +134,7 @@ export function ReplayTimelineBar({
         {/* Playhead */}
         <div
           className="pointer-events-none absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-primary"
-          style={{ left: `${pct(state.playheadTs)}%` }}
+          style={{ left: `${pct(player.playheadTs)}%` }}
         >
           <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rounded-full bg-primary shadow" />
         </div>
@@ -164,18 +157,18 @@ export function ReplayTimelineBar({
             variant="ghost"
             title="Previous segment boundary"
             aria-label="Previous segment boundary"
-            onClick={() => clock.seek(prevBoundary(timeline, state.playheadTs))}
+            onClick={() => player.stepBoundary(-1)}
           >
             <SkipBackIcon className="size-4" />
           </Button>
           <Button
             size="icon-sm"
             variant="secondary"
-            title={state.playing ? "Pause" : "Play"}
-            aria-label={state.playing ? "Pause" : "Play"}
-            onClick={() => (state.playing ? clock.pause() : clock.play())}
+            title={player.playing ? "Pause" : "Play"}
+            aria-label={player.playing ? "Pause" : "Play"}
+            onClick={() => (player.playing ? player.pause() : player.play())}
           >
-            {state.playing ? (
+            {player.playing ? (
               <PauseIcon className="size-4" />
             ) : (
               <PlayIcon className="size-4" />
@@ -186,7 +179,7 @@ export function ReplayTimelineBar({
             variant="ghost"
             title="Next segment boundary"
             aria-label="Next segment boundary"
-            onClick={() => clock.seek(nextBoundary(timeline, state.playheadTs))}
+            onClick={() => player.stepBoundary(1)}
           >
             <SkipForwardIcon className="size-4" />
           </Button>
@@ -200,15 +193,15 @@ export function ReplayTimelineBar({
               className="w-14 tabular-nums"
               title="Playback rate"
             >
-              {state.rate}×
+              {player.rate}×
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             {REPLAY_RATES.map((r: ReplayRate) => (
               <DropdownMenuItem
                 key={r}
-                onSelect={() => clock.setRate(r)}
-                className={cn("tabular-nums", r === state.rate && "font-semibold")}
+                onSelect={() => player.setRate(r)}
+                className={cn("tabular-nums", r === player.rate && "font-semibold")}
               >
                 {r}×
               </DropdownMenuItem>
@@ -219,8 +212,8 @@ export function ReplayTimelineBar({
         <div className="flex items-center gap-1.5">
           <Switch
             id="replay-skip-gaps"
-            checked={state.skipGaps}
-            onCheckedChange={(v) => clock.setSkipGaps(v === true)}
+            checked={player.skipGaps}
+            onCheckedChange={(v) => player.setSkipGaps(v === true)}
           />
           <Label
             htmlFor="replay-skip-gaps"
@@ -232,9 +225,9 @@ export function ReplayTimelineBar({
         </div>
 
         <div className="ml-auto flex items-baseline gap-2 text-xs tabular-nums">
-          <span className="font-medium">{formatDateTime(state.playheadTs)}</span>
+          <span className="font-medium">{formatDateTime(player.playheadTs)}</span>
           <span className="text-muted-foreground">
-            {formatDuration(state.playheadTs - timeline.from)} /{" "}
+            {formatDuration(player.playheadTs - timeline.from)} /{" "}
             {formatDuration(span)} · local time
           </span>
         </div>

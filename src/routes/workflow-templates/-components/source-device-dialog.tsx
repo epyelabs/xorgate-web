@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { WindowPicker } from "@/components/session-pickers"
-import type { Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
 import { DeviceRadioList } from "./device-radio-list"
 import { deviceLabel, type SourceBinding } from "./simulator-types"

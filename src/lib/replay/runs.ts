@@ -1,4 +1,10 @@
-import type { ApiRecordingRun, MediaSession } from "@/lib/api"
+// The SDK's RecordingRun IS the wire shape this file used to call
+// ApiRecordingRun (ISO timestamps, sessions embedded); the alias keeps the
+// adapter's vocabulary intact. The epoch-ms RecordingRun below stays local.
+import type {
+  MediaSession,
+  RecordingRun as ApiRecordingRun,
+} from "@xorgate/sdk"
 
 // Recording runs (composite replays plan, R9): one drive with N cameras
 // produces N per-cam sessions; the sessions table's primary object is the
@@ -55,16 +61,23 @@ function endMs(s: MediaSession): number {
 // helpers below read. The API speaks ISO (the sessions dialect); replay works
 // in epoch ms (the replay-clock unit), so the conversion happens here, once.
 export function runFromApi(run: ApiRecordingRun): RecordingRun {
+  // The rollups are optional in the SDK type (a defensive wire posture); the
+  // endpoint always sends them, so recompute only when genuinely absent.
   return {
     key: run.key,
     sessions: run.sessions,
     fromMs: Date.parse(run.fromTs),
     toMs: Date.parse(run.toTs),
     streamKeys: run.streamKeys,
-    segmentCount: run.segmentCount,
-    totalBytes: run.totalBytes,
-    anyOpen: run.anyOpen,
-    anyUnsynced: run.anyUnsynced,
+    segmentCount:
+      run.segmentCount ??
+      run.sessions.reduce((n, s) => n + (s.segmentCount ?? 0), 0),
+    totalBytes:
+      run.totalBytes ??
+      run.sessions.reduce((n, s) => n + (s.totalBytes ?? 0), 0),
+    anyOpen: run.anyOpen ?? run.sessions.some((s) => s.status === "open"),
+    anyUnsynced:
+      run.anyUnsynced ?? run.sessions.some((s) => s.timeSource === "unsynced"),
   }
 }
 
@@ -103,8 +116,8 @@ export function clusterRuns(
       fromMs: c.fromMs,
       toMs: c.toMs,
       streamKeys: [...new Set(c.sessions.map((s) => s.streamKey))].sort(),
-      segmentCount: c.sessions.reduce((n, s) => n + s.segmentCount, 0),
-      totalBytes: c.sessions.reduce((n, s) => n + s.totalBytes, 0),
+      segmentCount: c.sessions.reduce((n, s) => n + (s.segmentCount ?? 0), 0),
+      totalBytes: c.sessions.reduce((n, s) => n + (s.totalBytes ?? 0), 0),
       anyOpen: c.sessions.some((s) => s.status === "open"),
       anyUnsynced: c.sessions.some((s) => s.timeSource === "unsynced"),
     }))

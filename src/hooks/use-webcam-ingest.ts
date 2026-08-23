@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import mqtt from "mqtt"
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-provider-cognito-identity"
-import { getIdToken } from "@/lib/cognito"
-import { attachIotPolicy } from "@/lib/api"
-import { browserClientId, presignIotWssUrl } from "@/lib/iot-wss"
+import { presignIotWssUrl, useLiveCredentials } from "@xorgate/react"
+import { attachLiveAccess, browserClientId } from "@/lib/live-plane"
 
 const REGION = import.meta.env.VITE_AWS_REGION as string
-const IDENTITY_POOL_ID = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string
-const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID as string
 const IOT_ENDPOINT = import.meta.env.VITE_IOT_ENDPOINT as string
 
 // The engine-side guardrails mirrored client-side: <= 5 fps, <= 480p JPEG,
@@ -67,6 +63,8 @@ export function useWebcamIngest(args: {
   cameraDeviceId?: string
 }): WebcamIngest {
   const { active, topicPrefix, nodeId, cameraDeviceId } = args
+  // Provider-shared live credentials; nothing is minted locally.
+  const { credentials } = useLiveCredentials()
   const [status, setStatus] = useState<WebcamIngestStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [framesSent, setFramesSent] = useState(0)
@@ -128,10 +126,12 @@ export function useWebcamIngest(args: {
         setStatus("starting")
         setError(null)
         setFramesSent(0)
-        if (!IOT_ENDPOINT || !IDENTITY_POOL_ID) {
-          throw new Error(
-            "Live ingest is not configured (set VITE_IOT_ENDPOINT + VITE_COGNITO_IDENTITY_POOL_ID)",
-          )
+        if (!IOT_ENDPOINT) {
+          throw new Error("Live ingest is not configured (set VITE_IOT_ENDPOINT)")
+        }
+        if (!credentials) {
+          // Resolver still minting; the effect re-runs when they arrive.
+          return
         }
 
         media = await navigator.mediaDevices.getUserMedia({
@@ -145,18 +145,9 @@ export function useWebcamIngest(args: {
 
         // Same identity/policy/presign dance as use-sim-progress; the
         // identityId is what the client id must start with (browserClientId).
-        const { identityId } = await attachIotPolicy()
-        const idToken = await getIdToken()
-        if (!idToken) throw new Error("Not authenticated")
-        const creds = await fromCognitoIdentityPool({
-          identityPoolId: IDENTITY_POOL_ID,
-          logins: {
-            [`cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`]: idToken,
-          },
-          clientConfig: { region: REGION },
-        })()
+        const { identityId } = await attachLiveAccess()
         if (cancelled) return
-        const url = await presignIotWssUrl(IOT_ENDPOINT, REGION, creds)
+        const url = await presignIotWssUrl(IOT_ENDPOINT, REGION, credentials)
         if (cancelled) return
 
         client = mqtt.connect(url, {
@@ -231,7 +222,7 @@ export function useWebcamIngest(args: {
       teardown(true)
       stopRef.current = null
     }
-  }, [active, topicPrefix, nodeId, cameraDeviceId])
+  }, [active, topicPrefix, nodeId, cameraDeviceId, credentials])
 
   const stop = useCallback(() => stopRef.current?.(), [])
   return { status, error, framesSent, stream, stop }

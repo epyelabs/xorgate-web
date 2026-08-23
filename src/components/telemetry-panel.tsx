@@ -1,5 +1,5 @@
-import type { IoCapabilities } from "@/lib/api"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { IoCapabilities } from "@xorgate/sdk"
+import type { LatestReading } from "@xorgate/sdk"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
 import { MetricCell } from "@/components/telemetry-metric-cell"
 import { METRIC_GRID, metricGridStyle } from "@/lib/telemetry-grid"

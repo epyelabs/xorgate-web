@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { formatBytes } from "@/components/data-table"
-import type { Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import {
   DEFAULT_TIME_SYNC_OFFLINE_SOURCES,
@@ -54,7 +54,7 @@ export function SystemTab({
   commit: (key: string, patch: DeviceSettingsPatch) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
-  const timeSync = device.timeSyncConfig
+  const timeSync = device.config.timeSync ?? null
 
   return (
     <div className="flex w-full flex-col gap-4">

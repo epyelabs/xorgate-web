@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiError, removeMembership, type OrgMember } from "@/lib/api"
+import type { MembershipWithUser } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 
 export function RemoveMemberDialog({
   open,
@@ -20,7 +21,7 @@ export function RemoveMemberDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  member: OrgMember | null
+  member: MembershipWithUser | null
   onRemoved: () => void
 }) {
   const [removing, setRemoving] = useState(false)
@@ -31,16 +32,12 @@ export function RemoveMemberDialog({
     if (!member) return
     setRemoving(true)
     try {
-      await removeMembership(member.id)
+      await xg().memberships.remove(member.id)
       toast.success(`Removed ${label}`)
       onRemoved()
       onOpenChange(false)
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to remove member"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setRemoving(false)
     }

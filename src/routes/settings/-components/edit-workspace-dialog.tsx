@@ -12,7 +12,8 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { createWorkspaceSchema } from "@/lib/schemas"
-import { ApiError, type Workspace } from "@/lib/api"
+import type { Workspace } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import { useWorkspaceStore } from "@/store/workspace"
 
 // Edit dialog for an existing workspace. Mirrors CreateWorkspaceDialog but
@@ -85,11 +86,7 @@ function EditWorkspaceForm({
       toast.success(`Workspace "${updated.name}" updated`)
       onClose()
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to update workspace"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setSubmitting(false)
     }

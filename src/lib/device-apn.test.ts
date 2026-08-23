@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Device } from "./api"
+import type { Device } from "@xorgate/sdk"
 import {
   apnInputError,
   apnMachineNote,

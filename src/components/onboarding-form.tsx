@@ -17,7 +17,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { ApiError } from "@/lib/api"
+import { xgMessage } from "@/lib/xorgate"
 import { createOrganizationSchema, createWorkspaceSchema } from "@/lib/schemas"
 import { slugify } from "@/lib/utils"
 import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
@@ -75,9 +75,7 @@ export function OnboardingForm({
       void navigate({ to: DEFAULT_AUTHED_ROUTE, replace: true })
     } catch (err) {
       const message =
-        err instanceof ApiError
-          ? err.message
-          : ((err as Error).message ?? "Failed to create organization")
+        xgMessage(err) || "Failed to create organization"
       toast.error(message)
       setSubmitting(false)
     }

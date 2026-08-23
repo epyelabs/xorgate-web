@@ -1,4 +1,4 @@
-import { getTelemetryRecent } from "@/lib/api"
+import { xg } from "@/lib/xorgate"
 import {
   createSimulationUpload,
   uploadFileToS3,
@@ -88,7 +88,7 @@ async function lastNWindow(
   deviceId: string,
   n: number,
 ): Promise<{ from: string; to: string }> {
-  const { readings } = await getTelemetryRecent(deviceId, { limit: n })
+  const { readings } = await xg().telemetry.recent(deviceId, { limit: n })
   if (readings.length === 0) {
     throw new BindingResolveError(
       nodeId,

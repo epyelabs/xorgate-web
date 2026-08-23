@@ -21,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ActiveStreamsViewType, Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
+import type { ActiveStreamsViewType } from "@/lib/xorgate"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import { DEFAULT_IMU_VIEW } from "@/lib/device-config-defaults"
 import { SettingsCallout } from "./callout"
@@ -44,7 +45,7 @@ export function InterfaceTab({
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
 }) {
-  const view = device.imuView ?? DEFAULT_IMU_VIEW
+  const view = device.uiPrefs.imuView ?? DEFAULT_IMU_VIEW
   // Angle inputs are strings so partial numeric input ("-", "1.") never fights
   // the user; parsed on blur, re-seeded from the device (which is also how a
   // failed save and the backend's elevation clamp snap the fields back).
@@ -97,7 +98,7 @@ export function InterfaceTab({
                   Default stream view
                 </FieldLabel>
                 <Select
-                  value={device.activeStreamsViewType}
+                  value={device.uiPrefs.activeStreamsViewType ?? "card"}
                   disabled={isPending(VIEW_TYPE_KEY)}
                   onValueChange={(v) =>
                     commit(VIEW_TYPE_KEY, {

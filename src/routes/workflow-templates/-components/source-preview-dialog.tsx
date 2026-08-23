@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getSegmentPlaybackUrl, getSessionSegments } from "@/lib/api"
+import { xg, xgMessage } from "@/lib/xorgate"
 import type { VideoBinding } from "./simulator-types"
 import { bindingLabel } from "./simulator-types"
 
@@ -51,7 +51,7 @@ export function SourcePreviewDialog({
       try {
         // Chronologically first segment — NOT seq 0, which retention may have
         // evicted (and seq ordering is unreliable for reopened sessions).
-        const { segments } = await getSessionSegments(
+        const { segments } = await xg().media.segments(
           binding.deviceId,
           binding.session.id,
         )
@@ -59,14 +59,14 @@ export function SourcePreviewDialog({
           a.startTs < b.startTs ? -1 : 1,
         )[0]
         if (!first) throw new Error("This session has no stored segments")
-        const { url: playUrl } = await getSegmentPlaybackUrl(
+        const { url: playUrl } = await xg().media.segmentPlaybackUrl(
           binding.deviceId,
           binding.session.id,
           first.seq,
         )
         if (!cancelled) setRemoteUrl(playUrl)
       } catch (err) {
-        if (!cancelled) setError((err as Error).message)
+        if (!cancelled) setError(xgMessage(err))
       }
     })()
     return () => {
@@ -97,7 +97,7 @@ export function SourcePreviewDialog({
         }
         if (webcamRef.current) webcamRef.current.srcObject = stream
       } catch (err) {
-        if (!cancelled) setError((err as Error).message)
+        if (!cancelled) setError(xgMessage(err))
       }
     })()
     return () => {

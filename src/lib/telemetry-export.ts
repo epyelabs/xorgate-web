@@ -1,4 +1,4 @@
-import type { TelemetryTablePage } from "@/lib/api"
+import type { TelemetryTablePage } from "@xorgate/sdk"
 import { formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 /**
@@ -102,7 +102,7 @@ type FetchPage = (params: {
  * oldest-first (`asc`), up to `cap` timestamps.
  *
  * `fetchPage` is injected so the walk is testable without a network: it is
- * `getTelemetryTable` bound to a device at the call site. No metric filter is
+ * `xg().telemetry.readings` bound to a device at the call site. No metric filter is
  * sent — the server derives the column set from the device model, the same set
  * the table displays.
  *

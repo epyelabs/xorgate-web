@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
 import { isOlderThan } from "@/lib/relative-time"
 
 const DAY_MS = 24 * 60 * 60 * 1000

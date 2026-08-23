@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { VideoPresetName } from "@/lib/api"
+import type { VideoPresetName } from "@/lib/xorgate"
 import type { ResolvedRecording } from "@/lib/device-config-defaults"
 import { formatSeconds, withCurrent } from "./shared"
 

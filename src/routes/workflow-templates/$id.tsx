@@ -11,7 +11,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ApiError } from "@/lib/api"
+import { isXorgateError } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import { parsePublishIssues } from "@/lib/workflow-catalog-schemas"
 import { cn } from "@/lib/utils"
 import {
@@ -115,11 +116,11 @@ function WorkflowTemplateDetailPage() {
         const initial = pickInitialVersion(fetched)
         if (initial) loadVersionIntoEditor(initial)
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) {
+        if (isXorgateError(err) && err.status === 404) {
           if (!cancelled) setNotFound(true)
           return
         }
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) setError(message)
         toast.error(message)
       }
@@ -127,7 +128,6 @@ function WorkflowTemplateDetailPage() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // Clear breadcrumb name + editor state when leaving the page.
@@ -185,9 +185,16 @@ function WorkflowTemplateDetailPage() {
   // A failed publish returns typed validation issues (WORKFLOW_VALIDATION_FAILED);
   // push them into the editor store so the canvas highlights the offending
   // nodes/edges, and summarize in a toast. Other errors toast as before.
+  // XorgateError splits the wire envelope across fields; rebuild it for the
+  // body-text parser.
   const surfacePublishError = (err: unknown): void => {
-    const issues =
-      err instanceof ApiError ? parsePublishIssues(err.message) : null
+    const issues = isXorgateError(err)
+      ? parsePublishIssues(
+          JSON.stringify({
+            error: { code: err.code, message: xgMessage(err), details: err.details },
+          }),
+        )
+      : null
     if (issues && issues.length > 0) {
       useWorkflowEditor.getState().setPublishIssues(issues)
       toast.error(
@@ -195,7 +202,7 @@ function WorkflowTemplateDetailPage() {
       )
       return
     }
-    toast.error((err as Error).message)
+    toast.error(xgMessage(err))
   }
 
   const handlePublish = async () => {

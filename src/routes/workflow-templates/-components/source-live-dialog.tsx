@@ -10,7 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getKvsChannels, type Device, type KvsChannel } from "@/lib/api"
+import type { Device, VideoChannel } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { cn } from "@/lib/utils"
 import { DeviceRadioList } from "./device-radio-list"
 import { deviceLabel, type SourceBinding } from "./simulator-types"
@@ -28,7 +29,7 @@ export function SourceLiveDialog({
   onConfirm: (binding: Extract<SourceBinding, { kind: "video-live" }>) => void
 }) {
   const [device, setDevice] = useState<Device | null>(null)
-  const [channels, setChannels] = useState<KvsChannel[] | null>(null)
+  const [channels, setChannels] = useState<VideoChannel[] | null>(null)
   const [chError, setChError] = useState<string | null>(null)
   const [streamKey, setStreamKey] = useState<string | null>(null)
 
@@ -54,10 +55,10 @@ export function SourceLiveDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { channels: chs } = await getKvsChannels(device.id)
+        const chs = await xg().devices.videoChannels(device.id)
         if (!cancelled) setChannels(chs)
       } catch (err) {
-        if (!cancelled) setChError((err as Error).message)
+        if (!cancelled) setChError(xgMessage(err))
       }
     })()
     return () => {

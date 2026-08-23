@@ -43,22 +43,12 @@ import {
   toCsv,
   type DateRangeMode,
 } from "@/components/data-table"
-import {
-  deleteDeviceSession,
-  getDeviceRuns,
-  getDeviceSessions,
-  getSessionSegments,
-  getSegmentPlaybackUrl,
-  type MediaSegment,
-  type MediaSession,
-  type MediaSessionsListParams,
-  type MediaSessionStatus,
-} from "@/lib/api"
-import {
-  getDeviceRunsResponseSchema,
-  getDeviceSessionsResponseSchema,
-  getSessionSegmentsResponseSchema,
-} from "@/lib/schemas"
+import type {
+  ListSessionsParams,
+  MediaSegment,
+  MediaSession,
+} from "@xorgate/sdk"
+import { xg, xgMessage, type MediaSessionStatus } from "@/lib/xorgate"
 import {
   runFromApi,
   runReplayBlocked,
@@ -236,12 +226,10 @@ export function DeviceSessionsCard({
 
   const refreshSegments = useCallback(
     async (sessionId: string) => {
-      const raw = await getSessionSegments(deviceId, sessionId)
-      const parsed = getSessionSegmentsResponseSchema.safeParse(raw)
-      if (!parsed.success) throw new Error("Unexpected segments response")
+      const { segments } = await xg().media.segments(deviceId, sessionId)
       setSegmentsBySession((prev) => ({
         ...prev,
-        [sessionId]: parsed.data.segments,
+        [sessionId]: segments,
       }))
     },
     [deviceId]
@@ -253,7 +241,7 @@ export function DeviceSessionsCard({
   // grows. `limit`/`offset` count RUNS here, because that is what the request
   // asks the server to group by.
   const serverParams = useMemo(
-    (): MediaSessionsListParams => ({
+    (): ListSessionsParams => ({
       limit: size,
       offset: (page - 1) * size,
       order,
@@ -276,23 +264,27 @@ export function DeviceSessionsCard({
   const refresh = useCallback(async () => {
     const seq = ++reqSeq.current
     try {
-      const raw = await getDeviceRuns(deviceId, serverParams)
+      // `listRuns` takes no `sort` (the endpoint forces sort=startedAt).
+      const { sort, ...runParams } = serverParams
+      void sort
+      const { items, page: pageMeta } = await xg().media.sessions.listRuns(
+        deviceId,
+        runParams
+      )
       if (seq !== reqSeq.current) return
-      const parsed = getDeviceRunsResponseSchema.safeParse(raw)
-      if (!parsed.success) throw new Error("Unexpected runs response")
       // The server already returns runs in the requested order, so there is
       // nothing to re-sort or reverse here.
-      setRuns(parsed.data.runs.map(runFromApi))
-      setTotal(parsed.data.page?.total ?? parsed.data.runs.length)
+      setRuns(items.map(runFromApi))
+      setTotal(pageMeta.total)
       setKnownStreamKeys((prev) => {
         const next = new Set(prev)
-        for (const r of parsed.data.runs) for (const k of r.streamKeys) next.add(k)
+        for (const r of items) for (const k of r.streamKeys) next.add(k)
         return next.size === prev.length ? prev : [...next].sort()
       })
       setLoadError(null)
     } catch (err) {
       if (seq !== reqSeq.current) return
-      setLoadError((err as Error).message)
+      setLoadError(xgMessage(err))
     }
   }, [deviceId, serverParams])
 
@@ -369,16 +361,17 @@ export function DeviceSessionsCard({
       let off = 0
       let grandTotal = Infinity
       while (off < grandTotal && all.length < EXPORT_CAP) {
-        const raw = await getDeviceSessions(deviceId, {
-          ...serverParams,
-          limit: EXPORT_PAGE_LIMIT,
-          offset: off,
-        })
-        const parsed = getDeviceSessionsResponseSchema.safeParse(raw)
-        if (!parsed.success) break
-        all.push(...parsed.data.sessions)
-        grandTotal = parsed.data.page?.total ?? parsed.data.sessions.length
-        if (parsed.data.sessions.length === 0) break
+        const { items, page: pageMeta } = await xg().media.sessions.list(
+          deviceId,
+          {
+            ...serverParams,
+            limit: EXPORT_PAGE_LIMIT,
+            offset: off,
+          }
+        )
+        all.push(...items)
+        grandTotal = pageMeta.total
+        if (items.length === 0) break
         off += EXPORT_PAGE_LIMIT
       }
       const header = [
@@ -406,9 +399,9 @@ export function DeviceSessionsCard({
             s.endedAt ?? "",
             s.status,
             s.timeSource ?? "",
-            s.totalDurationMs,
-            s.totalBytes,
-            s.segmentCount,
+            s.totalDurationMs ?? 0,
+            s.totalBytes ?? 0,
+            s.segmentCount ?? 0,
             s.width ?? "",
             s.height ?? "",
             s.fps ?? "",
@@ -441,7 +434,7 @@ export function DeviceSessionsCard({
       try {
         await refreshSegments(session.id)
       } catch (err) {
-        toast.error((err as Error).message)
+        toast.error(xgMessage(err))
         setExpandedSessionId(null)
       } finally {
         setSegmentsLoading(false)
@@ -453,13 +446,13 @@ export function DeviceSessionsCard({
     if (!deleting) return
     setDeleteBusy(true)
     try {
-      await deleteDeviceSession(deviceId, deleting.id)
+      await xg().media.sessions.delete(deviceId, deleting.id)
       toast.success("Session deleted")
       if (expandedSessionId === deleting.id) setExpandedSessionId(null)
       setDeleting(null)
       await refresh()
     } catch (err) {
-      toast.error((err as Error).message)
+      toast.error(xgMessage(err))
     } finally {
       setDeleteBusy(false)
     }
@@ -469,14 +462,14 @@ export function DeviceSessionsCard({
     setPlaying({ session, segment })
     setPlayUrl(null)
     try {
-      const { url } = await getSegmentPlaybackUrl(
+      const { url } = await xg().media.segmentPlaybackUrl(
         deviceId,
         session.id,
         segment.seq
       )
       setPlayUrl(url)
     } catch (err) {
-      toast.error((err as Error).message)
+      toast.error(xgMessage(err))
       setPlaying(null)
     }
   }
@@ -756,6 +749,7 @@ export function DeviceSessionsCard({
                             {run.sessions.map((s) => {
                               const sessionExpanded = expandedSessionId === s.id
                               const segments = segmentsBySession[s.id]
+                              const segmentCount = s.segmentCount ?? 0
                               return [
                                 <TableRow
                                   key={s.id}
@@ -785,13 +779,13 @@ export function DeviceSessionsCard({
                                     ) : null}
                                   </TableCell>
                                   <TableCell className="text-right text-xs tabular-nums">
-                                    {formatDuration(s.totalDurationMs)}
+                                    {formatDuration(s.totalDurationMs ?? 0)}
                                   </TableCell>
                                   <TableCell className="text-right text-xs tabular-nums">
-                                    {formatBytes(s.totalBytes)}
+                                    {formatBytes(s.totalBytes ?? 0)}
                                   </TableCell>
                                   <TableCell className="text-right text-xs tabular-nums">
-                                    {s.segmentCount}
+                                    {segmentCount}
                                   </TableCell>
                                   <TableCell className="text-xs text-muted-foreground">
                                     {s.width && s.height
@@ -818,11 +812,11 @@ export function DeviceSessionsCard({
                                       <Button
                                         size="sm"
                                         variant="secondary"
-                                        disabled={s.segmentCount === 0}
-                                        asChild={s.segmentCount > 0}
+                                        disabled={segmentCount === 0}
+                                        asChild={segmentCount > 0}
                                         onClick={(e) => e.stopPropagation()}
                                       >
-                                        {s.segmentCount > 0 ? (
+                                        {segmentCount > 0 ? (
                                           <Link
                                             to="/devices/$id/replay"
                                             params={{ id: deviceId }}
@@ -1019,7 +1013,7 @@ export function DeviceSessionsCard({
             <DialogDescription>
               This permanently deletes the on-device recording session
               {deleting
-                ? ` from ${deleting.streamKey} (${formatTimestamp(deleting.startedAt)}, ${deleting.segmentCount} segments, ${formatBytes(deleting.totalBytes)})`
+                ? ` from ${deleting.streamKey} (${formatTimestamp(deleting.startedAt)}, ${deleting.segmentCount ?? 0} segments, ${formatBytes(deleting.totalBytes ?? 0)})`
                 : ""}
               {" "}— every segment file in storage and its index. This cannot
               be undone. Other cameras in the same run are not affected.

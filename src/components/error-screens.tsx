@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/auth"
-import { apiErrorMessage } from "@/lib/api"
+import { xgMessage } from "@/lib/xorgate"
 import {
   ROLE_LABEL,
   rolesWithPermission,
@@ -185,7 +185,7 @@ export function AppErrorScreen({
   reset?: () => void
 }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const message = apiErrorMessage(error)
+  const message = xgMessage(error)
 
   return (
     <ErrorScreen

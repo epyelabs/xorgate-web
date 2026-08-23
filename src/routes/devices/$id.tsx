@@ -14,17 +14,13 @@ import {
 import { StatusDot } from "@/components/data-table/status-dot"
 import { DeviceBacklogBadge } from "@/components/device-backlog-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { xg, xgMessage } from "@/lib/xorgate"
 import {
-  ApiError,
-  apiErrorMessage,
-  getDevice,
-  getDeviceModel,
-  powerOffDevice,
-  rebootDevice,
+  isXorgateError,
   type Device,
   type DeviceModel,
   type DeviceStatus,
-} from "@/lib/api"
+} from "@xorgate/sdk"
 import { DeviceModelDialog } from "./-components/device-model-dialog"
 import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
@@ -32,15 +28,9 @@ import {
   DeviceAlertsButton,
   type DeviceAlert,
 } from "./-components/device-alerts"
-import {
-  useIotTelemetry,
-  type LatestReading,
-} from "@/hooks/use-iot-telemetry"
+import { useLiveTelemetry } from "@xorgate/react"
+import type { LatestReading } from "@xorgate/sdk"
 import { decodeThrottleBits } from "@/lib/telemetry-meta"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
 import { formatRelative } from "@/lib/relative-time"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
@@ -147,7 +137,7 @@ function DeviceLayout() {
   // dismissal/acknowledgment state lives inside DeviceAlertsButton.
   // (This adds a second MQTT connection on tabs that mount their own feed —
   // acceptable for now; a shared per-device feed is a future refactor.)
-  const { recording, latest } = useIotTelemetry(id)
+  const { recording, latest } = useLiveTelemetry(id)
   const alerts: DeviceAlert[] = []
   if (recording && recording.droppedSegments > 0) {
     alerts.push({
@@ -181,13 +171,8 @@ function DeviceLayout() {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getDevice(id)
-        const parsed = getDeviceResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const fetched = await xg().devices.get(id)
         if (!cancelled) {
-          const fetched = parsed.data.device
           setDevice(fetched)
           useBreadcrumbStore
             .getState()
@@ -197,29 +182,18 @@ function DeviceLayout() {
           // Best-effort: a failure here must not block the header, so swallow
           // errors.
           try {
-            const rawModel = await getDeviceModel(fetched.deviceModelId)
-            const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-            if (parsedModel.success && !cancelled) {
-              const m = parsedModel.data.device_model
-              // The schema leaves these optional; the DeviceModel type wants
-              // them present, so normalize undefined -> null.
-              setDeviceModel({
-                ...m,
-                ioCapabilities: m.ioCapabilities ?? null,
-                firmwareChannel: m.firmwareChannel ?? null,
-              })
-            }
+            const m = await xg().deviceModels.get(fetched.deviceModelId)
+            if (!cancelled) setDeviceModel(m)
           } catch {
             // ignore
           }
         }
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) {
+        if (isXorgateError(err) && err.status === 404) {
           if (!cancelled) setNotFound(true)
           return
         }
-        const message = (err as Error).message
-        toast.error(message)
+        toast.error(xgMessage(err))
       }
     })()
     return () => {
@@ -423,13 +397,13 @@ function DeviceLayout() {
           deviceName={device.name ?? device.serial}
           onConfirm={async () => {
             try {
-              await rebootDevice(id)
+              await xg().devices.reboot(id)
               toast.success(
                 `Reboot command sent to ${device.name ?? device.serial}`
               )
               setRebootDialogOpen(false)
             } catch (err) {
-              toast.error(apiErrorMessage(err))
+              toast.error(xgMessage(err))
             }
           }}
         />
@@ -442,13 +416,13 @@ function DeviceLayout() {
           deviceName={device.name ?? device.serial}
           onConfirm={async () => {
             try {
-              await powerOffDevice(id)
+              await xg().devices.powerOff(id)
               toast.success(
                 `Power off command sent to ${device.name ?? device.serial}`
               )
               setPowerOffDialogOpen(false)
             } catch (err) {
-              toast.error(apiErrorMessage(err))
+              toast.error(xgMessage(err))
             }
           }}
         />

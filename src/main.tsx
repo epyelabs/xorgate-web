@@ -6,6 +6,7 @@ import "./index.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
+import { XorgateRoot } from "@/components/xorgate-root"
 import { routeTree } from "./routeTree.gen"
 
 const router = createRouter({ routeTree })
@@ -20,7 +21,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <TooltipProvider>
-        <RouterProvider router={router} />
+        <XorgateRoot>
+          <RouterProvider router={router} />
+        </XorgateRoot>
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

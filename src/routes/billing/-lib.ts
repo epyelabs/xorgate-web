@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import type { UserTier } from "@/lib/api"
+import type { UserTier } from "@xorgate/sdk"
 
 // ---------------------------------------------------------------------------
 // Mock billing data. In production these come from the billing service; the

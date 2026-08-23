@@ -1,7 +1,7 @@
 import { Fragment } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import type { LatestReading } from "@/hooks/use-iot-telemetry"
+import type { LatestReading } from "@xorgate/sdk"
 import {
   formatMetricValue,
   formatUnit,

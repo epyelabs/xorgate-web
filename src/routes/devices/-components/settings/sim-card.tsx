@@ -15,7 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
 import {
   formatMsisdn,
   groupIccid,

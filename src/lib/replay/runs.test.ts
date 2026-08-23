@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { MediaSession } from "@/lib/api"
+import type { MediaSession } from "@xorgate/sdk"
 import {
   clusterRuns,
   runReplayBlocked,

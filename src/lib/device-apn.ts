@@ -16,7 +16,7 @@
 // All decisions live here, DOM-free, because the frontend vitest has no DOM;
 // the card component is a thin renderer over these functions.
 
-import type { Device } from "./api"
+import type { Device } from "@xorgate/sdk"
 import { parseReportedConfig } from "./device-config-status"
 import { reportedUplink, type ReportedUplink } from "./device-sim"
 

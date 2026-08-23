@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { addMemberSchema } from "@/lib/schemas"
-import { ApiError, addMembership, type MembershipRole } from "@/lib/api"
+import type { MembershipRole } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 
 // Owner is intentionally omitted — transferring ownership is a separate flow;
 // the add form only assigns the collaborator roles.
@@ -65,7 +66,7 @@ export function AddMemberDialog({
     }
     setSubmitting(true)
     try {
-      const { invited } = await addMembership(parsed.data)
+      const { invited } = await xg().memberships.add(parsed.data)
       toast.success(
         invited
           ? `Invitation emailed to ${parsed.data.email}`
@@ -74,11 +75,7 @@ export function AddMemberDialog({
       onAdded()
       onOpenChange(false)
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to add member"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setSubmitting(false)
     }

@@ -1,4 +1,4 @@
-import { apiRequest } from "./api"
+import { xg } from "./xorgate"
 
 // Per-organization connector credentials (M7). Write-only by design: reads
 // return presence + last-rotated metadata, never the key value. The backend
@@ -24,33 +24,29 @@ export interface CredentialValidation {
 export async function listOrgCredentials(): Promise<{
   credentials: OrgCredential[]
 }> {
-  return apiRequest("/organization-credentials")
+  return xg().request("GET", "/organization-credentials")
 }
 
 export async function setOrgCredential(
   provider: CredentialProvider,
   apiKey: string
 ): Promise<{ credential: OrgCredential }> {
-  return apiRequest(`/organization-credentials/${provider}`, {
-    method: "PUT",
-    body: JSON.stringify({ apiKey }),
+  return xg().request("PUT", `/organization-credentials/${provider}`, {
+    body: { apiKey },
   })
 }
 
 export async function clearOrgCredential(
   provider: CredentialProvider
 ): Promise<void> {
-  await apiRequest<void>(`/organization-credentials/${provider}`, {
-    method: "DELETE",
-  })
+  await xg().request<void>("DELETE", `/organization-credentials/${provider}`)
 }
 
 export async function validateOrgCredential(
   provider: ValidatableProvider,
   apiKey?: string
 ): Promise<{ validation: CredentialValidation }> {
-  return apiRequest(`/organization-credentials/${provider}/validate`, {
-    method: "POST",
-    body: JSON.stringify(apiKey ? { apiKey } : {}),
+  return xg().request("POST", `/organization-credentials/${provider}/validate`, {
+    body: apiKey ? { apiKey } : {},
   })
 }

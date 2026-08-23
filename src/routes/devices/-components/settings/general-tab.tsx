@@ -20,20 +20,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
-import {
-  deleteDevice,
-  getDeviceModel,
-  getLatestAgentBuild,
-  type Device,
-  type DeviceIdentity,
-  type LatestAgentBuild,
-} from "@/lib/api"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type {
+  AgentBuild as LatestAgentBuild,
+  Device,
+  DeviceIdentity,
+} from "@xorgate/sdk"
 import {
   reportedAgentBuild,
   reportedAgentMode,
   type ReportedAgentBuild,
 } from "@/lib/device-config-status"
-import { getDeviceModelResponseSchema, updateDeviceSchema } from "@/lib/schemas"
+import { updateDeviceSchema } from "@/lib/schemas"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
 import { UpdateDeviceDialog } from "../update-device-dialog"
@@ -93,7 +91,7 @@ export function GeneralTab({
     let cancelled = false
     ;(async () => {
       try {
-        const latest = await getLatestAgentBuild()
+        const latest = await xg().devices.latestAgentBuild()
         if (!cancelled) setLatestBuild(latest)
       } catch {
         // Leave it unknown — this is decoration, not the action itself.
@@ -140,11 +138,8 @@ export function GeneralTab({
     setModelSettled(false)
     ;(async () => {
       try {
-        const raw = await getDeviceModel(device.deviceModelId)
-        const parsed = getDeviceModelResponseSchema.safeParse(raw)
-        if (!cancelled && parsed.success) {
-          setModelName(parsed.data.device_model.name)
-        }
+        const model = await xg().deviceModels.get(device.deviceModelId)
+        if (!cancelled) setModelName(model.name)
       } catch {
         // ignore — the id is shown instead
       } finally {
@@ -174,9 +169,9 @@ export function GeneralTab({
 
   async function handleDelete() {
     try {
-      await deleteDevice(device.id)
+      await xg().devices.delete(device.id)
     } catch (err) {
-      toast.error((err as Error).message)
+      toast.error(xgMessage(err))
       return
     }
     toast.success("Device deleted")

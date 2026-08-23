@@ -1,4 +1,5 @@
-import { apiRequest, type Page } from "./api"
+import { xg } from "./xorgate"
+import type { PageMeta as Page } from "@xorgate/sdk"
 import type {
   WorkflowRunDetail,
   WorkflowRunSummary,
@@ -7,20 +8,20 @@ import type {
 import { runsListQuery } from "./device-workflows-api"
 
 // Real client for Workflow Instances (runs). Backend: workflow-runs.ts. The list
-// is workspace-scoped server-side via the X-Workspace-Id header that apiRequest
+// is workspace-scoped server-side via the X-Workspace-Id header the SDK client
 // attaches automatically; the page still re-fetches on workspace switch.
 // Signatures are unchanged from the former mock, so no page edits were needed.
 
 export async function listWorkflowInstances(
   params: WorkflowRunsListParams = {},
 ): Promise<{ runs: WorkflowRunSummary[]; page?: Page }> {
-  return apiRequest(`/workflow-runs${runsListQuery(params)}`)
+  return xg().request("GET", `/workflow-runs${runsListQuery(params)}`)
 }
 
 export async function getWorkflowInstance(
   id: string,
 ): Promise<{ run: WorkflowRunDetail }> {
-  return apiRequest(`/workflow-runs/${id}`)
+  return xg().request("GET", `/workflow-runs/${id}`)
 }
 
 // Re-run: clones the source run's snapshot definition + trigger context into a
@@ -28,7 +29,7 @@ export async function getWorkflowInstance(
 // and refreshes the list). Simulation runs return 400 (re-run them from the
 // editor's simulator instead).
 export async function rerunWorkflowInstance(id: string): Promise<void> {
-  await apiRequest(`/workflow-runs/${id}/rerun`, { method: "POST" })
+  await xg().request("POST", `/workflow-runs/${id}/rerun`)
 }
 
 // Presigned GET for a v2 run artifact (Data Capture records, events.jsonl,
@@ -39,7 +40,7 @@ export async function getRunArtifactUrl(
   runId: string,
   key: string,
 ): Promise<{ url: string; expiresInSeconds: number }> {
-  return apiRequest(
-    `/workflow-runs/${runId}/artifact-url?key=${encodeURIComponent(key)}`,
-  )
+  return xg().request("GET", `/workflow-runs/${runId}/artifact-url`, {
+    query: { key },
+  })
 }

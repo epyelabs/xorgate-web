@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import { ApiError, getTelemetryTable } from "@/lib/api"
-import { getTelemetryTableResponseSchema } from "@/lib/schemas"
-import type { HistoryPoint } from "@/hooks/use-iot-telemetry"
+import type { MetricName } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 export interface UseTelemetryReadings {
   // Rows in display order (per `order`), keyed by metric for the table.
@@ -78,20 +78,16 @@ export function useTelemetryReadings(
     setState((s) => ({ ...s, loading: true, error: null }))
     ;(async () => {
       try {
-        const raw = await getTelemetryTable(deviceId, {
+        const data = await xg().telemetry.readings(deviceId, {
           from,
           to,
           order,
           limit,
           offset,
-          metric: metric || undefined,
+          metric: metric ? (metric.split(",") as MetricName[]) : undefined,
         })
-        const parsed = getTelemetryTableResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /telemetry/readings response shape")
-        }
         if (cancelled) return
-        const { columns, rows, page } = parsed.data
+        const { columns, rows, page } = data
 
         const units: Record<string, string> = {}
         for (const c of columns) if (c.unit) units[c.key] = c.unit
@@ -121,9 +117,7 @@ export function useTelemetryReadings(
         })
       } catch (err) {
         if (cancelled) return
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
-        setState((s) => ({ ...s, loading: false, error: message }))
+        setState((s) => ({ ...s, loading: false, error: xgMessage(err) }))
       }
     })()
 

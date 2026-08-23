@@ -15,6 +15,17 @@ import { getIdToken } from "./cognito"
 // baseUrl that already carries it (design note N6a).
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, "")
 
+/**
+ * TEMPORARY until `@xorgate/sdk@0.1.2` is published (fix committed on
+ * `fix/browser-fetch-binding`): 0.1.1 stores the global fetch UNBOUND and
+ * calls it as a method of its own core, which browsers refuse with
+ * "Illegal invocation". Passing a bound fetch through the supported `fetch`
+ * option sidesteps that. Delete this (here and in xorgate-root.tsx) when the
+ * dependency moves to 0.1.2 — the SDK binds the global itself from there on.
+ */
+export const BOUND_FETCH = (input: string, init?: RequestInit) =>
+  globalThis.fetch(input, init)
+
 // One auth object for every client. The SDK calls getToken per request and
 // never caches it, so Cognito's own refresh logic stays in charge.
 const AUTH = {
@@ -43,6 +54,7 @@ export function registerWorkspaceIdGetter(fn: () => string | null) {
 const bootstrap: BootstrapClient = createBootstrapClient({
   baseUrl: BASE_URL,
   auth: AUTH,
+  fetch: BOUND_FETCH,
 })
 
 /**
@@ -71,6 +83,7 @@ export function xg(): XorgateClient {
   const client = createClient({
     baseUrl: BASE_URL,
     auth: AUTH,
+    fetch: BOUND_FETCH,
     organizationId: org,
     ...(ws ? { workspaceId: ws } : {}),
   })

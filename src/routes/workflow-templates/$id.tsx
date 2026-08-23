@@ -128,7 +128,6 @@ function WorkflowTemplateDetailPage() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // Clear breadcrumb name + editor state when leaving the page.

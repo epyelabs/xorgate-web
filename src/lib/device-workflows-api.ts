@@ -1,4 +1,4 @@
-import { apiRequest } from "./api"
+import { xg } from "./xorgate"
 import type {
   AttachWorkflowInput,
   DeviceWorkflowAttachment,
@@ -8,7 +8,7 @@ import type {
   WorkflowRunSummary,
   WorkflowRunsListParams,
 } from "./workflow-run-schemas"
-import type { Page } from "./api"
+import type { PageMeta as Page } from "@xorgate/sdk"
 
 // Serialize the standard list params into a query string suffix.
 export function runsListQuery(params: WorkflowRunsListParams = {}): string {
@@ -30,23 +30,25 @@ export function runsListQuery(params: WorkflowRunsListParams = {}): string {
 export async function listDeviceAttachments(deviceId: string): Promise<{
   attachments: DeviceWorkflowAttachment[]
 }> {
-  return apiRequest(`/devices/${deviceId}/workflows`)
+  return xg().request("GET", `/devices/${deviceId}/workflows`)
 }
 
 export async function listDeviceRuns(
   deviceId: string,
   params: WorkflowRunsListParams = {},
 ): Promise<{ runs: WorkflowRunSummary[]; page?: Page }> {
-  return apiRequest(`/devices/${deviceId}/workflow-runs${runsListQuery(params)}`)
+  return xg().request(
+    "GET",
+    `/devices/${deviceId}/workflow-runs${runsListQuery(params)}`
+  )
 }
 
 export async function attachWorkflow(
   deviceId: string,
   input: AttachWorkflowInput,
 ): Promise<{ attachment: DeviceWorkflowAttachment }> {
-  return apiRequest(`/devices/${deviceId}/workflows`, {
-    method: "POST",
-    body: JSON.stringify(input),
+  return xg().request("POST", `/devices/${deviceId}/workflows`, {
+    body: input,
   })
 }
 
@@ -55,9 +57,8 @@ export async function setAttachmentEnabled(
   attachmentId: string,
   enabled: boolean,
 ): Promise<{ attachment: DeviceWorkflowAttachment }> {
-  return apiRequest(`/devices/${deviceId}/workflows/${attachmentId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ enabled }),
+  return xg().request("PATCH", `/devices/${deviceId}/workflows/${attachmentId}`, {
+    body: { enabled },
   })
 }
 
@@ -65,9 +66,7 @@ export async function detachWorkflow(
   deviceId: string,
   attachmentId: string,
 ): Promise<void> {
-  await apiRequest(`/devices/${deviceId}/workflows/${attachmentId}`, {
-    method: "DELETE",
-  })
+  await xg().request("DELETE", `/devices/${deviceId}/workflows/${attachmentId}`)
 }
 
 // Ad-hoc "Run now": enqueues a one-off execution and bumps the attachment's
@@ -77,8 +76,7 @@ export async function runAttachmentNow(
   attachmentId: string,
   context?: ManualRunContext,
 ): Promise<{ attachment: DeviceWorkflowAttachment }> {
-  return apiRequest(`/devices/${deviceId}/workflows/${attachmentId}/run`, {
-    method: "POST",
-    body: JSON.stringify(context ?? {}),
+  return xg().request("POST", `/devices/${deviceId}/workflows/${attachmentId}/run`, {
+    body: context ?? {},
   })
 }

@@ -1,4 +1,5 @@
-import { apiRequest, type Page } from "./api"
+import { xg } from "./xorgate"
+import type { PageMeta as Page } from "@xorgate/sdk"
 import type {
   WorkflowDefinition,
   WorkflowDeployment,
@@ -30,39 +31,33 @@ export async function listWorkflowTemplates(
   if (params.sort) qs.set("sort", params.sort)
   if (params.status) qs.set("status", params.status)
   const suffix = qs.toString() ? `?${qs.toString()}` : ""
-  return apiRequest(`/workflow-templates${suffix}`)
+  return xg().request("GET", `/workflow-templates${suffix}`)
 }
 
 export async function getWorkflowTemplate(
   id: string,
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  return apiRequest(`/workflow-templates/${id}`)
+  return xg().request("GET", `/workflow-templates/${id}`)
 }
 
 export async function createWorkflowTemplate(input: {
   name: string
   description?: string
 }): Promise<{ template: WorkflowTemplateDetail }> {
-  return apiRequest("/workflow-templates", {
-    method: "POST",
-    body: JSON.stringify(input),
-  })
+  return xg().request("POST", "/workflow-templates", { body: input })
 }
 
 export async function updateWorkflowTemplate(
   id: string,
   updates: { name?: string; description?: string | null },
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  return apiRequest(`/workflow-templates/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(updates),
-  })
+  return xg().request("PUT", `/workflow-templates/${id}`, { body: updates })
 }
 
 // Permanently deletes a template (versions + run history cascade server-side).
 // The backend answers 409 while the template is still attached to any device.
 export async function deleteWorkflowTemplate(id: string): Promise<void> {
-  await apiRequest(`/workflow-templates/${id}`, { method: "DELETE" })
+  await xg().request("DELETE", `/workflow-templates/${id}`)
 }
 
 // Saves the editor's working copy. The server updates the open draft in place, or
@@ -72,9 +67,8 @@ export async function saveDraftVersion(
   definition: WorkflowDefinition,
   message?: string,
 ): Promise<{ template: WorkflowTemplateDetail; version: WorkflowTemplateVersion }> {
-  return apiRequest(`/workflow-templates/${id}/draft`, {
-    method: "PUT",
-    body: JSON.stringify(message !== undefined ? { definition, message } : { definition }),
+  return xg().request("PUT", `/workflow-templates/${id}/draft`, {
+    body: message !== undefined ? { definition, message } : { definition },
   })
 }
 
@@ -82,24 +76,26 @@ export async function publishVersion(
   id: string,
   versionId: string,
 ): Promise<{ template: WorkflowTemplateDetail }> {
-  return apiRequest(`/workflow-templates/${id}/versions/${versionId}/publish`, {
-    method: "POST",
-  })
+  return xg().request(
+    "POST",
+    `/workflow-templates/${id}/versions/${versionId}/publish`
+  )
 }
 
 export async function restoreVersion(
   id: string,
   versionId: string,
 ): Promise<{ template: WorkflowTemplateDetail; version: WorkflowTemplateVersion }> {
-  return apiRequest(`/workflow-templates/${id}/versions/${versionId}/restore`, {
-    method: "POST",
-  })
+  return xg().request(
+    "POST",
+    `/workflow-templates/${id}/versions/${versionId}/restore`
+  )
 }
 
 export async function listUsage(
   id: string,
 ): Promise<{ instances: WorkflowDeployment[] }> {
-  return apiRequest(`/workflow-templates/${id}/usage`)
+  return xg().request("GET", `/workflow-templates/${id}/usage`)
 }
 
 // --- Simulation (real API, M3) ---------------------------------------------------
@@ -113,10 +109,11 @@ export async function createSimulation(
   definition: WorkflowDefinition,
   bindings: Record<string, SimulationApiBinding>,
 ): Promise<CreateSimulationResponse> {
-  const raw = await apiRequest(`/workflow-templates/${templateId}/simulations`, {
-    method: "POST",
-    body: JSON.stringify({ definition, bindings }),
-  })
+  const raw = await xg().request(
+    "POST",
+    `/workflow-templates/${templateId}/simulations`,
+    { body: { definition, bindings } }
+  )
   const parsed = createSimulationResponseSchema.safeParse(raw)
   if (!parsed.success) {
     throw new Error("Unexpected /simulations response shape")
@@ -130,9 +127,10 @@ export async function createSimulationUpload(
   templateId: string,
   input: { kind: "video" | "csv"; filename: string; contentType?: string },
 ): Promise<SimulationUpload> {
-  const raw = await apiRequest(
+  const raw = await xg().request(
+    "POST",
     `/workflow-templates/${templateId}/simulations/uploads`,
-    { method: "POST", body: JSON.stringify(input) },
+    { body: input },
   )
   const parsed = createSimulationUploadResponseSchema.safeParse(raw)
   if (!parsed.success) {

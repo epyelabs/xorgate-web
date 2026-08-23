@@ -1,26 +1,19 @@
-import { apiRequest } from "./api"
+import { xg } from "./xorgate"
+import type { SearchResult } from "@xorgate/sdk"
 
-// Global cross-resource search. Mirrors the normalized result contract returned by
-// the backend GET /search handler (xorgate-core-service/src/handlers/search.ts).
-// The shape is deliberately generic so the palette renders any resource type from
-// one code path; adding a resource = a backend query block + a SEARCH_RESOURCES entry.
+export type SearchResultType = SearchResult["type"]
 
-export type SearchResultType =
-  | "device"
-  | "workflow-template"
-  | "workflow-instance"
+// Global cross-resource search, through the SDK's modeled client.search()
+// (which normalizes the {results} envelope away). The shape is deliberately
+// generic so the palette renders any resource type from one code path; adding
+// a resource = a backend query block + a SEARCH_RESOURCES entry.
 
-export interface SearchResult {
-  type: SearchResultType
-  id: string
-  title: string
-  subtitle: string | null
-}
+export type { SearchResult }
 
-// apiRequest already attaches the Cognito token + X-Organization-Id / X-Workspace-Id
+// The client attaches the Cognito token + X-Organization-Id / X-Workspace-Id
 // headers, so results are scoped to the active org server-side.
 export async function searchGlobal(
   q: string
 ): Promise<{ results: SearchResult[] }> {
-  return apiRequest(`/search?q=${encodeURIComponent(q)}`)
+  return { results: await xg().search(q) }
 }

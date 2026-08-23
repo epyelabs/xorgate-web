@@ -265,7 +265,8 @@ export function DeviceSessionsCard({
     const seq = ++reqSeq.current
     try {
       // `listRuns` takes no `sort` (the endpoint forces sort=startedAt).
-      const { sort: _sort, ...runParams } = serverParams
+      const { sort, ...runParams } = serverParams
+      void sort
       const { items, page: pageMeta } = await xg().media.sessions.listRuns(
         deviceId,
         runParams

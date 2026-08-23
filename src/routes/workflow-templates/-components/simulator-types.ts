@@ -1,4 +1,4 @@
-import type { Device, KvsChannel, MediaSession } from "@/lib/api"
+import type { Device, MediaSession, VideoChannel } from "@xorgate/sdk"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
 
 // Display name for a device: its label falls back to the serial.
@@ -26,7 +26,7 @@ export type SourceBinding =
       kind: "video-live"
       deviceId: string
       deviceName: string
-      channel: KvsChannel
+      channel: VideoChannel
     }
   | { kind: "video-webcam"; name: string; deviceId?: string }
   | { kind: "csv-file"; file: File; name: string; uploadKey?: string }
@@ -128,7 +128,8 @@ function formatDurationMs(ms: number | null): string | null {
 // endpoint rolled it up, else the wall-clock span. (Local twin of the one in
 // components/session-pickers.tsx — that file may only export components.)
 function sessionDurationMs(s: MediaSession): number | null {
-  if (s.totalDurationMs > 0) return s.totalDurationMs
+  const total = s.totalDurationMs ?? 0
+  if (total > 0) return total
   if (s.endedAt) return new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
   return null
 }
@@ -141,10 +142,11 @@ export function bindingMeta(b: SourceBinding): string | null {
     case "csv-file":
       return formatBytes(b.file.size)
     case "video-session": {
+      const segmentCount = b.session.segmentCount ?? 0
       const parts = [
         formatDurationMs(sessionDurationMs(b.session)),
-        formatBytes(b.session.totalBytes),
-        `${b.session.segmentCount} segment${b.session.segmentCount === 1 ? "" : "s"}`,
+        formatBytes(b.session.totalBytes ?? null),
+        `${segmentCount} segment${segmentCount === 1 ? "" : "s"}`,
       ].filter(Boolean)
       return parts.length ? parts.join(" · ") : null
     }

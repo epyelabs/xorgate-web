@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import type { IoCapabilities } from "@/lib/api"
+import type { IoCapabilities } from "@xorgate/sdk"
 import { missingCapabilities } from "@/lib/capability-metrics"
 import type { WorkflowTemplateSummary } from "@/lib/workflow-schemas"
 

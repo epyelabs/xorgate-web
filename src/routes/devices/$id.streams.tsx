@@ -2,21 +2,15 @@ import { useEffect, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
-  type ActiveStreamsViewType,
-  type ImuView,
-  type IoCapabilities,
-} from "@/lib/api"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
+import type { IoCapabilities } from "@xorgate/sdk"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
-import { xgMessage } from "@/lib/xorgate"
+import {
+  xg,
+  xgMessage,
+  type ActiveStreamsViewType,
+  type ImuView,
+} from "@/lib/xorgate"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -65,33 +59,19 @@ function DeviceStreamsPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const device = await xg().devices.get(id)
         if (cancelled) return
         useBreadcrumbStore
           .getState()
-          .setDeviceName(
-            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
-          )
-        setViewType(parsedDevice.data.device.activeStreamsViewType)
-        setImuView(parsedDevice.data.device.imuView)
-        setCameraEnables(
-          parsedDevice.data.device.recordingConfig?.video?.cameras
-        )
+          .setDeviceName(device.name ?? device.serial)
+        setViewType(device.uiPrefs.activeStreamsViewType ?? "card")
+        setImuView(device.uiPrefs.imuView ?? null)
+        setCameraEnables(device.config.recording?.video?.cameras)
 
-        const rawModel = await getDeviceModel(
-          parsedDevice.data.device.deviceModelId
-        )
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
+        const model = await xg().deviceModels.get(device.deviceModelId)
+        if (!cancelled) setCaps(model.ioCapabilities)
       } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) {
           setLoadError(message)
           toast.error(message)

@@ -9,7 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { SessionsList } from "@/components/session-pickers"
-import { getDeviceSessions, type Device, type MediaSession } from "@/lib/api"
+import type { Device, MediaSession } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { DeviceRadioList } from "./device-radio-list"
 import { deviceLabel, type SourceBinding } from "./simulator-types"
 
@@ -59,14 +60,14 @@ export function SourceMediaDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { sessions: rows } = await getDeviceSessions(device.id, {
+        const { items: rows } = await xg().media.sessions.list(device.id, {
           limit: SESSION_PAGE,
           sort: "startedAt",
           order: "desc",
         })
         if (!cancelled) setSessions(rows)
       } catch (err) {
-        if (!cancelled) setError((err as Error).message)
+        if (!cancelled) setError(xgMessage(err))
       }
     })()
     return () => {

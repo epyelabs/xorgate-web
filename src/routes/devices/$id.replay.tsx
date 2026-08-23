@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { ArrowLeftIcon } from "lucide-react"
@@ -6,37 +6,31 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import type { IoCapabilities, MetricName } from "@xorgate/sdk"
 import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
-  getReplayManifest,
+  useReplayManifest,
+  useReplayPlayer,
+  useReplayTelemetry,
+  type UseReplayManifestParams,
+} from "@xorgate/react"
+import {
+  xg,
+  xgMessage,
   type ActiveStreamsViewType,
   type ImuView,
-  type IoCapabilities,
-  type ReplayManifest,
-  type ReplayManifestParams,
-  type ReplaySegment,
-} from "@/lib/api"
+} from "@/lib/xorgate"
 import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-  getReplayManifestResponseSchema,
-} from "@/lib/schemas"
+  gpsMetrics,
+  imuMetrics,
+  signalMetrics,
+  systemMetrics,
+} from "@/lib/capability-metrics"
 import { formatDateTime } from "@/lib/format-time"
 import { formatDuration } from "@/components/data-table"
 import { cn } from "@/lib/utils"
 import { StreamsView } from "@/components/streams-view/streams-view"
 import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
-import {
-  buildClockTimeline,
-  buildLanes,
-  segmentUrlKey,
-  type LaneSegment,
-} from "@/lib/replay/lanes"
-import { useReplayClock } from "@/hooks/use-replay-clock"
-import { useReplayTelemetry } from "@/hooks/use-replay-telemetry"
 
 interface ReplaySearch {
   session?: string
@@ -44,11 +38,6 @@ interface ReplaySearch {
   to?: string
   streamKey?: string
 }
-
-// Minimum breathing room between manifest refetches when segment fetches hit
-// 403 (expired URLs): one refetch fixes every tile, so a burst of tile errors
-// must not turn into a burst of manifest calls.
-const AUTH_REFRESH_MIN_INTERVAL_MS = 30_000
 
 export const Route = createFileRoute("/devices/$id/replay")({
   validateSearch: (search: Record<string, unknown>): ReplaySearch => ({
@@ -69,8 +58,9 @@ export const Route = createFileRoute("/devices/$id/replay")({
 //   ?from&to[&streamKey]          composite — every camera with coverage in
 //                                 the range appears as its own lane on the
 //                                 shared clock (run-row entry)
-// The timeline/transport bar is page chrome (R8); the video slot holds one
-// MSE tile per lane with clock-elected pacing (lib/replay/lanes.ts).
+// The whole replay engine — manifest fetch + URL refresh, timeline/lane math,
+// the clock, per-lane MSE — lives in @xorgate/react now; this page is chrome
+// plus the capability-driven readout layout.
 function DeviceReplayPage() {
   const { id } = Route.useParams()
   const {
@@ -85,16 +75,9 @@ function DeviceReplayPage() {
   const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
   const [following, setFollowing] = useState(true)
 
-  // The FIRST manifest defines the replay (timeline + clock stay stable for
-  // the whole visit); refetches — scheduled at urlExpiresAt or forced by a
-  // 403 — only swap presigned URLs via urlMapRef.
-  const [manifest, setManifest] = useState<ReplayManifest | null>(null)
-  const [manifestError, setManifestError] = useState<string | null>(null)
-  const urlMapRef = useRef(new Map<string, string>())
-
   // One params object per distinct replay target; keyed by its serialized
-  // form so effects don't re-run on referential churn.
-  const params = useMemo<ReplayManifestParams | null>(() => {
+  // form so the manifest hook doesn't re-run on referential churn.
+  const params = useMemo<UseReplayManifestParams | null>(() => {
     if (sessionId) return { sessionId }
     if (fromParam && toParam) {
       return streamKeyParam
@@ -110,25 +93,14 @@ function DeviceReplayPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const device = await xg().devices.get(id)
         if (cancelled) return
-        setViewType(parsedDevice.data.device.activeStreamsViewType)
-        setImuView(parsedDevice.data.device.imuView)
-        const rawModel = await getDeviceModel(
-          parsedDevice.data.device.deviceModelId
-        )
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
+        setViewType(device.uiPrefs.activeStreamsViewType ?? "card")
+        setImuView(device.uiPrefs.imuView ?? null)
+        const model = await xg().deviceModels.get(device.deviceModelId)
+        if (!cancelled) setCaps(model.ioCapabilities)
       } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
-        if (!cancelled) toast.error(message)
+        if (!cancelled) toast.error(xgMessage(err))
       }
     })()
     return () => {
@@ -136,109 +108,27 @@ function DeviceReplayPage() {
     }
   }, [id])
 
-  // Initial manifest fetch. Warm manifests take ~1.5–3 s on dev (cold ~6 s)
-  // — the loading state below is not decorative.
-  useEffect(() => {
-    if (!params) return
-    let cancelled = false
-    // Reset-on-param-change: a new target must not replay stale state.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setManifest(null)
-    setManifestError(null)
-    /* eslint-enable react-hooks/set-state-in-effect */
-    urlMapRef.current = new Map()
-    ;(async () => {
-      try {
-        const raw = await getReplayManifest(id, params)
-        const parsed = getReplayManifestResponseSchema.safeParse(raw)
-        if (!parsed.success) throw new Error("Unexpected replay-manifest response")
-        if (cancelled) return
-        setManifest(parsed.data.replay)
-      } catch (err) {
-        const message =
-          err instanceof ApiError && err.status === 404
-            ? "Session not found (it may have been deleted)."
-            : (err as Error).message
-        if (!cancelled) setManifestError(message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id, params])
+  // Manifest (with its own presigned-URL refresh cycle) + the player. A
+  // refetch that describes the same replay swaps only URLs; the timeline and
+  // clock stay stable for the whole visit — the package owns that contract.
+  const manifestQuery = useReplayManifest(id, params)
+  const manifest = manifestQuery.data ?? null
+  const player = useReplayPlayer(manifest)
 
-  // Manifest URL refresh: scheduled before urlExpiresAt (presigned URLs die
-  // after ~1 h; the server already subtracted a 5 min margin), or forced
-  // early when a tile reports a 403. Either way the timeline/clock are
-  // untouched — only the seq→URL maps swap; in-buffer media keeps playing.
-  const authRefreshRef = useRef<() => void>(() => {})
-  useEffect(() => {
-    if (!manifest || !params) return
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let inFlight = false
-    let lastAt = 0
+  // Same capability-driven metric groups the live views read, passed
+  // explicitly so the hook does not re-fetch device + model for discovery.
+  const metrics = useMemo<MetricName[] | undefined>(() => {
+    if (!caps) return undefined
+    return [
+      ...gpsMetrics(caps),
+      ...imuMetrics(caps),
+      ...signalMetrics(caps),
+      ...systemMetrics(caps),
+    ] as MetricName[]
+  }, [caps])
+  const telemetry = useReplayTelemetry(id, player, { metrics })
 
-    const schedule = (expiresAt: number) => {
-      if (cancelled) return
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(
-        () => void refresh(),
-        Math.max(expiresAt - Date.now(), 30_000)
-      )
-    }
-    const refresh = async () => {
-      if (cancelled || inFlight) return
-      inFlight = true
-      lastAt = Date.now()
-      try {
-        const raw = await getReplayManifest(id, params)
-        const parsed = getReplayManifestResponseSchema.safeParse(raw)
-        if (!parsed.success) throw new Error("bad refresh response")
-        if (cancelled) return
-        for (const s of parsed.data.replay.sessions) {
-          for (const seg of s.segments) {
-            urlMapRef.current.set(segmentUrlKey(s.id, seg.seq), seg.url)
-          }
-        }
-        schedule(parsed.data.replay.urlExpiresAt)
-      } catch {
-        // Transient failure: retry in a minute; segment fetches keep using
-        // the previous URLs (their backoff re-attempts) meanwhile.
-        if (!cancelled) schedule(Date.now() + 60_000)
-      } finally {
-        inFlight = false
-      }
-    }
-
-    authRefreshRef.current = () => {
-      if (inFlight || Date.now() - lastAt < AUTH_REFRESH_MIN_INTERVAL_MS) return
-      void refresh()
-    }
-    schedule(manifest.urlExpiresAt)
-    return () => {
-      cancelled = true
-      authRefreshRef.current = () => {}
-      if (timer) clearTimeout(timer)
-    }
-  }, [manifest, id, params])
-
-  const lanes = useMemo(() => (manifest ? buildLanes(manifest) : []), [manifest])
-  const timeline = useMemo(
-    () =>
-      manifest ? buildClockTimeline(lanes, manifest.from, manifest.to) : null,
-    [manifest, lanes]
-  )
-  const clock = useReplayClock(timeline)
-  const telemetry = useReplayTelemetry(id, timeline, clock, caps)
-
-  const getSegmentUrl = useCallback((seg: ReplaySegment) => {
-    const lane = seg as LaneSegment
-    return (
-      urlMapRef.current.get(segmentUrlKey(lane.sessionId, seg.seq)) ?? seg.url
-    )
-  }, [])
-  const onTileAuthError = useCallback(() => authRefreshRef.current(), [])
+  const { timeline, lanes } = player
 
   if (!params) {
     return (
@@ -256,11 +146,15 @@ function DeviceReplayPage() {
     )
   }
 
-  if (manifestError) {
-    return <p className="text-sm text-destructive">{manifestError}</p>
+  if (manifestQuery.error) {
+    const message =
+      manifestQuery.error.status === 404
+        ? "Session not found (it may have been deleted)."
+        : xgMessage(manifestQuery.error)
+    return <p className="text-sm text-destructive">{message}</p>
   }
 
-  if (!manifest || !timeline || !clock) {
+  if (!manifest || !timeline) {
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
@@ -288,11 +182,9 @@ function DeviceReplayPage() {
   const tiles = lanes.map((lane) => (
     <ReplayVideoTile
       key={lane.streamKey}
-      clock={clock}
-      timeline={lane.timeline}
+      player={player}
+      streamKey={lane.streamKey}
       label={lane.streamKey}
-      getSegmentUrl={getSegmentUrl}
-      onAuthError={onTileAuthError}
     />
   ))
   // Both views use the live grid's exact tile layout (side-by-side on lg —
@@ -410,8 +302,8 @@ function DeviceReplayPage() {
       ) : null}
       {telemetry.error ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          Recorded telemetry failed to load ({telemetry.error}) — video still
-          plays; reload the page to retry.
+          Recorded telemetry failed to load ({xgMessage(telemetry.error)}) —
+          video still plays; reload the page to retry.
         </p>
       ) : null}
 
@@ -441,7 +333,7 @@ function DeviceReplayPage() {
         />
       </div>
 
-      <ReplayTimelineBar clock={clock} timeline={timeline} />
+      <ReplayTimelineBar player={player} timeline={timeline} />
     </div>
   )
 }

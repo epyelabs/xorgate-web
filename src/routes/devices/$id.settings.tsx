@@ -4,16 +4,8 @@ import { requireAuth } from "@/lib/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
-import {
-  getDeviceIdentity,
-  getKvsChannels,
-  type DeviceIdentity,
-  type KvsChannel,
-} from "@/lib/api"
-import {
-  getDeviceIdentityResponseSchema,
-  getKvsChannelsResponseSchema,
-} from "@/lib/schemas"
+import { xg } from "@/lib/xorgate"
+import type { DeviceIdentity, VideoChannel } from "@xorgate/sdk"
 import {
   SETTINGS_TABS,
   SETTINGS_TAB_LABELS,
@@ -87,15 +79,14 @@ function DeviceSettingsPage() {
   // the form. Channels drive the per-camera switches as well as the table.
   const [identity, setIdentity] = useState<DeviceIdentity | null>(null)
   const [identityLoaded, setIdentityLoaded] = useState(false)
-  const [channels, setChannels] = useState<KvsChannel[] | null>(null)
+  const [channels, setChannels] = useState<VideoChannel[] | null>(null)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getDeviceIdentity(id)
-        const parsed = getDeviceIdentityResponseSchema.safeParse(raw)
-        if (!cancelled && parsed.success) setIdentity(parsed.data.identity)
+        const fetched = await xg().devices.identity(id)
+        if (!cancelled) setIdentity(fetched)
       } catch {
         // Identity is best-effort metadata; leave it null on failure.
       } finally {
@@ -111,9 +102,8 @@ function DeviceSettingsPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getKvsChannels(id)
-        const parsed = getKvsChannelsResponseSchema.safeParse(raw)
-        if (!cancelled) setChannels(parsed.success ? parsed.data.channels : [])
+        const fetched = await xg().devices.videoChannels(id)
+        if (!cancelled) setChannels(fetched)
       } catch {
         if (!cancelled) setChannels([])
       }

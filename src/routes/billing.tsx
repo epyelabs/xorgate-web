@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
-import type { UserTier } from "@/lib/api"
+import type { UserTier } from "@xorgate/sdk"
 import { useAuthStore } from "@/store/auth"
 import {
   compact,

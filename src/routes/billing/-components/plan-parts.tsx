@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import type { UserTier } from "@/lib/api"
+import type { UserTier } from "@xorgate/sdk"
 import {
   compact,
   money,

@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/tooltip"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
-import { listMemberships, type MembershipRole, type OrgMember } from "@/lib/api"
+import type { MembershipRole, MembershipWithUser } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
@@ -55,11 +56,11 @@ const ROLE_VARIANT: Record<MembershipRole, "default" | "secondary" | "outline"> 
   viewer: "outline",
 }
 
-function displayName(member: OrgMember): string {
+function displayName(member: MembershipWithUser): string {
   return member.user?.name?.trim() || member.user?.email || "Unknown user"
 }
 
-function initials(member: OrgMember): string {
+function initials(member: MembershipWithUser): string {
   const name = member.user?.name?.trim()
   if (name) {
     const parts = name.split(/\s+/)
@@ -70,14 +71,14 @@ function initials(member: OrgMember): string {
 
 interface MembersData {
   organizationId: string | null
-  members: OrgMember[]
+  members: MembershipWithUser[]
 }
 
 function MembersPage() {
   const [data, setData] = useState<MembersData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
-  const [removing, setRemoving] = useState<OrgMember | null>(null)
+  const [removing, setRemoving] = useState<MembershipWithUser | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
 
   const authUserId = useAuthStore((s) => s.user?.id ?? null)
@@ -97,12 +98,12 @@ function MembersPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const { memberships } = await listMemberships()
+        const memberships = await xg().memberships.list()
         if (cancelled) return
         setError(null)
         setData({ organizationId: currentOrganizationId, members: memberships })
       } catch (err) {
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (cancelled) return
         setError(message)
         setData({ organizationId: currentOrganizationId, members: [] })
@@ -119,7 +120,7 @@ function MembersPage() {
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), [])
 
-  const columns: DataTableColumn<OrgMember>[] = [
+  const columns: DataTableColumn<MembershipWithUser>[] = [
     {
       id: "member",
       header: "Member",

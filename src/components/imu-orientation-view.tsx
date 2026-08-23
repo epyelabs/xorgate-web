@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import * as THREE from "three"
 import type { LatestReading } from "@xorgate/sdk"
-import type { ImuView } from "@/lib/api"
+import type { ImuView } from "@/lib/xorgate"
 import { useIsDark } from "@/hooks/use-is-dark"
 import {
   formatMetricValue,

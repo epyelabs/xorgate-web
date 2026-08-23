@@ -15,7 +15,7 @@
 // "no signal", and — just as important — an old agent that reports nothing at
 // all has to render as UNKNOWN rather than as "no SIM".
 
-import type { Device } from "./api"
+import type { Device } from "@xorgate/sdk"
 import { parseReportedConfig } from "./device-config-status"
 
 /** SIM presence/usability as the modem reported it. */

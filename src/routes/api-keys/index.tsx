@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/tooltip"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
-import { listApiKeys, type ApiKey } from "@/lib/api"
+import type { ApiKey } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { CreateApiKeyDialog } from "./-components/create-api-key-dialog"
@@ -88,12 +89,12 @@ function ApiKeysPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const { api_keys } = await listApiKeys()
+        const keys = await xg().apiKeys.list()
         if (cancelled) return
         setError(null)
-        setData({ organizationId: currentOrganizationId, keys: api_keys })
+        setData({ organizationId: currentOrganizationId, keys })
       } catch (err) {
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (cancelled) return
         setError(message)
         setData({ organizationId: currentOrganizationId, keys: [] })

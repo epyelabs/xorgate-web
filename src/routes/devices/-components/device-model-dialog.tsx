@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import type { DeviceModel, IoCapabilities } from "@/lib/api"
+import type { DeviceModel, IoCapabilities } from "@xorgate/sdk"
 import { setupMonaco } from "@/lib/monaco-setup"
 import { cn } from "@/lib/utils"
 

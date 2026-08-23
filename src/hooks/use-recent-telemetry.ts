@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { ApiError, getTelemetryRecent } from "@/lib/api"
-import { getTelemetryResponseSchema } from "@/lib/schemas"
+import type { MetricName } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 export interface UseRecentTelemetry {
@@ -41,20 +41,16 @@ export function useRecentTelemetry(
     setState((s) => ({ ...s, loading: true, error: null }))
     ;(async () => {
       try {
-        const raw = await getTelemetryRecent(deviceId, {
-          metric: metricsKey || undefined,
+        const data = await xg().telemetry.recent(deviceId, {
+          metric: metrics.length > 0 ? (metrics as MetricName[]) : undefined,
           limit,
         })
-        const parsed = getTelemetryResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /telemetry/recent response shape")
-        }
         if (cancelled) return
 
         const byTs = new Map<number, HistoryPoint>()
         const units: Record<string, string> = {}
         const seen = new Set<string>()
-        for (const r of parsed.data.readings) {
+        for (const r of data.readings) {
           if (r.value === null) continue
           const ts = Date.parse(r.ts)
           let point = byTs.get(ts)
@@ -77,9 +73,7 @@ export function useRecentTelemetry(
         })
       } catch (err) {
         if (cancelled) return
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
-        setState((s) => ({ ...s, loading: false, error: message }))
+        setState((s) => ({ ...s, loading: false, error: xgMessage(err) }))
       }
     })()
 

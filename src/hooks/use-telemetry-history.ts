@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { ApiError, getTelemetry } from "@/lib/api"
-import { getTelemetryResponseSchema } from "@/lib/schemas"
+import type { MetricName } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import type { HistoryPoint } from "@/lib/telemetry-meta"
 
 // Aim for ~this many chart points per metric; the backend buckets server-side.
@@ -50,21 +50,17 @@ export function useTelemetryHistory(
       try {
         const rangeSeconds = (Date.parse(toIso) - Date.parse(fromIso)) / 1000
         const interval = Math.max(1, Math.ceil(rangeSeconds / TARGET_POINTS))
-        const raw = await getTelemetry(deviceId, {
+        const data = await xg().telemetry.history(deviceId, {
           from: fromIso,
           to: toIso,
-          metric: metricsKey,
+          metric: metrics as MetricName[],
           interval,
         })
-        const parsed = getTelemetryResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /telemetry response shape")
-        }
         if (cancelled) return
 
         const byTs = new Map<number, HistoryPoint>()
         const units: Record<string, string> = {}
-        for (const r of parsed.data.readings) {
+        for (const r of data.readings) {
           if (r.value === null) continue
           const ts = Date.parse(r.ts)
           let point = byTs.get(ts)
@@ -91,14 +87,12 @@ export function useTelemetryHistory(
           gpsTrack,
           loading: false,
           error: null,
-          truncated: parsed.data.truncated,
-          bucketSeconds: parsed.data.bucketSeconds,
+          truncated: data.truncated,
+          bucketSeconds: data.bucketSeconds,
         })
       } catch (err) {
         if (cancelled) return
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
-        setState((s) => ({ ...s, loading: false, error: message }))
+        setState((s) => ({ ...s, loading: false, error: xgMessage(err) }))
       }
     })()
 

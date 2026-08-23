@@ -24,7 +24,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import type { Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
 import type { DeviceConfigStatus } from "@/lib/device-config-status"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import {

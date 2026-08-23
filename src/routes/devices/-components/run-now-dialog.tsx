@@ -18,12 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SessionsList, WindowPicker } from "@/components/session-pickers"
-import {
-  getDeviceSessions,
-  getSessionSegments,
-  type MediaSegment,
-  type MediaSession,
-} from "@/lib/api"
+import type { MediaSegment, MediaSession } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { runAttachmentNow } from "@/lib/device-workflows-api"
 import {
   TRIGGER_TYPE_LABELS,
@@ -116,14 +112,14 @@ export function RunNowDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { sessions: rows } = await getDeviceSessions(deviceId, {
+        const { items: rows } = await xg().media.sessions.list(deviceId, {
           limit: SESSION_PAGE,
           sort: "startedAt",
           order: "desc",
         })
         if (!cancelled) setSessions(rows)
       } catch (err) {
-        if (!cancelled) setSessionError((err as Error).message)
+        if (!cancelled) setSessionError(xgMessage(err))
       }
     })()
     return () => {
@@ -143,7 +139,7 @@ export function RunNowDialog({
     /* eslint-enable react-hooks/set-state-in-effect */
     ;(async () => {
       try {
-        const { segments: rows } = await getSessionSegments(
+        const { segments: rows } = await xg().media.segments(
           deviceId,
           chosenSessionId,
         )
@@ -153,7 +149,7 @@ export function RunNowDialog({
         setSegments(ordered)
         setSegmentSeq(ordered[ordered.length - 1]?.seq ?? null)
       } catch (err) {
-        if (!cancelled) setSessionError((err as Error).message)
+        if (!cancelled) setSessionError(xgMessage(err))
       }
     })()
     return () => {

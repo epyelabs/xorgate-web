@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiError, deleteApiKey, type ApiKey } from "@/lib/api"
+import type { ApiKey } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 
 export function DeleteApiKeyDialog({
   open,
@@ -29,16 +30,12 @@ export function DeleteApiKeyDialog({
     if (!apiKey) return
     setDeleting(true)
     try {
-      await deleteApiKey(apiKey.id)
+      await xg().apiKeys.delete(apiKey.id)
       toast.success(`API key "${apiKey.name}" revoked`)
       onDeleted()
       onOpenChange(false)
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to revoke API key"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setDeleting(false)
     }

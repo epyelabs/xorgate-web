@@ -1,4 +1,4 @@
-import type { IoCapabilities } from "@/lib/api"
+import type { IoCapabilities } from "@xorgate/sdk"
 import type { LatestReading } from "@xorgate/sdk"
 import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
 import { MetricCell } from "@/components/telemetry-metric-cell"

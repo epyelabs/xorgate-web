@@ -10,7 +10,7 @@
 // about a revision it has not received. Everything else comes straight off the
 // device's own report.
 
-import type { Device } from "./api"
+import type { Device } from "@xorgate/sdk"
 import type { SettingsTab } from "./device-settings-tabs"
 import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
 import { deepEqual } from "./deep-equal"
@@ -89,12 +89,16 @@ export interface ReportedConfig {
  * unrecognized is dropped rather than allowed to throw in a render.
  */
 export function parseReportedConfig(
-  raw: Record<string, unknown> | null | undefined
+  // `unknown`, not the SDK's DeviceReportedConfig: this parser is the app's
+  // own defensive narrowing (older agents send sparser shapes), so it accepts
+  // whatever the row carried and validates for itself.
+  raw: unknown
 ): ReportedConfig | null {
   if (!raw || typeof raw !== "object") return null
-  const rev = raw.rev
+  const rec = raw as Record<string, unknown>
+  const rev = rec.rev
   const status: ReportedConfig["status"] = {}
-  const rawStatus = raw.status
+  const rawStatus = rec.status
   if (rawStatus && typeof rawStatus === "object" && !Array.isArray(rawStatus)) {
     for (const [ns, value] of Object.entries(rawStatus as Record<string, unknown>)) {
       if (!value || typeof value !== "object") continue
@@ -110,13 +114,13 @@ export function parseReportedConfig(
     }
   }
   const effective =
-    raw.effective && typeof raw.effective === "object" && !Array.isArray(raw.effective)
-      ? (raw.effective as Record<string, unknown>)
+    rec.effective && typeof rec.effective === "object" && !Array.isArray(rec.effective)
+      ? (rec.effective as Record<string, unknown>)
       : {}
   return {
-    ts: typeof raw.ts === "number" ? raw.ts : null,
+    ts: typeof rec.ts === "number" ? rec.ts : null,
     rev: typeof rev === "number" && Number.isFinite(rev) && rev > 0 ? Math.floor(rev) : 0,
-    origin: typeof raw.origin === "string" ? raw.origin : null,
+    origin: typeof rec.origin === "string" ? rec.origin : null,
     effective,
     status,
   }

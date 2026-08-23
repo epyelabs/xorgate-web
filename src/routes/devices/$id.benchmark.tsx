@@ -2,16 +2,8 @@ import { Fragment, useEffect, useRef, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import {
-  ApiError,
-  getDevice,
-  getDeviceModel,
-  type IoCapabilities,
-} from "@/lib/api"
-import {
-  getDeviceModelResponseSchema,
-  getDeviceResponseSchema,
-} from "@/lib/schemas"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { IoCapabilities } from "@xorgate/sdk"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { gpsMetrics, imuMetrics, signalMetrics } from "@/lib/capability-metrics"
 import { Badge } from "@/components/ui/badge"
@@ -230,28 +222,16 @@ function DeviceBenchmarkPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rawDevice = await getDevice(id)
-        const parsedDevice = getDeviceResponseSchema.safeParse(rawDevice)
-        if (!parsedDevice.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const device = await xg().devices.get(id)
         if (cancelled) return
         useBreadcrumbStore
           .getState()
-          .setDeviceName(
-            parsedDevice.data.device.name ?? parsedDevice.data.device.serial
-          )
+          .setDeviceName(device.name ?? device.serial)
 
-        const rawModel = await getDeviceModel(
-          parsedDevice.data.device.deviceModelId
-        )
-        const parsedModel = getDeviceModelResponseSchema.safeParse(rawModel)
-        if (parsedModel.success && !cancelled) {
-          setCaps(parsedModel.data.device_model.ioCapabilities ?? null)
-        }
+        const model = await xg().deviceModels.get(device.deviceModelId)
+        if (!cancelled) setCaps(model.ioCapabilities)
       } catch (err) {
-        const message =
-          err instanceof ApiError ? err.message : (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) {
           setLoadError(message)
           toast.error(message)

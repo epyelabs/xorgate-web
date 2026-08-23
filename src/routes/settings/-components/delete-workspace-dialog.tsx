@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ApiError, type Workspace } from "@/lib/api"
+import type { Workspace } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import { useWorkspaceStore } from "@/store/workspace"
 
 export function DeleteWorkspaceDialog({
@@ -32,11 +33,7 @@ export function DeleteWorkspaceDialog({
       toast.success(`Workspace "${workspace.name}" deleted`)
       onOpenChange(false)
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to delete workspace"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setDeleting(false)
     }

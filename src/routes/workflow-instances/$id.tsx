@@ -6,7 +6,8 @@ import { AlertTriangleIcon, RadioIcon, RotateCwIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ApiError } from "@/lib/api"
+import { isXorgateError } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import { cn } from "@/lib/utils"
 import {
   getWorkflowInstance,
@@ -107,12 +108,12 @@ function WorkflowInstanceDetailPage() {
             `${fetched.templateName} · ${fetched.deviceName ?? "simulation"}`,
           )
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) {
+        if (isXorgateError(err) && err.status === 404) {
           if (!cancelledRef.current && !silent) setNotFound(true)
           return
         }
         if (silent) return
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (!cancelledRef.current) setError(message)
         toast.error(message)
       }

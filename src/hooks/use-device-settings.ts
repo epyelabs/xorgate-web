@@ -1,26 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
-  ApiError,
-  apiErrorMessage,
-  getDevice,
-  patchDeviceConfig,
-  patchDeviceUiPrefs,
-  refreshDeviceState,
-  updateDevice,
-  updateDeviceAgent,
-  type ActiveStreamsViewType,
+  isXorgateError,
   type CellularConfig,
   type Device,
   type DeviceConfigPatch,
   type DeviceUiPrefsPatch,
-  type ImuMount,
-  type ImuView,
   type LteRecoveryConfig,
   type RecordingConfig,
   type TimeSyncConfig,
-} from "@/lib/api"
-import { getDeviceResponseSchema } from "@/lib/schemas"
+} from "@xorgate/sdk"
+import {
+  xg,
+  xgMessage,
+  type ActiveStreamsViewType,
+  type ImuMount,
+  type ImuView,
+} from "@/lib/xorgate"
 import {
   buildRecordingConfig,
   resolveRecording,
@@ -52,13 +48,13 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
 // There is no hand-maintained baseline copy to forget to update.
 //
 // Phase 2 swapped the transport underneath without touching a single tab: a
-// patch is still keyed by DEVICE FIELD (`recordingConfig`, `imuView`, `name`),
+// patch is still keyed by FORM FIELD (`recordingConfig`, `imuView`, `name`),
 // and this hook routes each key to the endpoint that owns it —
-// `PATCH /devices/{id}/config` for anything delivered to the device,
-// `PATCH /devices/{id}/ui-prefs` for cloud-only prefs, `PUT /devices/{id}` for
-// metadata. Tabs still READ the dual-written top-level fields; when the
-// follow-up migration drops those columns, the reads move to `device.config`
-// and this mapping is what tells you where each one goes.
+// `devices.patchConfig()` for anything delivered to the device,
+// `devices.patchUiPrefs()` for cloud-only prefs, `devices.update()` for
+// metadata. The SDK's Device carries no top-level duplicates, so reads and
+// optimistic writes both land on `device.config` / `device.uiPrefs`; the
+// mapping tables below are what tie a form key to its namespace.
 
 /**
  * Patch keys are device fields, not namespaces — that indirection is what let
@@ -192,21 +188,16 @@ export function useDeviceSettings(id: string): DeviceSettings {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getDevice(id)
-        const parsed = getDeviceResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /devices/:id response shape")
-        }
+        const fetched = await xg().devices.get(id)
         if (cancelled) return
-        const fetched = parsed.data.device
         serverRef.current = fetched
         applyDevice(fetched)
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) {
+        if (isXorgateError(err) && err.status === 404) {
           if (!cancelled) setNotFound(true)
           return
         }
-        const message = (err as Error).message
+        const message = xgMessage(err)
         if (!cancelled) setError(message)
         toast.error(message)
       }
@@ -241,10 +232,8 @@ export function useDeviceSettings(id: string): DeviceSettings {
       if (pendingCount > 0) return
       void (async () => {
         try {
-          const raw = await getDevice(id)
-          const parsed = getDeviceResponseSchema.safeParse(raw)
-          if (!parsed.success || cancelled) return
-          const fetched = parsed.data.device
+          const fetched = await xg().devices.get(id)
+          if (cancelled) return
           serverRef.current = fetched
           // Merge only the server-owned fields. The rest of the object is the
           // live form state and must not be reset under the operator's hands.
@@ -280,16 +269,25 @@ export function useDeviceSettings(id: string): DeviceSettings {
       const updates = Object.fromEntries(
         Object.entries(patch).filter(([, v]) => v !== undefined)
       ) as DeviceSettingsPatch
-      const keys = Object.keys(updates) as (keyof Device)[]
+      const keys = Object.keys(updates) as (keyof DeviceSettingsPatch)[]
       if (keys.length === 0) return
 
-      const next = { ...current, ...(updates as Partial<Device>) }
+      // What the device object currently holds for a patch key. The legacy
+      // top-level duplicates are gone (the SDK's Device carries config/uiPrefs
+      // only), so each key resolves into the document that owns it.
+      const readField = (device: Device, field: keyof DeviceSettingsPatch) => {
+        if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
+        if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
+        return device.name
+      }
+
       // Nothing actually changed (an incidental blur, a re-select of the value
       // already stored) — don't hit the API.
-      if (keys.every((k) => deepEqual(current[k], next[k]))) return
+      if (keys.every((k) => deepEqual(readField(current, k), updates[k])))
+        return
 
-      // Mirror the optimistic edit into the consolidated document too, so the
-      // two views of the same setting never disagree mid-flight.
+      // Optimistic apply, straight into the consolidated documents.
+      const next = { ...current }
       next.config = { ...current.config }
       next.uiPrefs = { ...current.uiPrefs }
       for (const [field, value] of Object.entries(updates)) {
@@ -301,6 +299,8 @@ export function useDeviceSettings(id: string): DeviceSettings {
           const pref = UI_PREF_FIELDS[field]
           if (value === null) delete next.uiPrefs[pref]
           else (next.uiPrefs as Record<string, unknown>)[pref] = value
+        } else if (field === "name") {
+          next.name = value as string | null
         }
       }
 
@@ -334,22 +334,25 @@ export function useDeviceSettings(id: string): DeviceSettings {
 
           let updated: Device | null = null
           if (Object.keys(metaPatch).length > 0) {
-            updated = (await updateDevice(id, metaPatch)).device
+            updated = await xg().devices.update(id, metaPatch)
           }
           if (Object.keys(configPatch).length > 0) {
-            updated = (await patchDeviceConfig(id, configPatch)).device
+            // patchConfig, deliberately: every control here builds its
+            // namespace WHOLE (commitRecording resolves over defaults first),
+            // which is exactly the endpoint's replace semantics. mergeConfig
+            // exists for callers sending fragments; this hook never does.
+            updated = await xg().devices.patchConfig(id, configPatch)
           }
           if (Object.keys(uiPrefsPatch).length > 0) {
-            updated = (await patchDeviceUiPrefs(id, uiPrefsPatch)).device
+            updated = await xg().devices.patchUiPrefs(id, uiPrefsPatch)
           }
           if (updated === null) throw new Error("Nothing to save")
           serverRef.current = updated
-          // Re-seed only the fields this save owns: later queued edits are
-          // already optimistically applied and must survive.
+          // Re-seed only what this save owns: later queued edits are already
+          // optimistically applied and must survive. config/uiPrefs come back
+          // wholesale below; `name` is the one field re-seeded individually.
           const merged = { ...(optimisticRef.current ?? updated) }
-          for (const k of keys) {
-            ;(merged as Record<string, unknown>)[k] = updated[k]
-          }
+          if (keys.includes("name")) merged.name = updated.name
           merged.status = updated.status
           merged.lastSeenAt = updated.lastSeenAt
           merged.updatedAt = updated.updatedAt
@@ -388,7 +391,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     (key: string, mutate: (r: ResolvedRecording) => void) => {
       const current = optimisticRef.current
       if (current === null) return
-      const stored = current.recordingConfig
+      const stored = current.config.recording ?? null
       const next = resolveRecording(stored)
       mutate(next)
       const nextCfg = buildRecordingConfig(next)
@@ -426,16 +429,13 @@ export function useDeviceSettings(id: string): DeviceSettings {
     setRefreshing(true)
     void (async () => {
       try {
-        await refreshDeviceState(id)
+        await xg().devices.refreshState(id)
         let advances = 0
         let lastSeen = before
         // 18 × 5 s = 90 s: covers the immediate report and the re-probe wave.
         for (let tick = 0; tick < 18; tick++) {
           await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
-          const raw = await getDevice(id)
-          const parsed = getDeviceResponseSchema.safeParse(raw)
-          if (!parsed.success) continue
-          const fetched = parsed.data.device
+          const fetched = await xg().devices.get(id)
           if (fetched.reportedAt === lastSeen) continue
           lastSeen = fetched.reportedAt
           advances += 1
@@ -484,7 +484,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     setUpdatingAgent(true)
     void (async () => {
       try {
-        await updateDeviceAgent(id)
+        await xg().devices.updateAgent(id)
         toast.success("Update command sent — the device will restart shortly")
         let sawOffline = false
         // 72 × 5 s = 6 min: the download + `npm ci` alone can take minutes on
@@ -492,10 +492,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         // failure while the device is still working.
         for (let tick = 0; tick < AGENT_UPDATE_POLL_TICKS; tick++) {
           await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
-          const raw = await getDevice(id)
-          const parsed = getDeviceResponseSchema.safeParse(raw)
-          if (!parsed.success) continue
-          const fetched = parsed.data.device
+          const fetched = await xg().devices.get(id)
           serverRef.current = fetched
           // Same merge rule as every other poll here: server-owned fields
           // only, never the live form state.
@@ -542,10 +539,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
             "(`journalctl -u xorgate-updater`) before retrying."
         )
       } catch (err) {
-        // apiErrorMessage, not err.message: an ApiError carries the raw
-        // response body, so a 403/409 would otherwise toast a JSON envelope
-        // instead of "Requires one of: owner, admin."
-        toast.error(apiErrorMessage(err))
+        // xgMessage, not err.message: a XorgateError's message carries the
+        // "CODE METHOD url:" prefix for logs; the toast wants only
+        // "Requires one of: owner, admin."
+        toast.error(xgMessage(err))
       } finally {
         updatingAgentRef.current = false
         setUpdatingAgent(false)
@@ -555,7 +552,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
 
   return {
     device,
-    recording: resolveRecording(device?.recordingConfig ?? null),
+    recording: resolveRecording(device?.config.recording ?? null),
     configStatus,
     error,
     notFound,

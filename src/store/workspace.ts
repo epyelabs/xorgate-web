@@ -1,20 +1,12 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import {
-  createOrganization as apiCreateOrganization,
-  createWorkspace as apiCreateWorkspace,
-  deleteWorkspace as apiDeleteWorkspace,
-  listWorkspaces as apiListWorkspaces,
-  updateWorkspace as apiUpdateWorkspace,
   registerOrgIdGetter,
   registerWorkspaceIdGetter,
-  type Organization,
-  type Workspace,
-} from "@/lib/api"
-import {
-  registerOrgIdGetter as registerXgOrgIdGetter,
-  registerWorkspaceIdGetter as registerXgWorkspaceIdGetter,
+  xg,
+  xgBootstrap,
 } from "@/lib/xorgate"
+import type { Organization, Workspace } from "@xorgate/sdk"
 import { useAuthStore } from "@/store/auth"
 
 interface WorkspaceState {
@@ -90,7 +82,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
         set({ isLoadingWorkspaces: true })
         try {
-          const { workspaces } = await apiListWorkspaces()
+          const workspaces = await xg().workspaces.list()
           const persistedWorkspaceId = get().currentWorkspaceId
           const stillValid =
             persistedWorkspaceId && workspaces.some((p) => p.id === persistedWorkspaceId)
@@ -108,14 +100,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       createOrganization: async (input) => {
-        const { organization } = await apiCreateOrganization(input)
+        // Bootstrap client: org creation is exactly the call that happens
+        // before any organization is selected (onboarding).
+        const organization = await xgBootstrap().createOrganization(input)
         await useAuthStore.getState().refreshMe()
         await get().setCurrentOrganization(organization.id)
         return organization
       },
 
       createWorkspace: async (input) => {
-        const { workspace } = await apiCreateWorkspace(input)
+        const workspace = await xg().workspaces.create(input)
         set((state) => ({
           workspaces: [workspace, ...state.workspaces],
           currentWorkspaceId: workspace.id,
@@ -124,7 +118,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       updateWorkspace: async (id, input) => {
-        const { workspace } = await apiUpdateWorkspace(id, input)
+        const workspace = await xg().workspaces.update(id, input)
         set((state) => ({
           workspaces: state.workspaces.map((w) =>
             w.id === workspace.id ? workspace : w
@@ -134,7 +128,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       deleteWorkspace: async (id) => {
-        await apiDeleteWorkspace(id)
+        await xg().workspaces.delete(id)
         set((state) => {
           const workspaces = state.workspaces.filter((w) => w.id !== id)
           // If the active workspace was deleted, fall back to the first
@@ -169,10 +163,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
 registerOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
 registerWorkspaceIdGetter(() => useWorkspaceStore.getState().currentWorkspaceId)
-registerXgOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
-registerXgWorkspaceIdGetter(
-  () => useWorkspaceStore.getState().currentWorkspaceId
-)
 
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.isAuthenticated && !state.isAuthenticated) {

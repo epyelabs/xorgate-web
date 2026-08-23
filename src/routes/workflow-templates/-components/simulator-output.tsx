@@ -15,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getSegmentPlaybackUrl, getSessionSegments } from "@/lib/api"
+import { xg } from "@/lib/xorgate"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import type {
   RunEvent,
@@ -285,7 +285,7 @@ export function SimulatorOutput({
     let cancelled = false
     ;(async () => {
       try {
-        const { segments } = await getSessionSegments(
+        const { segments } = await xg().media.segments(
           videoBinding.deviceId,
           videoBinding.session.id,
         )
@@ -293,7 +293,7 @@ export function SimulatorOutput({
           a.startTs < b.startTs ? -1 : 1,
         )[0]
         if (!first) return
-        const { url } = await getSegmentPlaybackUrl(
+        const { url } = await xg().media.segmentPlaybackUrl(
           videoBinding.deviceId,
           videoBinding.session.id,
           first.seq,

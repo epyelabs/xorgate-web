@@ -14,8 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatBytes, formatDuration } from "@/components/data-table"
-import { getDeviceRuns } from "@/lib/api"
-import { getDeviceRunsResponseSchema } from "@/lib/schemas"
+import { xg } from "@/lib/xorgate"
 import {
   runFromApi,
   runReplayBlocked,
@@ -61,15 +60,12 @@ export function RecentSessionsSection({
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getDeviceRuns(deviceId, {
+        // No `sort` param: runs always come back sorted by startedAt.
+        const { items } = await xg().media.sessions.listRuns(deviceId, {
           limit: RECENT_RUNS,
           order: "desc",
-          sort: "startedAt",
         })
-        const parsed = getDeviceRunsResponseSchema.safeParse(raw)
-        if (!cancelled) {
-          setRuns(parsed.success ? parsed.data.runs.map(runFromApi) : [])
-        }
+        if (!cancelled) setRuns(items.map(runFromApi))
       } catch {
         if (!cancelled) setRuns([])
       }

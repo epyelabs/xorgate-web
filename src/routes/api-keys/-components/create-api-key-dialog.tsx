@@ -20,7 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { createApiKeySchema } from "@/lib/schemas"
-import { ApiError, createApiKey, type ApiKeyScope } from "@/lib/api"
+import type { ApiKeyScope } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 
 const SCOPE_OPTIONS: { value: ApiKeyScope; label: string; hint: string }[] = [
   { value: "client", label: "Client", hint: "Frontend / dashboard clients" },
@@ -75,15 +76,11 @@ export function CreateApiKeyDialog({
     }
     setSubmitting(true)
     try {
-      const { plaintext_key } = await createApiKey(parsed.data)
-      setPlaintext(plaintext_key)
+      const { plaintextKey } = await xg().apiKeys.create(parsed.data)
+      setPlaintext(plaintextKey)
       onCreated()
     } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : (err as Error).message ?? "Failed to create API key"
-      toast.error(message)
+      toast.error(xgMessage(err))
     } finally {
       setSubmitting(false)
     }

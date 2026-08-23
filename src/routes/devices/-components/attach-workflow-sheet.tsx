@@ -30,12 +30,8 @@ import {
 } from "@/lib/device-workflow-schemas"
 import { attachWorkflow } from "@/lib/device-workflows-api"
 import { listWorkflowTemplates } from "@/lib/workflow-templates-api"
-import {
-  getDevice,
-  getDeviceModel,
-  getKvsChannels,
-  type IoCapabilities,
-} from "@/lib/api"
+import type { IoCapabilities } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { telemetryMetricOptions } from "@/lib/capability-metrics"
 import {
   listWorkflowTemplatesResponseSchema,
@@ -123,14 +119,14 @@ export function AttachWorkflowSheet({
     let cancelled = false
     ;(async () => {
       try {
-        const { device } = await getDevice(deviceId)
+        const device = await xg().devices.get(deviceId)
         if (cancelled) return
-        const [{ device_model }, { channels }] = await Promise.all([
-          getDeviceModel(device.deviceModelId),
-          getKvsChannels(deviceId),
+        const [model, channels] = await Promise.all([
+          xg().deviceModels.get(device.deviceModelId),
+          xg().devices.videoChannels(deviceId),
         ])
         if (cancelled) return
-        setDeviceCaps(device_model.ioCapabilities)
+        setDeviceCaps(model.ioCapabilities)
         // The media triggers run against recorded video streams (exclude audio).
         setStreamKeys(
           channels
@@ -138,7 +134,7 @@ export function AttachWorkflowSheet({
             .filter((k) => !k.startsWith("audio")),
         )
       } catch (err) {
-        if (!cancelled) toast.error((err as Error).message)
+        if (!cancelled) toast.error(xgMessage(err))
       }
     })()
     return () => {

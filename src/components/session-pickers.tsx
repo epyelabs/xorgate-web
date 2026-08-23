@@ -2,7 +2,7 @@ import { CheckIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type MediaSession } from "@/lib/api"
+import type { MediaSession } from "@xorgate/sdk"
 import { formatRelative } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 import type { ManualWindow } from "@/lib/device-workflow-schemas"
@@ -24,7 +24,8 @@ function formatDur(ms: number | null): string {
 }
 
 function sessionDurationMs(s: MediaSession): number | null {
-  if (s.totalDurationMs > 0) return s.totalDurationMs
+  const total = s.totalDurationMs ?? 0
+  if (total > 0) return total
   if (s.endedAt)
     return new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
   return null
@@ -142,7 +143,8 @@ export function SessionsList({
   return (
     <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto rounded-md border border-border p-1">
       {sessions.map((session) => {
-        const selectable = session.segmentCount > 0
+        const segmentCount = session.segmentCount ?? 0
+        const selectable = segmentCount > 0
         const on = selectedIds.includes(session.id)
         return (
           <button
@@ -184,8 +186,8 @@ export function SessionsList({
               </span>
               <span className="block truncate text-xs text-muted-foreground">
                 {formatRelative(session.startedAt)} ago ·{" "}
-                {formatDur(sessionDurationMs(session))} · {session.segmentCount}{" "}
-                segment{session.segmentCount === 1 ? "" : "s"}
+                {formatDur(sessionDurationMs(session))} · {segmentCount}{" "}
+                segment{segmentCount === 1 ? "" : "s"}
               </span>
             </span>
             {!selectable ? (

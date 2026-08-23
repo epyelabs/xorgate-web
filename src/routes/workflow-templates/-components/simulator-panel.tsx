@@ -8,7 +8,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
-import { ApiError } from "@/lib/api"
+import { isXorgateError } from "@xorgate/sdk"
+import { xgMessage } from "@/lib/xorgate"
 import { createSimulation } from "@/lib/workflow-templates-api"
 import {
   getRunArtifactUrl,
@@ -300,10 +301,15 @@ export function SimulatorPanel({
         setRowIssues({ [err.nodeId]: err.message })
         return
       }
-      if (err instanceof ApiError) {
+      if (isXorgateError(err)) {
+        // XorgateError splits the wire envelope across fields; rebuild it for
+        // the body-text parsers.
+        const body = JSON.stringify({
+          error: { code: err.code, message: xgMessage(err), details: err.details },
+        })
         // 400 WORKFLOW_VALIDATION_FAILED: same shape as publish; light the
         // canvas + banner through the editor store.
-        const publishIssues = parsePublishIssues(err.message)
+        const publishIssues = parsePublishIssues(body)
         if (publishIssues && publishIssues.length > 0) {
           useWorkflowEditor.getState().setPublishIssues(publishIssues)
           toast.error(
@@ -312,7 +318,7 @@ export function SimulatorPanel({
           return
         }
         // 400 SIMULATION_BINDING_INVALID: render per source row by nodeId.
-        const bindingIssues = parseBindingIssues(err.message)
+        const bindingIssues = parseBindingIssues(body)
         if (bindingIssues && bindingIssues.length > 0) {
           const rows: Record<string, string> = {}
           const general: string[] = []
@@ -328,13 +334,13 @@ export function SimulatorPanel({
           return
         }
         // 502 SIMULATION_DISPATCH_FAILED: the run row is already failed.
-        const dispatch = parseDispatchFailure(err.message)
+        const dispatch = parseDispatchFailure(body)
         if (dispatch) {
           toast.error(`Simulation failed to start: ${dispatch.message}`)
           return
         }
       }
-      toast.error((err as Error).message)
+      toast.error(xgMessage(err))
     } finally {
       setPrepMessage(null)
     }

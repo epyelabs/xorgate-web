@@ -13,7 +13,8 @@
 // and regenerate.
 
 import contract from "@/lib/config-contract.json"
-import type { ImuMount, ImuView, RecordingConfig, VideoPresetName } from "@/lib/api"
+import type { RecordingConfig } from "@xorgate/sdk"
+import type { ImuMount, ImuView, VideoPresetName } from "@/lib/xorgate"
 
 export const GIB = 1024 ** 3
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { listDevices, type Device } from "@/lib/api"
+import type { Device } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { cn } from "@/lib/utils"
 import { deviceLabel } from "./simulator-types"
 
@@ -41,15 +42,15 @@ export function DeviceRadioList({
         let offset = 0
         let total = Infinity
         while (offset < total && all.length < 5000) {
-          const { devices, page } = await listDevices({ limit: 500, offset })
-          all.push(...devices)
-          total = page?.total ?? devices.length
-          if (devices.length === 0) break
+          const { items, page } = await xg().devices.list({ limit: 500, offset })
+          all.push(...items)
+          total = page.total
+          if (items.length === 0) break
           offset += 500
         }
         if (!cancelled) setDevices(all)
       } catch (err) {
-        if (!cancelled) setError((err as Error).message)
+        if (!cancelled) setError(xgMessage(err))
       }
     })()
     return () => {

@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      BUCKET: www.xorgate.io
+      BUCKET: console.xorgate.io
     steps:
       - uses: actions/checkout@v4
         with:

@@ -1,7 +1,9 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Editor from "@monaco-editor/react"
-import { BracesIcon } from "lucide-react"
+import { BracesIcon, Loader2Icon } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -10,8 +12,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { DeviceModel, IoCapabilities } from "@xorgate/sdk"
+import type { DeviceModel, IoCapabilities, UpdateDeviceInput } from "@xorgate/sdk"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { setupMonaco } from "@/lib/monaco-setup"
 import { cn } from "@/lib/utils"
 
@@ -19,18 +29,26 @@ setupMonaco()
 
 type View = "gui" | "json"
 
-// Read-only inspector for a device model. Offers a structured "GUI" view of the
-// model's fields + IO capabilities and a raw "JSON" view (Monaco) of the same
-// object, toggled at the top. The model is passed in already-fetched by the
-// caller, so this component never touches the network.
+// Inspector for a device model: a structured "GUI" view of the model's fields
+// + IO capabilities and a raw "JSON" view (Monaco), toggled at the top. The
+// model is passed in already-fetched by the caller. When `deviceId` is given
+// it also offers model REASSIGNMENT (cm4-support): resolving a `needsModel`
+// device, or correcting a wrong model — the backend clears the flag and
+// republishes the device config with the new model's hardware block.
 export function DeviceModelDialog({
   open,
   onOpenChange,
   model,
+  deviceId,
+  needsModel,
+  onModelChanged,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   model: DeviceModel
+  deviceId?: string
+  needsModel?: boolean
+  onModelChanged?: () => void
 }) {
   const [view, setView] = useState<View>("gui")
   const isDark =
@@ -62,6 +80,18 @@ export function DeviceModelDialog({
           />
         </div>
 
+        {deviceId ? (
+          <ChangeModelSection
+            deviceId={deviceId}
+            currentModelId={model.id}
+            needsModel={needsModel === true}
+            onChanged={() => {
+              onModelChanged?.()
+              onOpenChange(false)
+            }}
+          />
+        ) : null}
+
         {view === "gui" ? (
           <DeviceModelGui model={model} />
         ) : (
@@ -86,6 +116,96 @@ export function DeviceModelDialog({
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Model reassignment. The catalog loads lazily (tiny, platform-wide). Applying
+// PUTs `{deviceModelId}` — `needsModel` clears server-side and the device's
+// config republishes with the new model's hardware block, so a fielded device
+// re-renders its pipelines with no re-provision.
+function ChangeModelSection({
+  deviceId,
+  currentModelId,
+  needsModel,
+  onChanged,
+}: {
+  deviceId: string
+  currentModelId: string
+  needsModel: boolean
+  onChanged: () => void
+}) {
+  const [catalog, setCatalog] = useState<DeviceModel[] | null>(null)
+  const [selected, setSelected] = useState(currentModelId)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const models = await xg().deviceModels.list()
+        if (!cancelled) setCatalog(models)
+      } catch {
+        if (!cancelled) setCatalog([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function apply() {
+    setSaving(true)
+    try {
+      // `deviceModelId` lands in the SDK's UpdateDeviceInput on its next
+      // publish; update() passes the body through verbatim today.
+      await xg().devices.update(deviceId, {
+        deviceModelId: selected,
+      } as UpdateDeviceInput)
+      toast.success("Device model updated; the device re-renders its pipelines")
+      onChanged()
+    } catch (err) {
+      toast.error(xgMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border p-3",
+        needsModel ? "border-amber-500/50" : "border-border"
+      )}
+    >
+      {needsModel ? (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          The device's hardware probe could not pick a model unambiguously at
+          registration — confirm the right one below.
+        </p>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Select value={selected} onValueChange={setSelected}>
+          <SelectTrigger className="h-8 flex-1 text-xs">
+            <SelectValue placeholder="Select a model" />
+          </SelectTrigger>
+          <SelectContent>
+            {(catalog ?? []).map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name} · {m.sku}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          disabled={saving || catalog === null || selected === currentModelId}
+          onClick={apply}
+        >
+          {saving ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+          {needsModel ? "Confirm model" : "Change model"}
+        </Button>
+      </div>
+    </section>
   )
 }
 
@@ -123,11 +243,43 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
   const video = caps.media?.video ?? []
   const imu = caps.sensors?.imu
   const accel = imu?.accel ?? imu?.axes
+  // schemaVersion-2 platform facts (cm4-support). Typed loosely because the
+  // installed SDK may predate v2; a v1 doc simply has none of these.
+  const sys = caps.system as
+    | {
+        platform?: string
+        encoder?: string
+        rails?: boolean
+        statusLed?: { r: number; g: number; b: number } | null
+      }
+    | undefined
 
   return (
     <div className="flex flex-col gap-2">
+      {sys?.platform ? <Field label="Platform" value={sys.platform} /> : null}
+      {sys?.encoder ? <Field label="Encoder" value={sys.encoder} /> : null}
+      {sys?.platform ? (
+        <Field label="Power rails" value={sys.rails ? "PMIC telemetry" : "none"} />
+      ) : null}
+      {sys?.platform ? (
+        <Field
+          label="Status LED"
+          value={
+            sys.statusLed
+              ? `GPIO r${sys.statusLed.r} g${sys.statusLed.g} b${sys.statusLed.b}`
+              : "not wired"
+          }
+        />
+      ) : null}
       {video.length > 0 ? (
-        <Chips label="Video" items={video.map((v) => v.label ?? v.key)} />
+        <Chips
+          label="Video"
+          items={video.map((v) => {
+            const conn = (v as { connector?: string }).connector
+            const base = v.label ?? v.key
+            return conn ? `${base} (${conn})` : base
+          })}
+        />
       ) : null}
       <Chips label="IMU accel" items={accel} />
       <Chips label="IMU quaternion" items={imu?.quaternion} />

@@ -185,12 +185,14 @@ function DeviceSettingsPage() {
             </TabsContent>
             <TabsContent value="media">
               <MediaTab
+                device={device}
                 recording={recording}
                 configStatus={configStatus}
                 channels={channels}
                 reportedRecording={reportedRecording}
                 reportedMedia={reportedMedia}
                 isPending={isPending}
+                commit={commit}
                 commitRecording={commitRecording}
               />
             </TabsContent>

@@ -34,6 +34,45 @@ export const CONFIG_NAMESPACE_DEFAULTS: Readonly<Record<string, unknown>> =
     Object.entries(contract.namespaces).map(([ns, spec]) => [ns, spec.defaults])
   )
 
+/**
+ * The `cameraMount` namespace as this app writes it (cam-sensor-level-rotate).
+ *
+ * Declared here rather than imported from `@xorgate/sdk` only because the
+ * generated type ships in 0.4.0 and the app is still on 0.3.0 — swap the two
+ * lines below for `import type { CameraMountConfig } from "@xorgate/sdk"` once
+ * that is published. The shape is the contract's, not an invention: the
+ * artifact this file already imports carries the same schema.
+ */
+export type CameraRotationDeg = 0 | 180
+export interface CameraMountConfig {
+  cameras: Record<string, { rotationDeg: CameraRotationDeg }>
+}
+
+/**
+ * The rotation each camera is CONFIGURED to, from the stored namespace.
+ *
+ * An absent key is deliberately absent from the result too, not 0: on the
+ * device an absent camera is UNMANAGED (its boot config is left exactly as
+ * found), so a control that rendered it as "0, upright" would claim the cloud
+ * is holding something it is not. The UI shows the switch off either way; the
+ * difference only matters when writing, which is why the writer always sends
+ * an explicit rotation.
+ */
+export function resolveCameraMount(config: unknown): Record<string, CameraRotationDeg> {
+  const cameras =
+    config && typeof config === "object" && !Array.isArray(config)
+      ? (config as { cameras?: unknown }).cameras
+      : undefined
+  if (!cameras || typeof cameras !== "object" || Array.isArray(cameras)) return {}
+  const out: Record<string, CameraRotationDeg> = {}
+  for (const [key, entry] of Object.entries(cameras as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object") continue
+    const deg = (entry as { rotationDeg?: unknown }).rotationDeg
+    if (deg === 0 || deg === 180) out[key] = deg
+  }
+  return out
+}
+
 const RECORDING = contract.namespaces.recording.defaults
 const SHED = RECORDING.powerShedding
 const VIDEO = RECORDING.video

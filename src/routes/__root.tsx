@@ -1,9 +1,16 @@
-import { Fragment, useEffect } from "react"
-import { createRootRoute, Outlet, useLocation } from "@tanstack/react-router"
+import { Fragment, useEffect, useRef } from "react"
+import {
+  createRootRoute,
+  Outlet,
+  useLocation,
+  useRouterState,
+} from "@tanstack/react-router"
 import { useAuthStore } from "@/store/auth"
+import { useWorkspaceStore } from "@/store/workspace"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { ensureAuthInitialized } from "@/lib/auth-guard"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
+import { AppLoadingScreen } from "@/components/app-loading-screen"
 import { AppSidebar } from "@/components/app-sidebar"
 import { GlobalSearch } from "@/components/global-search"
 import {
@@ -82,16 +89,6 @@ function resolveCrumbs(
   return [{ label: "Not found" }]
 }
 
-function LoadingScreen() {
-  return (
-    <div className="flex min-h-svh items-center justify-center">
-      <span className="animate-pulse font-mono text-xs text-muted-foreground">
-        Loading...
-      </span>
-    </div>
-  )
-}
-
 const AUTH_ROUTES = ["/login", "/signup"]
 
 // Routes a SIGNED-IN user sees without the app chrome. /onboarding is the only
@@ -110,6 +107,24 @@ function RootLayout() {
   const instanceName = useBreadcrumbStore((s) => s.instanceName)
   const location = useLocation()
 
+  // The initial route load blocks in beforeLoad on /me, and /me's arrival
+  // kicks off the first /workspaces fetch. Rendering the chrome before both
+  // settle shows the sidebar with "No organization" placeholders, so the whole
+  // shell holds behind the loading screen until the boot has settled once.
+  //
+  // "Settled" is the router going idle with no workspace fetch in flight — NOT
+  // "profile loaded": a failed /me also sends the router idle (the guard's
+  // error renders in the outlet), and gating on success would hide that error
+  // screen behind an infinite loading hold. The latch is one-way so later
+  // navigations and org switches (which re-run the workspace fetch) never
+  // blank the whole app again.
+  const routerStatus = useRouterState({ select: (s) => s.status })
+  const isLoadingWorkspaces = useWorkspaceStore((s) => s.isLoadingWorkspaces)
+  const bootSettledRef = useRef(false)
+  if (routerStatus === "idle" && !isLoadingWorkspaces) {
+    bootSettledRef.current = true
+  }
+
   useEffect(() => {
     void ensureAuthInitialized()
   }, [])
@@ -117,7 +132,7 @@ function RootLayout() {
   const isOnAuthRoute = AUTH_ROUTES.includes(location.pathname)
 
   if (isLoading || (isAuthenticated && isOnAuthRoute)) {
-    return <LoadingScreen />
+    return <AppLoadingScreen label="Restoring your session" />
   }
 
   if (!isAuthenticated) {
@@ -126,6 +141,10 @@ function RootLayout() {
 
   if (CHROMELESS_AUTHED_ROUTES.includes(location.pathname)) {
     return <Outlet />
+  }
+
+  if (!bootSettledRef.current) {
+    return <AppLoadingScreen />
   }
 
   const crumbs = resolveCrumbs(

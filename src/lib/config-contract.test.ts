@@ -34,6 +34,7 @@ describe("config-contract.json", () => {
 
   it("carries the namespaces the settings tabs render", () => {
     expect(Object.keys(contract.namespaces).sort()).toEqual([
+      "cameraMount",
       "cellular",
       "gnssAntBias",
       "imuMount",

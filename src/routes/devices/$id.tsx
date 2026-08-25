@@ -127,8 +127,14 @@ function DeviceLayout() {
     : "overview"
   const [device, setDevice] = useState<Device | null>(null)
   const [deviceModel, setDeviceModel] = useState<DeviceModel | null>(null)
+  // Probe-at-claim couldn't pick a model (cm4-support): surfaced as a badge
+  // and resolved in the model dialog. Read via a raw request because the
+  // installed SDK's normalizer predates the field; once the SDK updates this
+  // can come from `device.needsModel` directly.
+  const [needsModel, setNeedsModel] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
+  const [modelNonce, setModelNonce] = useState(0)
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false)
   const [powerOffDialogOpen, setPowerOffDialogOpen] = useState(false)
 
@@ -187,6 +193,16 @@ function DeviceLayout() {
           } catch {
             // ignore
           }
+          // needsModel via the raw row (see the state's comment). Best-effort.
+          try {
+            const raw = await xg().request<{ device?: { needsModel?: boolean } }>(
+              "GET",
+              `/devices/${encodeURIComponent(id)}`
+            )
+            if (!cancelled) setNeedsModel(raw.device?.needsModel === true)
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
         if (isXorgateError(err) && err.status === 404) {
@@ -199,7 +215,7 @@ function DeviceLayout() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, modelNonce])
 
   // Clear the published name when leaving the device (or switching to a
   // different one) so the breadcrumb never shows a stale name.
@@ -252,6 +268,16 @@ function DeviceLayout() {
                         >
                           {deviceModel.name}
                         </button>
+                        {needsModel ? (
+                          <button
+                            type="button"
+                            onClick={() => setModelDialogOpen(true)}
+                            className="rounded-full border border-amber-500/50 px-1.5 py-px text-[0.65rem] font-medium text-amber-600 dark:text-amber-400"
+                            title="The device's hardware probe could not pick a model unambiguously — confirm one here."
+                          >
+                            needs model
+                          </button>
+                        ) : null}
                       </>
                     ) : null}
                     <span aria-hidden className="h-3 w-px shrink-0 bg-border" />
@@ -377,11 +403,14 @@ function DeviceLayout() {
         <Outlet />
       </div>
 
-      {deviceModel ? (
+      {deviceModel && device ? (
         <DeviceModelDialog
           open={modelDialogOpen}
           onOpenChange={setModelDialogOpen}
           model={deviceModel}
+          deviceId={device.id}
+          needsModel={needsModel}
+          onModelChanged={() => setModelNonce((n) => n + 1)}
         />
       ) : null}
 

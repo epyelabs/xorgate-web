@@ -21,8 +21,16 @@ import {
   StatusDot,
   type DataTableColumn,
 } from "@/components/data-table"
+import { Badge } from "@/components/ui/badge"
 import { xg, xgMessage } from "@/lib/xorgate"
 import type { Device, DeviceStatus } from "@xorgate/sdk"
+
+// `needsModel` ships in the SDK after its next publish (cm4-support); until
+// then the normalizer strips it, so this reads as undefined and the badge
+// simply never shows. Forward-compatible on purpose.
+function deviceNeedsModel(device: Device): boolean {
+  return (device as Device & { needsModel?: boolean }).needsModel === true
+}
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
@@ -91,6 +99,9 @@ interface DevicesData {
 
 function DevicesListPage() {
   const [data, setData] = useState<DevicesData | null>(null)
+  // Model id → name, for the Model column (the platform-wide catalog is tiny).
+  // Best-effort: on failure the column falls back to the short id, as before.
+  const [modelNames, setModelNames] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | "any">("any")
@@ -140,6 +151,23 @@ function DevicesListPage() {
       cancelled = true
     }
   }, [currentWorkspaceId, reloadNonce])
+
+  // The model catalog, once per mount — names for the Model column.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const models = await xg().deviceModels.list()
+        if (cancelled) return
+        setModelNames(Object.fromEntries(models.map((m) => [m.id, m.name])))
+      } catch {
+        // fall back to short ids
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const isLoading = !data || data.workspaceId !== currentWorkspaceId
   const fleet = isLoading ? null : data.devices
@@ -279,18 +307,40 @@ function DevicesListPage() {
       id: "model",
       header: "Model",
       cellClassName: "text-muted-foreground",
-      cell: (device) => (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="cursor-default font-mono">
-              {shortId(device.deviceModelId)}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{device.deviceModelId}</TooltipContent>
-        </Tooltip>
-      ),
+      cell: (device) => {
+        const name = modelNames[device.deviceModelId]
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={name ? "cursor-default" : "cursor-default font-mono"}>
+                  {name ?? shortId(device.deviceModelId)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{device.deviceModelId}</TooltipContent>
+            </Tooltip>
+            {deviceNeedsModel(device) ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+                  >
+                    needs model
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  The device's hardware probe could not pick a model; confirm
+                  one on the device page.
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </span>
+        )
+      },
       csvHeader: "Model",
-      csvValue: (device) => device.deviceModelId,
+      csvValue: (device) =>
+        modelNames[device.deviceModelId] ?? device.deviceModelId,
     },
     {
       id: "lastSeenAt",

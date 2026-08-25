@@ -10,7 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { DeviceRegistration } from "@xorgate/sdk"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import type { DeviceModel, DeviceRegistration } from "@xorgate/sdk"
 import { xg, xgMessage } from "@/lib/xorgate"
 
 type Phase = "creating" | "pending" | "claimed" | "expired" | "error"
@@ -47,6 +55,45 @@ export function ProvisionDeviceDialog({
   const [now, setNow] = useState(() => Date.now())
   // Bumped to mint a fresh code (after expiry / error) without closing.
   const [reloadNonce, setReloadNonce] = useState(0)
+  // Optional model pin (cm4-support D3 override). "auto" = probe-at-claim maps
+  // the device's own hardware to a model row, which is the normal path; picking
+  // a model re-pins the pending code so the claim honors it instead. There is
+  // no un-pin — generate a new code to return to automatic.
+  const [models, setModels] = useState<DeviceModel[] | null>(null)
+  const [modelPick, setModelPick] = useState("auto")
+  const [pinned, setPinned] = useState(false)
+
+  useEffect(() => {
+    if (!open || models !== null) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const catalog = await xg().deviceModels.list()
+        if (!cancelled) setModels(catalog)
+      } catch {
+        if (!cancelled) setModels([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, models])
+
+  async function handleModelPick(value: string) {
+    setModelPick(value)
+    if (value === "auto" || phase !== "pending") return
+    try {
+      // Raw request: the installed SDK's create() predates the deviceModelId
+      // body field. The endpoint is idempotent and RE-PINS the pending code.
+      const r = await xg().request<DeviceRegistration>("POST", "/device-registrations", {
+        body: { deviceModelId: value },
+      })
+      setReg(r)
+      setPinned(true)
+    } catch (err) {
+      toast.error(xgMessage(err))
+    }
+  }
 
   // Mint (or reuse — the endpoint is idempotent) a code whenever the dialog
   // opens or the user asks for a new one.
@@ -57,6 +104,8 @@ export function ProvisionDeviceDialog({
     setReg(null)
     setErrorMsg(null)
     setCopied(false)
+    setModelPick("auto")
+    setPinned(false)
     ;(async () => {
       try {
         const r = await xg().deviceRegistrations.create()
@@ -188,6 +237,40 @@ export function ProvisionDeviceDialog({
           </div>
         ) : (
           <>
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="register-model-pick"
+                className="shrink-0 text-xs text-muted-foreground"
+              >
+                Device model
+              </Label>
+              <Select value={modelPick} onValueChange={handleModelPick}>
+                <SelectTrigger
+                  id="register-model-pick"
+                  className="h-8 flex-1 text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    value="auto"
+                    disabled={pinned}
+                    title={
+                      pinned
+                        ? "Already pinned — generate a new code to return to automatic"
+                        : undefined
+                    }
+                  >
+                    Automatic (detect from hardware)
+                  </SelectItem>
+                  {(models ?? []).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name} · {m.sku}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="relative min-w-0">
               <pre className="overflow-x-auto rounded-md bg-muted p-3 pr-10 font-mono text-xs/relaxed text-foreground">
                 <code className="break-all whitespace-pre-wrap">

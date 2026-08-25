@@ -291,7 +291,7 @@ describe("tabAttentionCounts", () => {
     expect(tabAttentionCounts(status)).toEqual({
       connectivity: 3, // gnssAntBias + lteRecovery + cellular
       telemetry: 2, // imuMount + recording
-      media: 1,
+      media: 2, // recording + cameraMount
       power: 1,
       system: 2, // recording + timeSync
     })

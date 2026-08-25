@@ -20,9 +20,14 @@ import {
   formatBytes,
   type DataTableColumn,
 } from "@/components/data-table"
-import type { VideoChannel } from "@xorgate/sdk"
+import type { Device, VideoChannel } from "@xorgate/sdk"
 import type { DeviceConfigStatus } from "@/lib/device-config-status"
-import type { ResolvedRecording } from "@/lib/device-config-defaults"
+import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
+import {
+  resolveCameraMount,
+  type CameraRotationDeg,
+  type ResolvedRecording,
+} from "@/lib/device-config-defaults"
 import type {
   TelemetryMediaStatus as DeviceMediaStatus,
   TelemetryRecordingStatus as DeviceRecordingStatus,
@@ -32,6 +37,7 @@ import { SettingsCallout } from "./callout"
 import { VideoOptions } from "./video-options"
 
 const VIDEO_KEY = "device-recording-video-enabled"
+const MOUNT_KEY = (streamKey: string) => `device-camera-mount-${streamKey}`
 
 const kvsChannelColumns: DataTableColumn<VideoChannel>[] = [
   {
@@ -54,23 +60,49 @@ const kvsChannelColumns: DataTableColumn<VideoChannel>[] = [
 ]
 
 export function MediaTab({
+  device,
   recording,
   configStatus,
   channels,
   reportedRecording,
   reportedMedia,
   isPending,
+  commit,
   commitRecording,
 }: {
+  device: Device
   recording: ResolvedRecording
   configStatus: DeviceConfigStatus
   channels: VideoChannel[] | null
   reportedRecording: DeviceRecordingStatus | null
   reportedMedia: DeviceMediaStatus | null
   isPending: (key: string) => boolean
+  commit: (key: string, patch: DeviceSettingsPatch) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
   const reportedVideo = reportedMedia?.recording?.value === true
+  // Cast: the namespace is in the config contract but reaches the SDK's
+  // DeviceConfig type in 0.4.0 — drop it once that is published.
+  const mounted = resolveCameraMount(
+    (device.config as Record<string, unknown>).cameraMount
+  )
+
+  /**
+   * Write one camera's rotation, carrying the others through unchanged.
+   *
+   * Always an explicit rotation, including 0. An absent key means UNMANAGED on
+   * the device — it leaves that camera's boot config exactly as it found it —
+   * so turning a switch OFF has to say "0", not "nothing".
+   */
+  function commitRotation(streamKey: string, deg: CameraRotationDeg) {
+    const cameras = Object.fromEntries(
+      Object.entries({ ...mounted, [streamKey]: deg }).map(([k, v]) => [
+        k,
+        { rotationDeg: v },
+      ])
+    )
+    commit(MOUNT_KEY(streamKey), { cameraMountConfig: { cameras } })
+  }
   // Runtime state, NOT config: what the capture pipeline is doing right now and
   // how much is queued for upload. This half still comes off the live 1 Hz
   // payload — the config report says what the device was TOLD to do, never
@@ -123,6 +155,58 @@ export function MediaTab({
                   </Field>
                 )
               })}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {channels && channels.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Camera mounting</CardTitle>
+            <CardDescription>
+              How each camera is fitted. A camera mounted upside down is turned
+              back at the image sensor, so live view, recordings, replays and
+              anything the workflows look at are all corrected at once — and it
+              costs the device nothing to do.
+            </CardDescription>
+            <CardAction>
+              <ConfigStatusBadge status={configStatus.cameraMount} />
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              {channels.map((ch) => {
+                const key = MOUNT_KEY(ch.streamKey)
+                return (
+                  <Field key={ch.streamKey} orientation="horizontal">
+                    <FieldContent>
+                      <FieldLabel htmlFor={key}>
+                        Camera <span className="font-mono">{ch.streamKey}</span>{" "}
+                        is mounted upside down
+                      </FieldLabel>
+                      <FieldDescription>
+                        Rotates the picture 180°. Takes effect the next time the
+                        device boots — use Reboot Device at the top of this page
+                        once you have set it.
+                      </FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id={key}
+                      checked={mounted[ch.streamKey] === 180}
+                      disabled={isPending(key)}
+                      onCheckedChange={(next) =>
+                        commitRotation(ch.streamKey, next ? 180 : 0)
+                      }
+                    />
+                  </Field>
+                )
+              })}
+              {/* Where "saved, but the device is still running the old
+                  orientation until it reboots" is said out loud — the device
+                  reports that state itself, with which camera and which
+                  rotation, so nothing here has to infer it. */}
+              <ConfigStatusCallout status={configStatus.cameraMount} />
             </FieldGroup>
           </CardContent>
         </Card>

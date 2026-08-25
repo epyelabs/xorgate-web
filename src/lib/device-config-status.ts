@@ -23,6 +23,7 @@ export const CONFIG_NAMESPACES = [
   "lteRecovery",
   "timeSync",
   "cellular",
+  "cameraMount",
 ] as const
 
 export type ConfigNamespace = (typeof CONFIG_NAMESPACES)[number]
@@ -303,6 +304,7 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   lteRecovery: ["connectivity"],
   timeSync: ["system"],
   cellular: ["connectivity"],
+  cameraMount: ["media"],
 }
 
 /**

@@ -20,6 +20,7 @@ import {
 import {
   buildRecordingConfig,
   resolveRecording,
+  type CameraMountConfig,
   type ResolvedRecording,
 } from "@/lib/device-config-defaults"
 import {
@@ -73,6 +74,12 @@ export interface DeviceSettingsPatch {
    * `device.config.cellular`, never from a top-level field.
    */
   cellularConfig?: CellularConfig | null
+  /**
+   * Camera mounting rotation. Like `cellular` it has NO legacy device column —
+   * this key exists only to route through CONFIG_FIELDS; read the value from
+   * `device.config.cameraMount`, never from a top-level field.
+   */
+  cameraMountConfig?: CameraMountConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -96,6 +103,7 @@ const CONFIG_FIELDS = {
   lteRecoveryConfig: "lteRecovery",
   timeSyncConfig: "timeSync",
   cellularConfig: "cellular",
+  cameraMountConfig: "cameraMount",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
@@ -276,7 +284,12 @@ export function useDeviceSettings(id: string): DeviceSettings {
       // top-level duplicates are gone (the SDK's Device carries config/uiPrefs
       // only), so each key resolves into the document that owns it.
       const readField = (device: Device, field: keyof DeviceSettingsPatch) => {
-        if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
+        // Cast: `cameraMount` is in the config contract but not yet in the
+        // installed @xorgate/sdk's DeviceConfig (it ships in 0.4.0). Drop the
+        // cast — here and in the two writes below — once that is published.
+        if (isConfigField(field)) {
+          return (device.config as Record<string, unknown>)[CONFIG_FIELDS[field]] ?? null
+        }
         if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
         return device.name
       }
@@ -293,7 +306,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       for (const [field, value] of Object.entries(updates)) {
         if (isConfigField(field)) {
           const ns = CONFIG_FIELDS[field]
-          if (value === null) delete next.config[ns]
+          if (value === null) delete (next.config as Record<string, unknown>)[ns]
           else (next.config as Record<string, unknown>)[ns] = value
         } else if (isUiPrefField(field)) {
           const pref = UI_PREF_FIELDS[field]

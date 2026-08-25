@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   isXorgateError,
+  type CameraMountConfig,
   type CellularConfig,
   type Device,
   type DeviceConfigPatch,
@@ -20,7 +21,6 @@ import {
 import {
   buildRecordingConfig,
   resolveRecording,
-  type CameraMountConfig,
   type ResolvedRecording,
 } from "@/lib/device-config-defaults"
 import {
@@ -284,12 +284,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       // top-level duplicates are gone (the SDK's Device carries config/uiPrefs
       // only), so each key resolves into the document that owns it.
       const readField = (device: Device, field: keyof DeviceSettingsPatch) => {
-        // Cast: `cameraMount` is in the config contract but not yet in the
-        // installed @xorgate/sdk's DeviceConfig (it ships in 0.4.0). Drop the
-        // cast — here and in the two writes below — once that is published.
-        if (isConfigField(field)) {
-          return (device.config as Record<string, unknown>)[CONFIG_FIELDS[field]] ?? null
-        }
+        if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
         if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
         return device.name
       }
@@ -306,7 +301,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       for (const [field, value] of Object.entries(updates)) {
         if (isConfigField(field)) {
           const ns = CONFIG_FIELDS[field]
-          if (value === null) delete (next.config as Record<string, unknown>)[ns]
+          if (value === null) delete next.config[ns]
           else (next.config as Record<string, unknown>)[ns] = value
         } else if (isUiPrefField(field)) {
           const pref = UI_PREF_FIELDS[field]

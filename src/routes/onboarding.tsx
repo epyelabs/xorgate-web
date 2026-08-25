@@ -2,7 +2,11 @@ import { createFileRoute, redirect } from "@tanstack/react-router"
 import { OnboardingForm } from "@/components/onboarding-form"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
-import { DEFAULT_AUTHED_ROUTE, requireAuthOnly } from "@/lib/auth-guard"
+import {
+  DEFAULT_AUTHED_ROUTE,
+  requireAuthOnly,
+  requireProfile,
+} from "@/lib/auth-guard"
 
 // Where a signed-in user with no organization is sent. Guarded by
 // requireAuthOnly rather than requireAuth: requireAuth redirects org-less users
@@ -10,6 +14,11 @@ import { DEFAULT_AUTHED_ROUTE, requireAuthOnly } from "@/lib/auth-guard"
 export const Route = createFileRoute("/onboarding")({
   beforeLoad: async (opts) => {
     await requireAuthOnly(opts)
+    // requireAuthOnly deliberately skips the org check, so this route has to
+    // ask for the profile itself. Without it the bounce below reads the same
+    // unhydrated `organizations: []` that sent the user here and strands them
+    // on the form — the second half of the intermittent-onboarding bug.
+    await requireProfile(opts)
     // Already onboarded, or arrived by typing the URL. Nothing to do here.
     if (useAuthStore.getState().organizations.length > 0) {
       throw redirect({ to: DEFAULT_AUTHED_ROUTE, replace: true })

@@ -1,4 +1,5 @@
 import { redirect } from "@tanstack/react-router"
+import { getCurrentSession } from "@/lib/cognito"
 import { useAuthStore } from "@/store/auth"
 
 // Restoring a Cognito session is async, so a guard that read the auth store
@@ -10,7 +11,17 @@ import { useAuthStore } from "@/store/auth"
 let initPromise: Promise<void> | null = null
 
 export function ensureAuthInitialized(): Promise<void> {
-  if (!initPromise) initPromise = useAuthStore.getState().initialize()
+  if (!initPromise) {
+    initPromise = useAuthStore
+      .getState()
+      .initialize()
+      .catch((err: unknown) => {
+        // Never let one failed bootstrap poison every later navigation in this
+        // tab: drop the memo so the next guard starts over.
+        initPromise = null
+        throw err
+      })
+  }
   return initPromise
 }
 
@@ -58,17 +69,49 @@ export async function requireAuthOnly({
 // organization switcher, which is not a place a new user thinks to look.
 // Checking here rather than per route means the 36 existing `requireAuth`
 // call sites are covered without touching any of them.
-//
-// ensureAuthInitialized() resolves only after initialize() has awaited /me, so
-// `organizations` is settled by this point and not merely still loading. The
-// one soft spot: initialize() swallows a failing /me, so an unreachable API
-// looks the same as a user with no organizations and lands them on onboarding.
-// That is recoverable (the form surfaces the API error) and beats waving them
-// through to a page that cannot work.
 export async function requireAuth(opts: {
   location: { href: string }
 }): Promise<void> {
   await requireAuthOnly(opts)
+  await requireProfile(opts)
   if (useAuthStore.getState().organizations.length > 0) return
   throw redirect({ to: ONBOARDING_ROUTE, replace: true })
+}
+
+// Makes `organizations` safe to branch on, and is the whole reason onboarding
+// stopped appearing at random for users who already had an organization.
+//
+// initialize() marks the session authenticated from the id token's claims and
+// then hydrates /me best-effort. When that call failed — a token refresh landing
+// mid-flight, a cold API, a laptop waking up — the failure was swallowed and
+// `organizations` stayed `[]`, which is byte-for-byte what a genuinely org-less
+// user looks like. requireAuth read it and redirected. Worse, nothing retried:
+// the empty array persisted for the tab's lifetime, so every subsequent
+// navigation redirected too, and /onboarding's own "already onboarded" bounce
+// read the same stale array and kept the user there. The visible result was an
+// already-onboarded user being invited to create a DUPLICATE organization.
+//
+// So the array is only ever read after /me has actually answered. If it cannot,
+// we say so rather than guessing — an error screen with a retry is recoverable,
+// a spurious onboarding form is not.
+export async function requireProfile(opts: {
+  location: { href: string }
+}): Promise<void> {
+  try {
+    await useAuthStore.getState().ensureProfile()
+  } catch (err) {
+    // A dead session fails /me exactly like a flaky network does, but it has a
+    // real destination. Ask Cognito directly: no session means the refresh
+    // token is gone, and the correct screen is the login page, not an error the
+    // user can only retry into the same wall.
+    if ((await getCurrentSession()) === null) {
+      useAuthStore.getState().logout()
+      throw redirect({
+        to: "/login",
+        search: { redirect: opts.location.href },
+        replace: true,
+      })
+    }
+    throw err
+  }
 }

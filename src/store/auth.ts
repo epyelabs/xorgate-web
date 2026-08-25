@@ -20,9 +20,14 @@ interface AuthState {
   organizations: Organization[]
   isLoading: boolean
   isAuthenticated: boolean
+  // Whether /me has actually answered. `organizations` carries no meaning
+  // until it has: an empty array means "this user has none" ONLY when this is
+  // true, and "we don't know yet" when it is false. Read them together.
+  profileLoaded: boolean
   error: string | null
 
   initialize: () => Promise<void>
+  ensureProfile: () => Promise<void>
   login: (email: string, password: string) => Promise<LoginResult>
   completeNewPassword: (newPassword: string) => Promise<void>
   signup: (email: string, password: string) => Promise<void>
@@ -50,7 +55,24 @@ async function hydrateFromMe(set: (partial: Partial<AuthState>) => void) {
     user: me.user,
     memberships: me.memberships,
     organizations: me.organizations,
+    profileLoaded: true,
   })
+}
+
+// One in-flight /me at a time. Several route guards can resolve in the same
+// tick, and without this each would fire its own request — and a retry storm on
+// a flaky API is exactly the condition that made the original bug show up.
+let profileFlight: Promise<void> | null = null
+
+function fetchProfile(
+  set: (partial: Partial<AuthState>) => void
+): Promise<void> {
+  if (!profileFlight) {
+    profileFlight = hydrateFromMe(set).finally(() => {
+      profileFlight = null
+    })
+  }
+  return profileFlight
 }
 
 // Marks the session authenticated from a fresh id token, then best-effort
@@ -72,9 +94,11 @@ async function applyIdToken(
     isAuthenticated: true,
   })
   try {
-    await hydrateFromMe(set)
+    await fetchProfile(set)
   } catch {
-    // proceed even if /me isn't reachable yet; token claims carry the basics
+    // Proceed even if /me isn't reachable yet; token claims carry the basics.
+    // profileLoaded stays false, so the route guards retry rather than reading
+    // the empty `organizations` as "this user needs onboarding".
   }
 }
 
@@ -84,6 +108,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   organizations: [],
   isLoading: true,
   isAuthenticated: false,
+  profileLoaded: false,
   error: null,
 
   initialize: async () => {
@@ -107,13 +132,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
       })
       try {
-        await hydrateFromMe(set)
+        await fetchProfile(set)
       } catch {
-        // best-effort; UI shows whatever is in the token until /me is reachable
+        // Best-effort: boot must not block on /me. profileLoaded stays false
+        // and ensureProfile() retries from the first guard that needs it.
       }
     } catch {
       set({ isLoading: false })
     }
+  },
+
+  // Guarantees `organizations` is trustworthy, or throws. Cheap once loaded,
+  // so guards can call it on every navigation.
+  ensureProfile: async () => {
+    if (!get().isAuthenticated) return
+    if (get().profileLoaded) return
+    await fetchProfile(set)
   },
 
   login: async (email, password) => {
@@ -171,6 +205,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       memberships: [],
       organizations: [],
       isAuthenticated: false,
+      profileLoaded: false,
     })
   },
 

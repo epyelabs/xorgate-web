@@ -25,12 +25,6 @@ import { Badge } from "@/components/ui/badge"
 import { xg, xgMessage } from "@/lib/xorgate"
 import type { Device, DeviceStatus } from "@xorgate/sdk"
 
-// `needsModel` ships in the SDK after its next publish (cm4-support); until
-// then the normalizer strips it, so this reads as undefined and the badge
-// simply never shows. Forward-compatible on purpose.
-function deviceNeedsModel(device: Device): boolean {
-  return (device as Device & { needsModel?: boolean }).needsModel === true
-}
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
@@ -319,7 +313,7 @@ function DevicesListPage() {
               </TooltipTrigger>
               <TooltipContent>{device.deviceModelId}</TooltipContent>
             </Tooltip>
-            {deviceNeedsModel(device) ? (
+            {device.needsModel ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge

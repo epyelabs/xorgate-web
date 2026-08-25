@@ -83,11 +83,8 @@ export function ProvisionDeviceDialog({
     setModelPick(value)
     if (value === "auto" || phase !== "pending") return
     try {
-      // Raw request: the installed SDK's create() predates the deviceModelId
-      // body field. The endpoint is idempotent and RE-PINS the pending code.
-      const r = await xg().request<DeviceRegistration>("POST", "/device-registrations", {
-        body: { deviceModelId: value },
-      })
+      // The endpoint is idempotent and RE-PINS the pending code in place.
+      const r = await xg().deviceRegistrations.create({ deviceModelId: value })
       setReg(r)
       setPinned(true)
     } catch (err) {

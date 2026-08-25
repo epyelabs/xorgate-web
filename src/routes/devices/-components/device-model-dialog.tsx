@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { DeviceModel, IoCapabilities, UpdateDeviceInput } from "@xorgate/sdk"
+import type { DeviceModel, IoCapabilities } from "@xorgate/sdk"
 import { xg, xgMessage } from "@/lib/xorgate"
 import { setupMonaco } from "@/lib/monaco-setup"
 import { cn } from "@/lib/utils"
@@ -156,11 +156,7 @@ function ChangeModelSection({
   async function apply() {
     setSaving(true)
     try {
-      // `deviceModelId` lands in the SDK's UpdateDeviceInput on its next
-      // publish; update() passes the body through verbatim today.
-      await xg().devices.update(deviceId, {
-        deviceModelId: selected,
-      } as UpdateDeviceInput)
+      await xg().devices.update(deviceId, { deviceModelId: selected })
       toast.success("Device model updated; the device re-renders its pipelines")
       onChanged()
     } catch (err) {

@@ -128,9 +128,7 @@ function DeviceLayout() {
   const [device, setDevice] = useState<Device | null>(null)
   const [deviceModel, setDeviceModel] = useState<DeviceModel | null>(null)
   // Probe-at-claim couldn't pick a model (cm4-support): surfaced as a badge
-  // and resolved in the model dialog. Read via a raw request because the
-  // installed SDK's normalizer predates the field; once the SDK updates this
-  // can come from `device.needsModel` directly.
+  // and resolved in the model dialog.
   const [needsModel, setNeedsModel] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
@@ -180,6 +178,7 @@ function DeviceLayout() {
         const fetched = await xg().devices.get(id)
         if (!cancelled) {
           setDevice(fetched)
+          setNeedsModel(fetched.needsModel)
           useBreadcrumbStore
             .getState()
             .setDeviceName(fetched.name ?? fetched.serial)
@@ -190,16 +189,6 @@ function DeviceLayout() {
           try {
             const m = await xg().deviceModels.get(fetched.deviceModelId)
             if (!cancelled) setDeviceModel(m)
-          } catch {
-            // ignore
-          }
-          // needsModel via the raw row (see the state's comment). Best-effort.
-          try {
-            const raw = await xg().request<{ device?: { needsModel?: boolean } }>(
-              "GET",
-              `/devices/${encodeURIComponent(id)}`
-            )
-            if (!cancelled) setNeedsModel(raw.device?.needsModel === true)
           } catch {
             // ignore
           }

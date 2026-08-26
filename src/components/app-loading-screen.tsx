@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { XorgateLogo } from "@/components/xorgate-logo"
+import { hasAppShellMounted } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
 
 /**
@@ -55,6 +56,49 @@ export function AppLoadingScreen({
         <div className="h-full w-1/3 animate-loading-bar rounded-full bg-primary" />
       </div>
       <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
+  )
+}
+
+/**
+ * The router's `defaultPendingComponent`. Boot gets the full-screen brand hold;
+ * every later transition gets a small delayed spinner inside the content area.
+ *
+ * No route declares a `loader`, so post-boot transitions resolve in microtasks
+ * off memoized guards — the delay means those paint nothing at all, and only a
+ * genuinely slow one ever shows the spinner.
+ */
+export function RoutePendingScreen() {
+  if (!hasAppShellMounted()) return <AppLoadingScreen />
+  return <InlineRoutePending />
+}
+
+function InlineRoutePending({ delayMs = 300 }: { delayMs?: number }) {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), delayMs)
+    return () => clearTimeout(timer)
+  }, [delayMs])
+
+  return (
+    <div
+      role="status"
+      aria-busy
+      aria-live="polite"
+      className={cn(
+        "flex flex-1 items-center justify-center p-6",
+        "transition-opacity duration-300 motion-reduce:transition-none",
+        visible ? "opacity-100" : "opacity-0"
+      )}
+    >
+      <div
+        aria-hidden
+        className="h-0.5 w-44 overflow-hidden rounded-full bg-muted"
+      >
+        <div className="h-full w-1/3 animate-loading-bar rounded-full bg-primary" />
+      </div>
+      <span className="sr-only">Loading</span>
     </div>
   )
 }

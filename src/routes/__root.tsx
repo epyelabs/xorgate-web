@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { ensureAuthInitialized } from "@/lib/auth-guard"
+import { markAppShellMounted } from "@/lib/app-shell"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
 import { AppLoadingScreen } from "@/components/app-loading-screen"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -75,7 +76,10 @@ function resolveCrumbs(
   if (pathname === "/devices") return [{ label: "Devices" }]
   if (pathname.startsWith("/devices/")) {
     const deviceCrumb: Crumb = { label: deviceName ?? "Device" }
-    const crumbs: Crumb[] = [{ label: "Devices", href: "/devices" }, deviceCrumb]
+    const crumbs: Crumb[] = [
+      { label: "Devices", href: "/devices" },
+      deviceCrumb,
+    ]
     const lastSegment = pathname.slice(pathname.lastIndexOf("/") + 1)
     const tabLabel = DEVICE_TAB_LABELS[lastSegment]
     if (tabLabel) {
@@ -146,6 +150,11 @@ function RootLayout() {
   if (!bootSettledRef.current) {
     return <AppLoadingScreen />
   }
+
+  // Past this point the shell renders, so the two holds above are the only
+  // full-screen ones the app should ever show. Tells the router's pending
+  // component to stop reaching for the brand screen on later navigations.
+  markAppShellMounted()
 
   const crumbs = resolveCrumbs(
     location.pathname,

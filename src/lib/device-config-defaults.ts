@@ -13,7 +13,7 @@
 // and regenerate.
 
 import contract from "@/lib/config-contract.json"
-import type { RecordingConfig } from "@xorgate/sdk"
+import type { CameraMountConfig, RecordingConfig } from "@xorgate/sdk"
 import type { ImuMount, ImuView, VideoPresetName } from "@/lib/xorgate"
 
 export const GIB = 1024 ** 3
@@ -34,19 +34,8 @@ export const CONFIG_NAMESPACE_DEFAULTS: Readonly<Record<string, unknown>> =
     Object.entries(contract.namespaces).map(([ns, spec]) => [ns, spec.defaults])
   )
 
-/**
- * The `cameraMount` namespace as this app writes it (cam-sensor-level-rotate).
- *
- * Declared here rather than imported from `@xorgate/sdk` only because the
- * generated type ships in 0.4.0 and the app is still on 0.3.0 — swap the two
- * lines below for `import type { CameraMountConfig } from "@xorgate/sdk"` once
- * that is published. The shape is the contract's, not an invention: the
- * artifact this file already imports carries the same schema.
- */
-export type CameraRotationDeg = 0 | 180
-export interface CameraMountConfig {
-  cameras: Record<string, { rotationDeg: CameraRotationDeg }>
-}
+/** The two rotations the camera overlay accepts, from the SDK's generated type. */
+export type CameraRotationDeg = CameraMountConfig["cameras"][string]["rotationDeg"]
 
 /**
  * The rotation each camera is CONFIGURED to, from the stored namespace.

@@ -81,11 +81,7 @@ export function MediaTab({
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
   const reportedVideo = reportedMedia?.recording?.value === true
-  // Cast: the namespace is in the config contract but reaches the SDK's
-  // DeviceConfig type in 0.4.0 — drop it once that is published.
-  const mounted = resolveCameraMount(
-    (device.config as Record<string, unknown>).cameraMount
-  )
+  const mounted = resolveCameraMount(device.config.cameraMount)
 
   /**
    * Write one camera's rotation, carrying the others through unchanged.

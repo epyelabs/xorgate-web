@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef } from "react"
 import {
   createRootRoute,
+  Link,
   Outlet,
   useLocation,
   useRouterState,
@@ -93,6 +94,16 @@ function resolveCrumbs(
   return [{ label: "Not found" }]
 }
 
+// A breadcrumb ancestor is never the page you are on — the leaf renders as
+// BreadcrumbPage instead. Link's default active matching is a fuzzy prefix, so
+// without this every ancestor crumb lit up as "active" (and carried the `active`
+// class) the moment you were anywhere beneath it: /devices/<id> made the
+// "Devices" crumb claim to be the current page.
+const CRUMB_LINK_PROPS = {
+  activeOptions: { exact: true },
+  activeProps: {},
+} as const
+
 const AUTH_ROUTES = ["/login", "/signup"]
 
 // Routes a SIGNED-IN user sees without the app chrome. /onboarding is the only
@@ -180,7 +191,15 @@ function RootLayout() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="/devices">Home</BreadcrumbLink>
+                  {/* asChild + router Link, not a bare href: a plain anchor
+                      navigates the document, which tears the SPA down and
+                      re-boots it — sidebar, session revalidation, loading
+                      screen and all — for what should be a client-side hop. */}
+                  <BreadcrumbLink asChild>
+                    <Link to="/devices" {...CRUMB_LINK_PROPS}>
+                      Home
+                    </Link>
+                  </BreadcrumbLink>
                 </BreadcrumbItem>
                 {crumbs.map((crumb, index) => {
                   const isLast = index === crumbs.length - 1
@@ -193,8 +212,10 @@ function RootLayout() {
                         </BreadcrumbItem>
                       ) : (
                         <BreadcrumbItem className="hidden md:block">
-                          <BreadcrumbLink href={crumb.href}>
-                            {crumb.label}
+                          <BreadcrumbLink asChild>
+                            <Link to={crumb.href} {...CRUMB_LINK_PROPS}>
+                              {crumb.label}
+                            </Link>
                           </BreadcrumbLink>
                         </BreadcrumbItem>
                       )}

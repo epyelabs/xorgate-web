@@ -23,6 +23,7 @@ import {
   Users,
   Waypoints,
 } from "lucide-react"
+import { Link } from "@tanstack/react-router"
 import { XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
@@ -63,7 +64,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="gap-1">
-              <a href="/devices">
+              <Link to="/devices">
                 <div className="flex aspect-square size-9 items-center justify-center rounded-md text-sidebar-primary">
                   <XorgateLogo className="size-6!" />
                 </div>
@@ -73,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     AI-Native IoT Infrastructure
                   </span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

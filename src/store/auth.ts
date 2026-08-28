@@ -6,6 +6,7 @@ import {
   signOut,
   getCurrentSession,
   completeNewPassword as cognitoCompleteNewPassword,
+  completeOAuthLogin,
 } from "@/lib/cognito"
 import { xgBootstrap } from "@/lib/xorgate"
 import type { Membership, Organization, User } from "@xorgate/sdk"
@@ -30,6 +31,10 @@ interface AuthState {
   ensureProfile: () => Promise<void>
   login: (email: string, password: string) => Promise<LoginResult>
   completeNewPassword: (newPassword: string) => Promise<void>
+  // Finishes a Hosted-UI (Google) round trip from the `code`/`state` Cognito
+  // sent to /auth/callback. Resolves to the same-origin path the visitor was
+  // headed for before signing in, if one was remembered.
+  finishOAuth: (code: string, state: string) => Promise<string | undefined>
   signup: (email: string, password: string) => Promise<void>
   confirmSignup: (email: string, code: string) => Promise<void>
   logout: () => void
@@ -172,6 +177,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const session = await cognitoCompleteNewPassword(newPassword)
       await applyIdToken(session.getIdToken().getJwtToken(), set)
+    } catch (err) {
+      set({ error: (err as Error).message })
+      throw err
+    }
+  },
+
+  finishOAuth: async (code, state) => {
+    set({ error: null })
+    try {
+      const { session, returnTo } = await completeOAuthLogin(code, state)
+      await applyIdToken(session.getIdToken().getJwtToken(), set)
+      return returnTo
     } catch (err) {
       set({ error: (err as Error).message })
       throw err

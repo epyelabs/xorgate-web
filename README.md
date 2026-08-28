@@ -17,6 +17,9 @@ npm run build        # routes:generate → tsc -b → vite build  (this is the r
 Env (`.env`): `VITE_API_BASE_URL` (the API Gateway `execute-api` endpoint — no
 custom DNS yet), `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`,
 `VITE_COGNITO_IDENTITY_POOL_ID`, `VITE_AWS_REGION`, `VITE_IOT_ENDPOINT`.
+Optional `VITE_COGNITO_DOMAIN` (the auth stack's `HostedUiBaseUrl` output)
+turns on "Continue with Google" via the Cognito Hosted UI; `/auth/callback`
+and `/login` on the page origin must be registered on the SPA app client.
 
 ## Structure
 

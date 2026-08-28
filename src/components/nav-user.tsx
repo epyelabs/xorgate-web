@@ -30,6 +30,7 @@ import {
   User,
 } from "lucide-react"
 import { useAuthStore } from "@/store/auth"
+import { redirectToHostedLogout } from "@/lib/cognito"
 import { useTheme, type Theme } from "@/components/theme-provider"
 
 interface NavUserData {
@@ -66,6 +67,9 @@ export function NavUser({ user }: { user: NavUserData }) {
 
   function handleLogout() {
     logout()
+    // With Google federation wired, also clear the Hosted-UI cookie; that
+    // round trip lands on /login by itself.
+    if (redirectToHostedLogout()) return
     navigate({ to: "/login" })
   }
 

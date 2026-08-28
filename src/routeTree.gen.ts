@@ -24,6 +24,7 @@ import { Route as ApiKeysIndexRouteImport } from './routes/api-keys/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
 import { Route as WorkflowInstancesIdRouteImport } from './routes/workflow-instances/$id'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as DevicesIdIndexRouteImport } from './routes/devices/$id.index'
 import { Route as DevicesIdWorkflowsRouteImport } from './routes/devices/$id.workflows'
 import { Route as DevicesIdTelemetryRouteImport } from './routes/devices/$id.telemetry'
@@ -109,6 +110,11 @@ const DevicesIdRoute = DevicesIdRouteImport.update({
   path: '/devices/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevicesIdIndexRoute = DevicesIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys': typeof ApiKeysIndexRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/signup'
+    | '/auth/callback'
     | '/devices/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/signup'
+    | '/auth/callback'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys'
@@ -293,6 +304,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/signup'
+    | '/auth/callback'
     | '/devices/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
@@ -320,6 +332,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   SignupRoute: typeof SignupRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
@@ -438,6 +451,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/devices/$id/': {
       id: '/devices/$id/'
       path: '/'
@@ -539,6 +559,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   SignupRoute: SignupRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,

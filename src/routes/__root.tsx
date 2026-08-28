@@ -104,7 +104,9 @@ const CRUMB_LINK_PROPS = {
   activeProps: {},
 } as const
 
-const AUTH_ROUTES = ["/login", "/signup"]
+// /auth/callback belongs here too: once the Google round trip has produced a
+// session it holds the loading screen until the callback navigates onward.
+const AUTH_ROUTES = ["/login", "/signup", "/auth/callback"]
 
 // Routes a SIGNED-IN user sees without the app chrome. /onboarding is the only
 // one: the sidebar is built out of the organization switcher and org-scoped nav

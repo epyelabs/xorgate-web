@@ -9,7 +9,9 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
@@ -35,9 +37,19 @@ import { Route as DevicesIdOverviewRouteImport } from './routes/devices/$id.over
 import { Route as DevicesIdMediaRouteImport } from './routes/devices/$id.media'
 import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.benchmark'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -167,7 +179,9 @@ export interface FileRoutesByFullPath {
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
@@ -194,7 +208,9 @@ export interface FileRoutesByTo {
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
@@ -221,7 +237,9 @@ export interface FileRoutesById {
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
@@ -250,7 +268,9 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/login'
     | '/onboarding'
+    | '/privacy'
     | '/signup'
+    | '/terms'
     | '/auth/callback'
     | '/devices/$id'
     | '/workflow-instances/$id'
@@ -277,7 +297,9 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/login'
     | '/onboarding'
+    | '/privacy'
     | '/signup'
+    | '/terms'
     | '/auth/callback'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
@@ -303,7 +325,9 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/login'
     | '/onboarding'
+    | '/privacy'
     | '/signup'
+    | '/terms'
     | '/auth/callback'
     | '/devices/$id'
     | '/workflow-instances/$id'
@@ -331,7 +355,9 @@ export interface RootRouteChildren {
   ForbiddenRoute: typeof ForbiddenRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
+  PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
+  TermsRoute: typeof TermsRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
@@ -346,11 +372,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding': {
@@ -558,7 +598,9 @@ const rootRouteChildren: RootRouteChildren = {
   ForbiddenRoute: ForbiddenRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
+  PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
+  TermsRoute: TermsRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,

@@ -106,7 +106,7 @@ export function SignupForm({
                   />
                 </Field>
                 <Field>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" variant="brand" disabled={submitting}>
                     {submitting ? "Verifying..." : "Verify"}
                   </Button>
                   <FieldDescription className="text-center">
@@ -183,7 +183,7 @@ export function SignupForm({
                 </FieldDescription>
               </Field>
               <Field>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" variant="brand" disabled={submitting}>
                   {submitting ? "Creating account..." : "Create Account"}
                 </Button>
               </Field>

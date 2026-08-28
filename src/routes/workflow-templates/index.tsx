@@ -305,7 +305,7 @@ function WorkflowTemplatesListPage() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
-              variant="default"
+              variant="brand"
               size="lg"
               onClick={() => setCreateOpen(true)}
             >

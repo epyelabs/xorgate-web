@@ -24,7 +24,7 @@ import {
   Waypoints,
 } from "lucide-react"
 import { Link } from "@tanstack/react-router"
-import { XorgateLogo } from "@/components/xorgate-logo"
+import { XorgateAppIcon, XorgateLogo } from "@/components/xorgate-logo"
 import { useAuthStore } from "@/store/auth"
 
 const workspaceNav = [
@@ -63,17 +63,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild className="gap-1">
-              <Link to="/devices">
-                <div className="flex aspect-square size-9 items-center justify-center rounded-md text-sidebar-primary">
-                  <XorgateLogo className="size-6!" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">xorgate</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    AI-Native IoT Infrastructure
-                  </span>
-                </div>
+            {/* Expanded: the brand wordmark, as on the landing navbar.
+                Collapsed to the icon rail: the square app icon (favicon),
+                since the wordmark is 2.75:1 and would letterbox. */}
+            <SidebarMenuButton size="lg" asChild>
+              <Link
+                to="/devices"
+                aria-label="xorgate home"
+                className="group-data-[collapsible=icon]:justify-center"
+              >
+                <XorgateAppIcon className="hidden size-6 group-data-[collapsible=icon]:block" />
+                <XorgateLogo className="h-4! w-auto! text-brand group-data-[collapsible=icon]:hidden" />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

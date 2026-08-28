@@ -19,7 +19,7 @@
     "@aws-sdk/client-kinesis-video-signaling": "^3.1064.0",
     "@aws-sdk/credential-provider-cognito-identity": "^3.972.42",
     "@aws-sdk/util-utf8": "^3.310.0",
-    "@fontsource-variable/space-grotesk": "^5.2.10",
+    "@fontsource-variable/figtree": "^5.3.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/vite": "^4",
     "@tanstack/react-router": "^1.170.8",

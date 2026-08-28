@@ -396,7 +396,7 @@ function DevicesListPage() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="default" size="lg" onClick={handleProvision}>
+            <Button variant="brand" size="lg" onClick={handleProvision}>
               <PlusIcon />
               Register device
             </Button>
@@ -467,7 +467,7 @@ function DevicesListPage() {
                   Provision your first device to start streaming.
                 </p>
               </div>
-              <Button variant="default" size="sm" onClick={handleProvision}>
+              <Button variant="brand" size="sm" onClick={handleProvision}>
                 <PlusIcon />
                 Register device
               </Button>

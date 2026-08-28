@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { LoginForm } from "@/components/login-form"
 import { XorgateLogo } from "@/components/xorgate-logo"
+import { AccentField } from "@/components/accent-field"
 import { useAuthStore } from "@/store/auth"
 import {
   DEFAULT_AUTHED_ROUTE,
@@ -29,11 +30,11 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   return (
-    <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+    <div className="relative isolate flex min-h-svh flex-col items-center justify-center gap-6 bg-shell p-6 md:p-10">
+      <AccentField variant="grid-full" />
       <div className="flex w-full max-w-sm flex-col gap-6">
-        <a href="/" className="flex items-center gap-2 self-center font-medium">
-          <XorgateLogo className="size-8 text-primary" />
-          xorgate
+        <a href="/" className="self-center" aria-label="xorgate">
+          <XorgateLogo className="h-7 w-auto text-brand" />
         </a>
         <LoginForm />
       </div>

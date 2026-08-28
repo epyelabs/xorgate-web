@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { OnboardingForm } from "@/components/onboarding-form"
 import { XorgateLogo } from "@/components/xorgate-logo"
+import { AccentField } from "@/components/accent-field"
 import { useAuthStore } from "@/store/auth"
 import {
   DEFAULT_AUTHED_ROUTE,
@@ -29,12 +30,10 @@ export const Route = createFileRoute("/onboarding")({
 
 function OnboardingPage() {
   return (
-    <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+    <div className="relative isolate flex min-h-svh flex-col items-center justify-center gap-6 bg-shell p-6 md:p-10">
+      <AccentField variant="grid-full" />
       <div className="flex w-full max-w-sm flex-col gap-6">
-        <span className="flex items-center gap-2 self-center font-medium">
-          <XorgateLogo className="size-8 text-primary" />
-          xorgate
-        </span>
+        <XorgateLogo className="h-7 w-auto self-center text-brand" />
         <OnboardingForm />
       </div>
     </div>

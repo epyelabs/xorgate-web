@@ -123,7 +123,7 @@ export function OnboardingForm({
                 </FieldDescription>
               </Field>
               <Field>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" variant="brand" disabled={submitting}>
                   {submitting ? "Creating..." : "Create organization"}
                 </Button>
                 <FieldDescription>

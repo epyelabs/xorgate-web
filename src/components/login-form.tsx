@@ -129,7 +129,7 @@ export function LoginForm({
                   />
                 </Field>
                 <Field>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" variant="brand" disabled={submitting}>
                     {submitting ? "Saving..." : "Set password and continue"}
                   </Button>
                 </Field>
@@ -179,7 +179,7 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" variant="brand" disabled={submitting}>
                   {submitting ? "Signing in..." : "Sign in"}
                 </Button>
               </Field>

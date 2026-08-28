@@ -44,10 +44,7 @@ export function AppLoadingScreen({
         className
       )}
     >
-      <div className="flex items-center gap-2.5">
-        <XorgateLogo className="size-7 animate-pulse text-primary motion-reduce:animate-none" />
-        <span className="text-xl font-semibold tracking-tight">xorgate</span>
-      </div>
+      <XorgateLogo className="h-7 w-auto animate-pulse text-brand motion-reduce:animate-none" />
       {/* Indeterminate sweep — the fetch has no measurable progress to report. */}
       <div
         aria-hidden

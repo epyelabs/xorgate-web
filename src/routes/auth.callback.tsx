@@ -35,6 +35,15 @@ export const Route = createFileRoute("/auth/callback")({
 const LINKED_RETRY_MARKER = "already found an entry for username"
 const RETRY_FLAG = "xorgate.oauthLinkRetried"
 
+// Codes this page has already started exchanging. Module-scoped on purpose: the
+// page MOUNTS MORE THAN ONCE per login. When finishOAuth flips isAuthenticated,
+// the root layout swaps from the bare <Outlet /> to the app shell while the
+// router is still mid-transition away from /auth/callback, so this component is
+// torn down and mounted fresh with the same search params. A per-instance ref
+// cannot see that; a second run would find the PKCE stash already consumed and
+// bounce the user through /login with a "Missing PKCE verifier" toast.
+const consumedCodes = new Set<string>()
+
 function AuthCallbackPage() {
   const { code, state, error, error_description } = Route.useSearch()
   const navigate = useNavigate()
@@ -64,6 +73,11 @@ function AuthCallbackPage() {
       navigate({ to: "/login", replace: true })
       return
     }
+
+    // A remount mid-exchange: the first instance owns this code and will
+    // navigate onward when it resolves. Do nothing here.
+    if (consumedCodes.has(code)) return
+    consumedCodes.add(code)
 
     finishOAuth(code, state)
       .then((returnTo) => {

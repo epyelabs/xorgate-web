@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { GoogleSignInButton } from "@/components/google-sign-in-button"
 import { useAuthStore } from "@/store/auth"
 import { loginSchema } from "@/lib/schemas"
 import { DEFAULT_AUTHED_ROUTE, sanitizeRedirect } from "@/lib/auth-guard"
@@ -181,13 +182,14 @@ export function LoginForm({
                 <Button type="submit" disabled={submitting}>
                   {submitting ? "Signing in..." : "Sign in"}
                 </Button>
-                <FieldDescription className="text-center">
-                  Don&apos;t have an account?{" "}
-                  <Link to="/signup" className="underline-offset-4 hover:underline">
-                    Sign up
-                  </Link>
-                </FieldDescription>
               </Field>
+              <GoogleSignInButton disabled={submitting} returnTo={redirectTo} />
+              <FieldDescription className="text-center">
+                Don&apos;t have an account?{" "}
+                <Link to="/signup" className="underline-offset-4 hover:underline">
+                  Sign up
+                </Link>
+              </FieldDescription>
             </FieldGroup>
           </form>
         </CardContent>

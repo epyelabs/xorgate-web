@@ -140,6 +140,39 @@ export function completeNewPassword(
 }
 
 /**
+ * Forgot password, step 1: Cognito emails a reset code to the account's
+ * verified address (the pool's recovery channel is email only). Resolves as
+ * soon as the code is on its way; the code itself never reaches the browser.
+ */
+export function forgotPassword(email: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = new CognitoUser({ Username: email, Pool: userPool })
+    user.forgotPassword({
+      onSuccess: () => resolve(),
+      onFailure: (err) => reject(err),
+      // Called INSTEAD of onSuccess when the SDK expects the code to be
+      // collected by the caller, which is exactly this flow.
+      inputVerificationCode: () => resolve(),
+    })
+  })
+}
+
+/** Forgot password, step 2: the emailed code authorizes the new password. */
+export function confirmForgotPassword(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = new CognitoUser({ Username: email, Pool: userPool })
+    user.confirmPassword(code, newPassword, {
+      onSuccess: () => resolve(),
+      onFailure: (err) => reject(err),
+    })
+  })
+}
+
+/**
  * Change the signed-in user's password. Cognito is the credential store, so
  * this never touches the platform API — the browser talks to Cognito directly
  * and the session survives, meaning there is nothing to sign out of afterwards.

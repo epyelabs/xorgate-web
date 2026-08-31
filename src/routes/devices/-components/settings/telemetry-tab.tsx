@@ -114,9 +114,9 @@ export function TelemetryTab({
                   Record telemetry on device
                 </FieldLabel>
                 <FieldDescription>
-                  Off by default. Samples sensors up to the rate below (higher
-                  than the 1&nbsp;Hz live feed) and becomes the authoritative
-                  telemetry history once uploaded.
+                  Off by default. Samples sensors at the rate below (up to
+                  20&nbsp;Hz, above the 1&nbsp;Hz live feed) and becomes the
+                  authoritative telemetry history once uploaded.
                 </FieldDescription>
               </FieldContent>
               <Switch
@@ -149,7 +149,7 @@ export function TelemetryTab({
                   <SelectContent>
                     {withCurrent(RATE_HZ_OPTIONS, recording.rateHz).map((hz) => (
                       <SelectItem key={hz} value={String(hz)}>
-                        {hz} Hz{hz === 10 ? " (default)" : ""}
+                        {hz} Hz{hz === 1 ? " (default)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

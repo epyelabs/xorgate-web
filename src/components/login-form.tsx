@@ -168,6 +168,17 @@ export function LoginForm({
               <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
+                  {/* Sized to match FieldLabel (text-xs/relaxed), so the row
+                      reads as one line rather than a label with a button
+                      bolted on. Carries whatever was typed so the reset form
+                      opens on the right address. */}
+                  <Link
+                    to="/forgot-password"
+                    search={{ email: email.trim() || undefined }}
+                    className="ml-auto text-xs/relaxed underline-offset-4 hover:underline"
+                  >
+                    Forgot your password?
+                  </Link>
                 </div>
                 <Input
                   id="password"

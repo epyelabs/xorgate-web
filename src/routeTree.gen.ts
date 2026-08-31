@@ -14,6 +14,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as AccountRouteImport } from './routes/account'
@@ -61,6 +62,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForbiddenRoute = ForbiddenRouteImport.update({
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
@@ -244,6 +252,7 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
@@ -276,6 +285,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/billing'
     | '/forbidden'
+    | '/forgot-password'
     | '/login'
     | '/onboarding'
     | '/privacy'
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/billing'
     | '/forbidden'
+    | '/forgot-password'
     | '/login'
     | '/onboarding'
     | '/privacy'
@@ -335,6 +346,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/billing'
     | '/forbidden'
+    | '/forgot-password'
     | '/login'
     | '/onboarding'
     | '/privacy'
@@ -366,6 +378,7 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   BillingRoute: typeof BillingRoute
   ForbiddenRoute: typeof ForbiddenRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -418,6 +431,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forbidden': {
@@ -617,6 +637,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   BillingRoute: BillingRoute,
   ForbiddenRoute: ForbiddenRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,

@@ -8,15 +8,15 @@ import {
   completeNewPassword as cognitoCompleteNewPassword,
   completeOAuthLogin,
 } from "@/lib/cognito"
-import { xgBootstrap } from "@/lib/xorgate"
-import type { Membership, Organization, User } from "@xorgate/sdk"
+import { fetchMe, type AccountUser } from "@/lib/account-api"
+import type { Membership, Organization } from "@xorgate/sdk"
 
 // login() resolves to "newPasswordRequired" when an admin-created invitee signs
 // in with their temporary password and must set a new one before continuing.
 export type LoginResult = { status: "ok" } | { status: "newPasswordRequired" }
 
 interface AuthState {
-  user: User | null
+  user: AccountUser | null
   memberships: Membership[]
   organizations: Organization[]
   isLoading: boolean
@@ -39,6 +39,11 @@ interface AuthState {
   confirmSignup: (email: string, code: string) => Promise<void>
   logout: () => void
   refreshMe: () => Promise<void>
+  // Writes a profile back after the account screen changes it, so the sidebar
+  // and its dropdown show the new name or picture in the same frame — the
+  // profile endpoints all answer with the updated user, so there is nothing
+  // to re-fetch.
+  applyUser: (user: AccountUser) => void
   clearError: () => void
 }
 
@@ -53,9 +58,12 @@ function decodeIdToken(token: string): IdTokenPayload {
 }
 
 async function hydrateFromMe(set: (partial: Partial<AuthState>) => void) {
-  // The bootstrap client works with no organization selected, which is
-  // exactly this call's situation on first sign-in.
-  const me = await xgBootstrap().me()
+  // `GET /me` needs no organization selected, which is exactly this call's
+  // situation on first sign-in. It is the one read in the app that does NOT go
+  // through `@xorgate/sdk`: the published client's user normalizer drops
+  // `avatarUrl`, so the profile picture cannot reach the app through it (see
+  // lib/account-api.ts). Everything else still runs on the SDK.
+  const me = await fetchMe()
   set({
     user: me.user,
     memberships: me.memberships,
@@ -92,6 +100,7 @@ async function applyIdToken(
       id: claims.sub,
       email: claims.email,
       name: null,
+      avatarUrl: null,
       tier: "free",
       role: "user",
       createdAt: null,
@@ -129,6 +138,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: claims.sub,
           email: claims.email,
           name: null,
+          avatarUrl: null,
           tier: "free",
           role: "user",
           createdAt: null,
@@ -230,6 +240,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!get().isAuthenticated) return
     await hydrateFromMe(set)
   },
+
+  applyUser: (user) => set({ user }),
 
   clearError: () => set({ error: null }),
 }))

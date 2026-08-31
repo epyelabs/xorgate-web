@@ -1,5 +1,5 @@
-import { useNavigate } from "@tanstack/react-router"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Link, useNavigate } from "@tanstack/react-router"
+import { UserAvatar } from "@/components/user-avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +21,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
-  BellIcon,
   EllipsisVerticalIcon,
   LogOutIcon,
   MonitorIcon,
@@ -36,21 +35,8 @@ import { useTheme, type Theme } from "@/components/theme-provider"
 interface NavUserData {
   name: string
   email: string
-  avatar: string
-  tier: string
-}
-
-function initialsFor(user: NavUserData): string {
-  if (user.name && user.name !== user.email) {
-    return (
-      user.name
-        .split(/\s+/)
-        .map((part) => part[0]?.toUpperCase() ?? "")
-        .slice(0, 2)
-        .join("") || user.email.slice(0, 2).toUpperCase()
-    )
-  }
-  return user.email.slice(0, 2).toUpperCase()
+  /** Presigned profile-picture URL, or null to draw initials. */
+  avatar: string | null
 }
 
 const ThemeIcon = {
@@ -73,8 +59,10 @@ export function NavUser({ user }: { user: NavUserData }) {
     navigate({ to: "/login" })
   }
 
-  const initials = initialsFor(user)
   const CurrentThemeIcon = ThemeIcon[theme]
+  // `name` falls back to the email when the profile has no name (app-sidebar),
+  // and repeating the address on both lines just looks like a rendering bug.
+  const secondLine = user.name === user.email ? null : user.email
 
   return (
     <SidebarMenu>
@@ -85,17 +73,20 @@ export function NavUser({ user }: { user: NavUserData }) {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={user.name}
+                email={user.email}
+                src={user.avatar}
+                className="h-8 w-8 rounded-lg"
+                fallbackClassName="rounded-lg"
+              />
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs text-muted-foreground capitalize">
-                  {user.tier}
-                </span>
+                {secondLine ? (
+                  <span className="truncate text-xs text-muted-foreground">
+                    {secondLine}
+                  </span>
+                ) : null}
               </div>
               <EllipsisVerticalIcon className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
@@ -108,29 +99,28 @@ export function NavUser({ user }: { user: NavUserData }) {
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={user.name}
+                  email={user.email}
+                  src={user.avatar}
+                  className="h-8 w-8 rounded-lg"
+                  fallbackClassName="rounded-lg"
+                />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs capitalize">
-                    {user.tier}
-                  </span>
+                  {secondLine ? (
+                    <span className="truncate text-xs">{secondLine}</span>
+                  ) : null}
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled>
-                <User />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <BellIcon />
-                Notifications
+              <DropdownMenuItem asChild>
+                <Link to="/account">
+                  <User />
+                  Account
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

@@ -139,6 +139,53 @@ export function completeNewPassword(
   })
 }
 
+/**
+ * Change the signed-in user's password. Cognito is the credential store, so
+ * this never touches the platform API — the browser talks to Cognito directly
+ * and the session survives, meaning there is nothing to sign out of afterwards.
+ *
+ * Federated (Google) users have no Cognito password at all; the account screen
+ * hides the form for them rather than letting this fail. See `isFederated`.
+ */
+export function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const user = userPool.getCurrentUser()
+    if (!user) return reject(new Error("No signed-in user"))
+    // getSession() is what attaches the session to the CognitoUser; without it
+    // changePassword throws "User is not authenticated" even on a live session.
+    user.getSession(
+      (err: Error | null, session: CognitoUserSession | null) => {
+        if (err || !session) return reject(err ?? new Error("Session expired"))
+        user.changePassword(currentPassword, newPassword, (changeErr) => {
+          if (changeErr) return reject(changeErr)
+          resolve()
+        })
+      }
+    )
+  })
+}
+
+/**
+ * Whether this session signed in through a federated provider (Google), which
+ * Cognito records as an `identities` claim on the ID token. Such a user has no
+ * password in the pool, so anything password-shaped has to be hidden rather
+ * than offered and then refused.
+ *
+ * Null while the session is still loading, so a caller can tell "not federated"
+ * apart from "not known yet" and avoid flashing the wrong UI.
+ */
+export async function isFederatedUser(): Promise<boolean | null> {
+  const session = await getCurrentSession()
+  if (!session) return null
+  const claims = session.getIdToken().decodePayload() as {
+    identities?: unknown[]
+  }
+  return Array.isArray(claims.identities) && claims.identities.length > 0
+}
+
 export function signOut(): void {
   const user = userPool.getCurrentUser()
   if (user) user.signOut()

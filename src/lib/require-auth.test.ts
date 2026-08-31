@@ -25,8 +25,11 @@ vi.mock("@/lib/cognito", () => ({
   completeNewPassword: vi.fn(),
 }))
 
+vi.mock("@/lib/account-api", () => ({
+  fetchMe: h.me,
+}))
+
 vi.mock("@/lib/xorgate", () => ({
-  xgBootstrap: () => ({ me: h.me }),
   xgMessage: (e: unknown) => String(e),
 }))
 

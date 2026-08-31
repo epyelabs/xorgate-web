@@ -16,6 +16,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
 import { Route as BillingRouteImport } from './routes/billing'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
 import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
@@ -70,6 +71,11 @@ const ForbiddenRoute = ForbiddenRouteImport.update({
 const BillingRoute = BillingRouteImport.update({
   id: '/billing',
   path: '/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -175,6 +181,7 @@ const DevicesIdBenchmarkRoute = DevicesIdBenchmarkRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
@@ -233,6 +241,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/billing': typeof BillingRoute
   '/forbidden': typeof ForbiddenRoute
   '/login': typeof LoginRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/billing'
     | '/forbidden'
     | '/login'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/billing'
     | '/forbidden'
     | '/login'
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/billing'
     | '/forbidden'
     | '/login'
@@ -351,6 +363,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   BillingRoute: typeof BillingRoute
   ForbiddenRoute: typeof ForbiddenRoute
   LoginRoute: typeof LoginRoute
@@ -419,6 +432,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof BillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -594,6 +614,7 @@ const DevicesIdRouteWithChildren = DevicesIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   BillingRoute: BillingRoute,
   ForbiddenRoute: ForbiddenRoute,
   LoginRoute: LoginRoute,

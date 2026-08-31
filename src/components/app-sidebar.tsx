@@ -54,8 +54,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = {
     name: authUser?.name ?? authUser?.email ?? "Guest",
     email: authUser?.email ?? "",
-    avatar: "",
-    tier: authUser?.tier ?? "free",
+    // Presigned and re-minted by every /me response; null until one lands, and
+    // for anyone who has not set a picture (NavUser draws initials instead).
+    avatar: authUser?.avatarUrl ?? null,
   }
 
   return (

@@ -21,6 +21,7 @@ import {
   PlusIcon,
 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EntityLogo } from "@/components/entity-logo"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
@@ -54,7 +55,18 @@ export function OrganizationSwitcher() {
               <SidebarMenuButton
                 className="border border-sidebar-border bg-background hover:bg-background data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
               >
-                <Building2Icon className="text-muted-foreground" />
+                {/* The logo when there is one, the generic mark otherwise —
+                    an organization without a logo should not read as a blank
+                    tile. Same rule in the dropdown rows below. */}
+                {activeOrg?.logoUrl ? (
+                  <EntityLogo
+                    name={activeOrg.name}
+                    src={activeOrg.logoUrl}
+                    className="size-5 rounded-sm after:rounded-sm"
+                  />
+                ) : (
+                  <Building2Icon className="text-muted-foreground" />
+                )}
                 <div className="flex flex-1 text-left text-sm leading-tight">
                   {isLoadingOrgs ? (
                     <Skeleton className="h-4 w-28" />
@@ -111,9 +123,17 @@ export function OrganizationSwitcher() {
                     }}
                     className="gap-2 p-2"
                   >
-                    <div className="flex size-6 items-center justify-center rounded-md border">
-                      <Building2Icon className="size-3.5" />
-                    </div>
+                    {org.logoUrl ? (
+                      <EntityLogo
+                        name={org.name}
+                        src={org.logoUrl}
+                        className="size-6 rounded-md after:rounded-md"
+                      />
+                    ) : (
+                      <div className="flex size-6 items-center justify-center rounded-md border">
+                        <Building2Icon className="size-3.5" />
+                      </div>
+                    )}
                     <span className="truncate">{org.name}</span>
                     {isActive && <CheckIcon className="ml-auto size-3.5" />}
                   </DropdownMenuItem>

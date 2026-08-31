@@ -11,8 +11,13 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { LogoField } from "@/components/logo-field"
 import { createWorkspaceSchema } from "@/lib/schemas"
-import type { Workspace } from "@xorgate/sdk"
+import {
+  removeWorkspaceLogo,
+  uploadWorkspaceLogo,
+  type BrandedWorkspace,
+} from "@/lib/branding-api"
 import { xgMessage } from "@/lib/xorgate"
 import { useWorkspaceStore } from "@/store/workspace"
 
@@ -27,7 +32,7 @@ export function EditWorkspaceDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  workspace: Workspace | null
+  workspace: BrandedWorkspace | null
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -35,7 +40,7 @@ export function EditWorkspaceDialog({
         <DialogHeader>
           <DialogTitle>Edit workspace</DialogTitle>
           <DialogDescription>
-            Update this workspace's name, slug, or description.
+            Update this workspace's logo, name, slug, or description.
           </DialogDescription>
         </DialogHeader>
         {workspace ? (
@@ -54,9 +59,18 @@ function EditWorkspaceForm({
   workspace,
   onClose,
 }: {
-  workspace: Workspace
+  workspace: BrandedWorkspace
   onClose: () => void
 }) {
+  const applyWorkspace = useWorkspaceStore((s) => s.applyWorkspace)
+  // The `workspace` prop is the row as it was when the menu was opened. The
+  // logo is written while the dialog is still up, so it reads the LIVE row
+  // instead — otherwise the Remove button would not appear until a reopen.
+  // The text fields deliberately do not: they are drafts seeded at mount.
+  const live = useWorkspaceStore((s) =>
+    s.workspaces.find((w) => w.id === workspace.id)
+  )
+  const logoUrl = (live ?? workspace).logoUrl
   const [name, setName] = useState(workspace.name)
   const [slug, setSlug] = useState(workspace.slug)
   const [description, setDescription] = useState(workspace.description ?? "")
@@ -94,6 +108,26 @@ function EditWorkspaceForm({
 
   return (
     <form onSubmit={handleSubmit}>
+      {/* Outside the FieldGroup and outside the submit: the logo lands on its
+          own upload, so closing without saving still keeps it. The name shown
+          beside it is the DRAFT, so the initials fallback tracks what is being
+          typed rather than the stored name. */}
+      <div className="mb-6 flex flex-col gap-2">
+        <FieldLabel>Logo</FieldLabel>
+        <LogoField
+          name={name || workspace.name}
+          logoUrl={logoUrl}
+          inputTestId="workspace-logo-input"
+          onUpload={async (input) => {
+            const result = await uploadWorkspaceLogo(workspace.id, input)
+            applyWorkspace(result.workspace)
+          }}
+          onRemove={async () => {
+            const result = await removeWorkspaceLogo(workspace.id)
+            applyWorkspace(result.workspace)
+          }}
+        />
+      </div>
       <FieldGroup>
         <Field>
           <FieldLabel htmlFor="edit-workspace-name">Name</FieldLabel>

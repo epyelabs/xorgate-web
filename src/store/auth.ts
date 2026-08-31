@@ -9,7 +9,8 @@ import {
   completeOAuthLogin,
 } from "@/lib/cognito"
 import { fetchMe, type AccountUser } from "@/lib/account-api"
-import type { Membership, Organization } from "@xorgate/sdk"
+import type { BrandedOrganization } from "@/lib/branding-api"
+import type { Membership } from "@xorgate/sdk"
 
 // login() resolves to "newPasswordRequired" when an admin-created invitee signs
 // in with their temporary password and must set a new one before continuing.
@@ -18,7 +19,7 @@ export type LoginResult = { status: "ok" } | { status: "newPasswordRequired" }
 interface AuthState {
   user: AccountUser | null
   memberships: Membership[]
-  organizations: Organization[]
+  organizations: BrandedOrganization[]
   isLoading: boolean
   isAuthenticated: boolean
   // Whether /me has actually answered. `organizations` carries no meaning
@@ -44,6 +45,11 @@ interface AuthState {
   // profile endpoints all answer with the updated user, so there is nothing
   // to re-fetch.
   applyUser: (user: AccountUser) => void
+  // Same idea one level up: the organization writes answer with the updated
+  // row, so an edited name or logo reaches the sidebar switcher without a
+  // second /me. An organization that is not in the list is ignored rather than
+  // appended — the list is defined by memberships, which this cannot change.
+  applyOrganization: (organization: BrandedOrganization) => void
   clearError: () => void
 }
 
@@ -242,6 +248,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   applyUser: (user) => set({ user }),
+
+  applyOrganization: (organization) =>
+    set((state) => ({
+      organizations: state.organizations.map((org) =>
+        org.id === organization.id ? organization : org
+      ),
+    })),
 
   clearError: () => set({ error: null }),
 }))

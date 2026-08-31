@@ -1,4 +1,5 @@
-import type { Membership, Organization, User } from "@xorgate/sdk"
+import type { Membership, User } from "@xorgate/sdk"
+import type { BrandedOrganization } from "./branding-api"
 import { getIdToken } from "./cognito"
 
 /**
@@ -68,7 +69,7 @@ interface MeResponse {
   user: AccountUser
   memberships: Membership[]
   organizations: Array<
-    Omit<Organization, "createdAt" | "updatedAt"> & {
+    Omit<BrandedOrganization, "createdAt" | "updatedAt"> & {
       created_at?: string
       updated_at?: string
     }
@@ -78,7 +79,7 @@ interface MeResponse {
 export interface Me {
   user: AccountUser
   memberships: Membership[]
-  organizations: Organization[]
+  organizations: BrandedOrganization[]
 }
 
 /** The bootstrap read: identity, memberships, and every organization. */
@@ -91,6 +92,9 @@ export async function fetchMe(): Promise<Me> {
       id: org.id,
       name: org.name,
       slug: org.slug,
+      // Presigned and short-lived, like the user's `avatarUrl`: it comes back
+      // fresh on every /me and is never persisted.
+      logoUrl: org.logoUrl ?? null,
       createdAt: org.created_at ?? "",
       updatedAt: org.updated_at ?? "",
     })),

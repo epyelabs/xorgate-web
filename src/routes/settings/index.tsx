@@ -24,9 +24,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateWorkspaceDialog } from "@/components/create-workspace-dialog"
+import { EntityLogo } from "@/components/entity-logo"
+import { LogoField } from "@/components/logo-field"
+import {
+  removeOrganizationLogo,
+  uploadOrganizationLogo,
+  type BrandedWorkspace,
+} from "@/lib/branding-api"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
-import type { Workspace } from "@xorgate/sdk"
 import { EditWorkspaceDialog } from "./-components/edit-workspace-dialog"
 import { DeleteWorkspaceDialog } from "./-components/delete-workspace-dialog"
 import { CredentialsCard } from "./-components/credentials-card"
@@ -50,6 +56,7 @@ function formatDate(iso: string): string {
 
 function OrganizationSettingsPage() {
   const organizations = useAuthStore((s) => s.organizations)
+  const applyOrganization = useAuthStore((s) => s.applyOrganization)
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
@@ -74,15 +81,24 @@ function OrganizationSettingsPage() {
   }
 
   const [createOpen, setCreateOpen] = useState(false)
-  const [editing, setEditing] = useState<Workspace | null>(null)
-  const [deleting, setDeleting] = useState<Workspace | null>(null)
+  const [editing, setEditing] = useState<BrandedWorkspace | null>(null)
+  const [deleting, setDeleting] = useState<BrandedWorkspace | null>(null)
 
-  const workspaceColumns: DataTableColumn<Workspace>[] = [
+  const workspaceColumns: DataTableColumn<BrandedWorkspace>[] = [
     {
       id: "name",
       header: "Name",
       cellClassName: "font-medium",
-      cell: (workspace) => workspace.name,
+      cell: (workspace) => (
+        <div className="flex items-center gap-2">
+          <EntityLogo
+            name={workspace.name}
+            src={workspace.logoUrl}
+            className="size-6"
+          />
+          {workspace.name}
+        </div>
+      ),
     },
     {
       id: "slug",
@@ -164,7 +180,34 @@ function OrganizationSettingsPage() {
                 Your organization's name and identity.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-col gap-6">
+              {/* Not part of the form below: an upload lands on its own, so
+                  there is no half-saved state where the logo changed and the
+                  name did not. */}
+              <div className="flex flex-col gap-2">
+                <Label>Logo</Label>
+                <LogoField
+                  name={orgName}
+                  logoUrl={activeOrg?.logoUrl ?? null}
+                  disabled={!activeOrg}
+                  inputTestId="organization-logo-input"
+                  onUpload={async (input) => {
+                    if (!activeOrg) return
+                    const { organization } = await uploadOrganizationLogo(
+                      activeOrg.id,
+                      input
+                    )
+                    applyOrganization(organization)
+                  }}
+                  onRemove={async () => {
+                    if (!activeOrg) return
+                    const { organization } = await removeOrganizationLogo(
+                      activeOrg.id
+                    )
+                    applyOrganization(organization)
+                  }}
+                />
+              </div>
               <div className="grid gap-2 sm:max-w-sm">
                 <Label htmlFor="org-name">Organization name</Label>
                 <Input

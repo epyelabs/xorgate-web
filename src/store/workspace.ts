@@ -6,13 +6,14 @@ import {
   xg,
   xgBootstrap,
 } from "@/lib/xorgate"
-import type { Organization, Workspace } from "@xorgate/sdk"
+import type { Organization } from "@xorgate/sdk"
+import type { BrandedWorkspace } from "@/lib/branding-api"
 import { useAuthStore } from "@/store/auth"
 
 interface WorkspaceState {
   currentOrganizationId: string | null
   currentWorkspaceId: string | null
-  workspaces: Workspace[]
+  workspaces: BrandedWorkspace[]
   isLoadingWorkspaces: boolean
 
   initialize: () => Promise<void>
@@ -24,11 +25,15 @@ interface WorkspaceState {
     name: string
     slug: string
     description?: string
-  }) => Promise<Workspace>
+  }) => Promise<BrandedWorkspace>
   updateWorkspace: (
     id: string,
     input: { name?: string; slug?: string; description?: string | null }
-  ) => Promise<Workspace>
+  ) => Promise<BrandedWorkspace>
+  // Writes a workspace back after a logo upload changes it, so the switcher
+  // and the settings table show the new mark in the same frame — the logo
+  // routes answer with the updated row, so there is nothing to re-fetch.
+  applyWorkspace: (workspace: BrandedWorkspace) => void
   deleteWorkspace: (id: string) => Promise<void>
   reset: () => void
 }
@@ -82,7 +87,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
         set({ isLoadingWorkspaces: true })
         try {
-          const workspaces = await xg().workspaces.list()
+          // The SDK unwraps this envelope verbatim, so `logoUrl` really is on
+          // the rows even though its published `Workspace` type predates it.
+          const workspaces = (await xg().workspaces.list()) as BrandedWorkspace[]
           const persistedWorkspaceId = get().currentWorkspaceId
           const stillValid =
             persistedWorkspaceId && workspaces.some((p) => p.id === persistedWorkspaceId)
@@ -109,7 +116,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       createWorkspace: async (input) => {
-        const workspace = await xg().workspaces.create(input)
+        const workspace = (await xg().workspaces.create(input)) as BrandedWorkspace
         set((state) => ({
           workspaces: [workspace, ...state.workspaces],
           currentWorkspaceId: workspace.id,
@@ -118,13 +125,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       updateWorkspace: async (id, input) => {
-        const workspace = await xg().workspaces.update(id, input)
+        const workspace = (await xg().workspaces.update(id, input)) as BrandedWorkspace
         set((state) => ({
           workspaces: state.workspaces.map((w) =>
             w.id === workspace.id ? workspace : w
           ),
         }))
         return workspace
+      },
+
+      applyWorkspace: (workspace) => {
+        set((state) => ({
+          workspaces: state.workspaces.map((w) =>
+            w.id === workspace.id ? workspace : w
+          ),
+        }))
       },
 
       deleteWorkspace: async (id) => {
@@ -164,12 +179,24 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 registerOrgIdGetter(() => useWorkspaceStore.getState().currentOrganizationId)
 registerWorkspaceIdGetter(() => useWorkspaceStore.getState().currentWorkspaceId)
 
+/** The organizations a user belongs to, as one comparable value. */
+function orgKey(orgs: Array<{ id: string }>): string {
+  return orgs.map((o) => o.id).join(",")
+}
+
 useAuthStore.subscribe((state, prevState) => {
   if (prevState.isAuthenticated && !state.isAuthenticated) {
     useWorkspaceStore.getState().reset()
     return
   }
-  if (state.isAuthenticated && state.organizations !== prevState.organizations) {
+  // Which organizations exist, not which object holds them. Editing an
+  // organization (a renamed org, a new logo) replaces the array without
+  // changing the membership set, and re-initializing on that would drop the
+  // loaded workspaces and flash a skeleton in the switcher for no reason.
+  if (
+    state.isAuthenticated &&
+    orgKey(state.organizations) !== orgKey(prevState.organizations)
+  ) {
     void useWorkspaceStore.getState().initialize()
   }
 })

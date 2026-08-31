@@ -21,6 +21,7 @@ import {
   PlusIcon,
 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EntityLogo } from "@/components/entity-logo"
 import { useWorkspaceStore } from "@/store/workspace"
 import { DEFAULT_AUTHED_ROUTE } from "@/lib/auth-guard"
 import { shouldLeaveOnContextSwitch } from "@/lib/context-scope"
@@ -58,7 +59,17 @@ export function WorkspaceSwitcher() {
               <SidebarMenuButton
                 className="border border-sidebar-border bg-background hover:bg-background data-[state=open]:bg-background data-[state=open]:text-sidebar-accent-foreground"
               >
-                <FolderIcon className="text-muted-foreground" />
+                {/* Same rule as the organization switcher: the logo when
+                    there is one, the generic mark otherwise. */}
+                {activeWorkspace?.logoUrl ? (
+                  <EntityLogo
+                    name={activeWorkspace.name}
+                    src={activeWorkspace.logoUrl}
+                    className="size-5 rounded-sm after:rounded-sm"
+                  />
+                ) : (
+                  <FolderIcon className="text-muted-foreground" />
+                )}
                 <div className="flex flex-1 text-left text-sm leading-tight">
                   {isLoading ? (
                     <Skeleton className="h-4 w-28" />
@@ -110,9 +121,17 @@ export function WorkspaceSwitcher() {
                     }}
                     className="gap-2 p-2"
                   >
-                    <div className="flex size-6 items-center justify-center rounded-md border">
-                      <FolderIcon className="size-3.5" />
-                    </div>
+                    {workspace.logoUrl ? (
+                      <EntityLogo
+                        name={workspace.name}
+                        src={workspace.logoUrl}
+                        className="size-6 rounded-md after:rounded-md"
+                      />
+                    ) : (
+                      <div className="flex size-6 items-center justify-center rounded-md border">
+                        <FolderIcon className="size-3.5" />
+                      </div>
+                    )}
                     <span className="truncate">{workspace.name}</span>
                     {isActive && <CheckIcon className="ml-auto size-3.5" />}
                   </DropdownMenuItem>

@@ -1,16 +1,9 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
-import { toast } from "sonner"
-import type { IoCapabilities } from "@xorgate/sdk"
-import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
-import {
-  xg,
-  xgMessage,
-  type ActiveStreamsViewType,
-  type ImuView,
-} from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
+import { useDevice, useDeviceModel } from "@/queries/devices"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -27,16 +20,25 @@ export const Route = createFileRoute("/devices/$id/streams")({
 // themselves live in components/streams-view.
 function DeviceStreamsPage() {
   const { id } = Route.useParams()
-  const [caps, setCaps] = useState<IoCapabilities | null>(null)
+  // Same query keys the layout polls, so a tab switch renders from cache with
+  // no request and no skeleton; the poll keeps prefs/config current behind it.
+  const deviceQuery = useDevice(id)
+  const device = deviceQuery.data ?? null
+  const modelQuery = useDeviceModel(device?.deviceModelId)
+  const caps = modelQuery.data?.ioCapabilities ?? null
   // Per-camera enables from the device's recording config (keyed by stream key;
   // absent = enabled). Drives the "camera turned off" placeholder in the grid.
-  const [cameraEnables, setCameraEnables] = useState<
-    Record<string, boolean> | undefined
-  >(undefined)
-  const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
-  const [imuView, setImuView] = useState<ImuView | null>(null)
-  const [metaLoading, setMetaLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const cameraEnables = device?.config.recording?.video?.cameras
+  const viewType = device?.uiPrefs.activeStreamsViewType ?? "card"
+  const imuView = device?.uiPrefs.imuView ?? null
+  const metaLoading =
+    deviceQuery.isPending || (device !== null && modelQuery.isPending)
+  const loadError =
+    !device && deviceQuery.error
+      ? xgMessage(deviceQuery.error)
+      : device && !caps && modelQuery.error
+        ? xgMessage(modelQuery.error)
+        : null
   // Map View camera follow: auto-centres on new fixes until the operator pans or
   // zooms, then pauses (Recenter resumes). Owned here so it survives view
   // switches; the view reports interactions through onFollowingChange.
@@ -54,36 +56,6 @@ function DeviceStreamsPage() {
   // (with fail-open + staleness) in one place and handed to the grid, which
   // renders a tile instead of mounting a viewer against a parked master.
   const liveBlock = useLiveBlock({ status, recording, receivedAt })
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const device = await xg().devices.get(id)
-        if (cancelled) return
-        useBreadcrumbStore
-          .getState()
-          .setDeviceName(device.name ?? device.serial)
-        setViewType(device.uiPrefs.activeStreamsViewType ?? "card")
-        setImuView(device.uiPrefs.imuView ?? null)
-        setCameraEnables(device.config.recording?.video?.cameras)
-
-        const model = await xg().deviceModels.get(device.deviceModelId)
-        if (!cancelled) setCaps(model.ioCapabilities)
-      } catch (err) {
-        const message = xgMessage(err)
-        if (!cancelled) {
-          setLoadError(message)
-          toast.error(message)
-        }
-      } finally {
-        if (!cancelled) setMetaLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
 
   const videoCaps = caps?.media?.video ?? []
 

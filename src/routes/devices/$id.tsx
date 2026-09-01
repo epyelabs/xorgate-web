@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
@@ -15,12 +15,14 @@ import { StatusDot } from "@/components/data-table/status-dot"
 import { DeviceBacklogBadge } from "@/components/device-backlog-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { xg, xgMessage } from "@/lib/xorgate"
+import { isXorgateError, type Device, type DeviceStatus } from "@xorgate/sdk"
 import {
-  isXorgateError,
-  type Device,
-  type DeviceModel,
-  type DeviceStatus,
-} from "@xorgate/sdk"
+  useDevice,
+  useDeviceModel,
+  useInvalidateDevices,
+} from "@/queries/devices"
+import { useLiveDeviceStatus } from "@/store/presence"
+import { DevicePresence } from "@/components/device-presence"
 import { DeviceModelDialog } from "./-components/device-model-dialog"
 import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
@@ -34,10 +36,12 @@ import { decodeThrottleBits } from "@/lib/telemetry-meta"
 import { formatRelative } from "@/lib/relative-time"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
-// Layout route for /devices/$id. Owns the device fetch and renders the shared
-// page header + tab bar; the active tab's content (live / history) renders
-// through the Outlet below. Because this layout stays mounted while only the
-// leaf swaps, the header persists across tab switches without refetching.
+// Layout route for /devices/$id. Owns the device query (and its 20s poll) and
+// renders the shared page header + tab bar; the active tab's content renders
+// through the Outlet below. The layout stays mounted while only the leaf
+// swaps, and the tabs read the SAME query keys, so switching tabs costs no
+// request and flashes no skeleton: each leaf renders the cached answer and
+// refreshes behind it only once it goes stale.
 export const Route = createFileRoute("/devices/$id")({
   beforeLoad: requireAuth,
   component: DeviceLayout,
@@ -125,16 +129,40 @@ function DeviceLayout() {
   const activeTab = (TAB_VALUES as readonly string[]).includes(segment)
     ? segment
     : "overview"
-  const [device, setDevice] = useState<Device | null>(null)
-  const [deviceModel, setDeviceModel] = useState<DeviceModel | null>(null)
-  // Probe-at-claim couldn't pick a model (cm4-support): surfaced as a badge
-  // and resolved in the model dialog.
-  const [needsModel, setNeedsModel] = useState(false)
-  const [notFound, setNotFound] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
-  const [modelNonce, setModelNonce] = useState(0)
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false)
   const [powerOffDialogOpen, setPowerOffDialogOpen] = useState(false)
+
+  // The device, polled while this screen is visible so the status badge (and
+  // the command gating below) tracks reality without a reload. Seeded from
+  // the fleet cache, so arriving from the list paints the header instantly.
+  const deviceQuery = useDevice(id, { poll: true })
+  const device = deviceQuery.data ?? null
+  // The model feeds the header subtitle and the model dialog. Best-effort: a
+  // failure here must not block the header.
+  const deviceModel = useDeviceModel(device?.deviceModelId).data ?? null
+  // Probe-at-claim couldn't pick a model (cm4-support): surfaced as a badge
+  // and resolved in the model dialog.
+  const needsModel = device?.needsModel ?? false
+  const notFound =
+    isXorgateError(deviceQuery.error) && deviceQuery.error.status === 404
+  const invalidateDevices = useInvalidateDevices()
+
+  // Surface a load failure once, but only when there is nothing to show; a
+  // failed background poll keeps the last good header.
+  useEffect(() => {
+    if (deviceQuery.error && !deviceQuery.data && !notFound) {
+      toast.error(xgMessage(deviceQuery.error))
+    }
+    // The error object identity is stable across renders for one failure.
+  }, [deviceQuery.error, deviceQuery.data, notFound])
+
+  // Publish the name for the breadcrumb whenever a fresh answer lands.
+  useEffect(() => {
+    if (device) {
+      useBreadcrumbStore.getState().setDeviceName(device.name ?? device.serial)
+    }
+  }, [device])
 
   // Live payload feed for the header alert button. Alerts are derived, not
   // stored: each source contributes zero or more DeviceAlerts per render;
@@ -161,50 +189,23 @@ function DeviceLayout() {
     })
   }
 
+  // Presence overlay: the moment this device publishes a frame, the badge
+  // flips online (the polled row catches up within a poll). Going offline is
+  // the poll's job; see lib/freshness.ts.
+  const watched = useMemo(() => [id], [id])
+  const liveDevice = useLiveDeviceStatus(device ?? undefined) ?? null
+
   // Commands are published non-retained, so an offline device would never
   // receive them — the backend rejects those with a 409. Gate the controls here
-  // too, so the UI never offers an action that cannot land.
-  const canCommand = device?.status === "online"
-  const commandHint = !device
+  // too, so the UI never offers an action that cannot land. Gated on the
+  // presence-overlaid status: a device that is publishing right now can take
+  // a command even if the poll hasn't flipped the row yet.
+  const canCommand = liveDevice?.status === "online"
+  const commandHint = !liveDevice
     ? undefined
     : canCommand
       ? undefined
-      : `Device is ${device.status}. It must be online to accept commands.`
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const fetched = await xg().devices.get(id)
-        if (!cancelled) {
-          setDevice(fetched)
-          setNeedsModel(fetched.needsModel)
-          useBreadcrumbStore
-            .getState()
-            .setDeviceName(fetched.name ?? fetched.serial)
-
-          // The model feeds the header subtitle and the model dialog.
-          // Best-effort: a failure here must not block the header, so swallow
-          // errors.
-          try {
-            const m = await xg().deviceModels.get(fetched.deviceModelId)
-            if (!cancelled) setDeviceModel(m)
-          } catch {
-            // ignore
-          }
-        }
-      } catch (err) {
-        if (isXorgateError(err) && err.status === 404) {
-          if (!cancelled) setNotFound(true)
-          return
-        }
-        toast.error(xgMessage(err))
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id, modelNonce])
+      : `Device is ${liveDevice.status}. It must be online to accept commands.`
 
   // Clear the published name when leaving the device (or switching to a
   // different one) so the breadcrumb never shows a stale name.
@@ -229,6 +230,7 @@ function DeviceLayout() {
     // page gutter lives on that scroll wrapper (not here) so card ring-outlines
     // sit inside its clip edge and stay visible on every side.
     <div className="flex h-[calc(100svh-4rem)] min-h-0 min-w-0 flex-col group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
+      <DevicePresence deviceIds={watched} />
       <div className="flex flex-col gap-3 px-4">
         <header className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
@@ -271,9 +273,9 @@ function DeviceLayout() {
                     ) : null}
                     <span aria-hidden className="h-3 w-px shrink-0 bg-border" />
                     <StatusDot
-                      color={DEVICE_STATUS_COLOR[device.status]}
-                      label={deviceStatusLabel(device)}
-                      pulse={device.status === "online"}
+                      color={DEVICE_STATUS_COLOR[(liveDevice ?? device).status]}
+                      label={deviceStatusLabel(liveDevice ?? device)}
+                      pulse={(liveDevice ?? device).status === "online"}
                     />
                     <ThrottleIndicator latest={latest} />
                   </div>
@@ -399,7 +401,7 @@ function DeviceLayout() {
           model={deviceModel}
           deviceId={device.id}
           needsModel={needsModel}
-          onModelChanged={() => setModelNonce((n) => n + 1)}
+          onModelChanged={() => invalidateDevices(id)}
         />
       ) : null}
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { RequirePermission } from "@/components/require-permission"
@@ -14,7 +14,8 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import type { ApiKey } from "@xorgate/sdk"
-import { xg, xgMessage } from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
+import { useApiKeys, useInvalidateApiKeys } from "@/queries/org"
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { CreateApiKeyDialog } from "./-components/create-api-key-dialog"
@@ -70,46 +71,29 @@ function keyState(key: ApiKey): "revoked" | "expired" | "active" {
   return "active"
 }
 
-interface ApiKeysData {
-  organizationId: string | null
-  keys: ApiKey[]
-}
-
 function ApiKeysPage() {
-  const [data, setData] = useState<ApiKeysData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [deleting, setDeleting] = useState<ApiKey | null>(null)
-  const [reloadNonce, setReloadNonce] = useState(0)
   const currentOrganizationId = useWorkspaceStore(
     (s) => s.currentOrganizationId
   )
 
+  // The org id lives in the query key, so an org switch reads (or starts)
+  // that org's own cache entry; revisiting this page inside staleTime renders
+  // instantly with no request.
+  const keysQuery = useApiKeys()
+  const isLoading = keysQuery.isPending
+  const keys = keysQuery.data ?? []
+  const error =
+    keysQuery.data || !keysQuery.error ? null : xgMessage(keysQuery.error)
+
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const keys = await xg().apiKeys.list()
-        if (cancelled) return
-        setError(null)
-        setData({ organizationId: currentOrganizationId, keys })
-      } catch (err) {
-        const message = xgMessage(err)
-        if (cancelled) return
-        setError(message)
-        setData({ organizationId: currentOrganizationId, keys: [] })
-        toast.error(message)
-      }
-    })()
-    return () => {
-      cancelled = true
+    if (keysQuery.error && !keysQuery.data) {
+      toast.error(xgMessage(keysQuery.error))
     }
-  }, [currentOrganizationId, reloadNonce])
+  }, [keysQuery.error, keysQuery.data])
 
-  const isLoading = !data || data.organizationId !== currentOrganizationId
-  const keys = isLoading ? [] : data.keys
-
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), [])
+  const reload = useInvalidateApiKeys()
 
   const columns: DataTableColumn<ApiKey>[] = [
     {

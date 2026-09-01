@@ -24,7 +24,10 @@ import {
   type TemplateStatus,
   type WorkflowTemplateSummary,
 } from "@/lib/workflow-schemas"
-import { useWorkspaceStore } from "@/store/workspace"
+import {
+  useInvalidateWorkflowTemplates,
+  useWorkflowTemplates,
+} from "@/queries/workflows"
 import { StickyHeader } from "@/components/sticky-header"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
 
@@ -54,67 +57,40 @@ function initials(name: string): string {
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")
 }
 
-interface TemplatesData {
-  organizationId: string | null
-  templates: WorkflowTemplateSummary[]
-  total: number
-}
-
 function WorkflowTemplatesListPage() {
-  const [data, setData] = useState<TemplatesData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<TemplateStatus | "any">("any")
   const [createOpen, setCreateOpen] = useState(false)
-  const [reloadNonce, setReloadNonce] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(DEFAULT_SIZE)
   const [sortBy, setSortBy] = useState<SortKey>("updatedAt")
   const [order, setOrder] = useState<"asc" | "desc">("desc")
-  const currentOrganizationId = useWorkspaceStore(
-    (s) => s.currentOrganizationId
-  )
 
   const status = statusFilter === "any" ? undefined : statusFilter
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await listWorkflowTemplates({
-          limit: size,
-          offset: (page - 1) * size,
-          order,
-          sort: sortBy,
-          status,
-        })
-        const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /workflow-templates response shape")
-        }
-        if (cancelled) return
-        setError(null)
-        setData({
-          organizationId: currentOrganizationId,
-          templates: parsed.data.templates,
-          total: parsed.data.page?.total ?? parsed.data.templates.length,
-        })
-      } catch (err) {
-        const message = (err as Error).message
-        if (cancelled) return
-        setError(message)
-        setData({ organizationId: currentOrganizationId, templates: [], total: 0 })
-        toast.error(message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [currentOrganizationId, reloadNonce, page, size, sortBy, order, status])
+  // The tenant lives in the query key, so an org/workspace switch reads (or
+  // starts) that tenant's own cache entry; filter changes hold the current
+  // rows while the next page loads (keepPreviousData in the hook).
+  const templatesQuery = useWorkflowTemplates({
+    limit: size,
+    offset: (page - 1) * size,
+    order,
+    sort: sortBy,
+    status,
+  })
+  const data = templatesQuery.data ?? null
+  const isLoading = templatesQuery.isPending
+  const error =
+    data || !templatesQuery.error
+      ? null
+      : (templatesQuery.error as Error).message
+  const reload = useInvalidateWorkflowTemplates()
 
-  // Switching organization leaves the user here, so the previous org's
-  // templates must read as loading until the refetch under the new one lands.
-  const isLoading = !data || data.organizationId !== currentOrganizationId
+  useEffect(() => {
+    if (templatesQuery.error && !templatesQuery.data) {
+      toast.error((templatesQuery.error as Error).message)
+    }
+  }, [templatesQuery.error, templatesQuery.data])
 
   // Client-side name/description search over the current page.
   const q = query.trim().toLowerCase()
@@ -392,7 +368,7 @@ function WorkflowTemplatesListPage() {
         open={createOpen}
         onOpenChange={(open) => {
           setCreateOpen(open)
-          if (!open) setReloadNonce((n) => n + 1)
+          if (!open) reload()
         }}
       />
     </div>

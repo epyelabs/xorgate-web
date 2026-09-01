@@ -9,6 +9,7 @@ import {
   completeOAuthLogin,
 } from "@/lib/cognito"
 import { fetchMe, type AccountUser } from "@/lib/account-api"
+import { queryClient } from "@/lib/query-client"
 import type { BrandedOrganization } from "@/lib/branding-api"
 import type { Membership } from "@xorgate/sdk"
 
@@ -233,6 +234,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     signOut()
+    // The cache holds tenant data; the next account must never see it.
+    queryClient.clear()
     set({
       user: null,
       memberships: [],

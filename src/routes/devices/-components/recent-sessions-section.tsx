@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { ArrowRightIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -14,13 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatBytes, formatDuration } from "@/components/data-table"
-import { xg } from "@/lib/xorgate"
-import {
-  runFromApi,
-  runReplayBlocked,
-  runReplaySearch,
-  type RecordingRun,
-} from "@/lib/replay/runs"
+import { useSessionRuns } from "@/queries/media"
+import { runReplayBlocked, runReplaySearch } from "@/lib/replay/runs"
 
 // Overview's glance surface for on-device recordings (recorder-removal plan,
 // decision G) — it replaces the cloud recorder's "Recent media recordings"
@@ -52,28 +46,14 @@ export function RecentSessionsSection({
   // Drives the empty-state hint: "turn it on" only makes sense when it is off.
   recordingEnabled?: boolean
 }) {
-  const [runs, setRuns] = useState<RecordingRun[] | null>(null)
-
-  // Load once on mount — Overview's other panels (device, model, recent
-  // telemetry) fetch once too; the Media tab owns the 5 s live cadence.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        // No `sort` param: runs always come back sorted by startedAt.
-        const { items } = await xg().media.sessions.listRuns(deviceId, {
-          limit: RECENT_RUNS,
-          order: "desc",
-        })
-        if (!cancelled) setRuns(items.map(runFromApi))
-      } catch {
-        if (!cancelled) setRuns([])
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [deviceId])
+  // No poll: Overview's other panels fetch once too; the Media tab owns the
+  // 5 s live cadence. Cached, so revisiting the Overview renders instantly.
+  const runsQuery = useSessionRuns(deviceId, {
+    limit: RECENT_RUNS,
+    order: "desc",
+  })
+  // Errors fall through to the empty state, as the old best-effort load did.
+  const runs = runsQuery.data?.runs ?? (runsQuery.isError ? [] : null)
 
   const loading = runs === null
 

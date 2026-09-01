@@ -50,13 +50,15 @@ import type {
 } from "@xorgate/sdk"
 import { xg, xgMessage, type MediaSessionStatus } from "@/lib/xorgate"
 import {
-  runFromApi,
+  useInvalidateSessions,
+  useSessionRuns,
+  useSessionSegments,
+} from "@/queries/media"
+import {
   runReplayBlocked,
   runReplaySearch,
   type RecordingRun,
 } from "@/lib/replay/runs"
-
-const POLL_MS = 5000
 
 export const SESSION_PAGE_SIZES = [25, 50, 100, 200]
 export const DEFAULT_SESSION_PAGE_SIZE = 25
@@ -162,19 +164,12 @@ export function DeviceSessionsCard({
   // Patch the URL search params. Any filter change must also clear `page`.
   onSearchChange: (patch: Partial<SessionsSearch>) => void
 }) {
-  const [runs, setRuns] = useState<RecordingRun[] | null>(null)
-  const [total, setTotal] = useState(0)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
 
   const [expandedRunKey, setExpandedRunKey] = useState<string | null>(null)
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(
     null
   )
-  const [segmentsBySession, setSegmentsBySession] = useState<
-    Record<string, MediaSegment[]>
-  >({})
-  const [segmentsLoading, setSegmentsLoading] = useState(false)
 
   const [playing, setPlaying] = useState<{
     session: MediaSession
@@ -224,22 +219,12 @@ export function DeviceSessionsCard({
     []
   )
 
-  const refreshSegments = useCallback(
-    async (sessionId: string) => {
-      const { segments } = await xg().media.segments(deviceId, sessionId)
-      setSegmentsBySession((prev) => ({
-        ...prev,
-        [sessionId]: segments,
-      }))
-    },
-    [deviceId]
-  )
-
   // Server-side filtering AND grouping (decision H + Phase 3): status /
   // streamKey / from / to / sort / pagination all go to
   // `GET /devices/{id}/sessions`, so this scales as a device's session count
   // grows. `limit`/`offset` count RUNS here, because that is what the request
-  // asks the server to group by.
+  // asks the server to group by. (`sort` is only for the export's ungrouped
+  // endpoint — `listRuns` takes none, the endpoint forces sort=startedAt.)
   const serverParams = useMemo(
     (): ListSessionsParams => ({
       limit: size,
@@ -254,51 +239,57 @@ export function DeviceSessionsCard({
     [size, page, order, sort, status, streamKey, fromIso, toIso]
   )
 
-  // ⚠️ Ordering guard. The 5 s poll means a request with the OLD filters is
-  // routinely in flight when a filter changes; without this, the stale
-  // response lands second and silently overwrites the filtered page (observed:
-  // `?streamKey=cam0` fired, list still showed all 84 sessions). Only the
-  // newest request may write state.
-  const reqSeq = useRef(0)
+  // The runs page, polled at 5 s so open sessions' rollups keep growing while
+  // a backlog drains. Filter changes are new query keys, so the stale-response
+  // ordering bug the old request-sequence guard existed for cannot happen: the
+  // held rows are the previous key's answer, swapped atomically when the new
+  // one lands.
+  const runsQuery = useSessionRuns(
+    deviceId,
+    {
+      limit: size,
+      offset: (page - 1) * size,
+      order,
+      status,
+      streamKey,
+      from: fromIso,
+      to: toIso,
+    },
+    { poll: true }
+  )
+  const runs = runsQuery.data?.runs ?? null
+  const total = runsQuery.data?.total ?? 0
+  // A failed background poll keeps the last good page on screen.
+  const loadError =
+    !runsQuery.data && runsQuery.error ? xgMessage(runsQuery.error) : null
 
-  const refresh = useCallback(async () => {
-    const seq = ++reqSeq.current
-    try {
-      // `listRuns` takes no `sort` (the endpoint forces sort=startedAt).
-      const { sort, ...runParams } = serverParams
-      void sort
-      const { items, page: pageMeta } = await xg().media.sessions.listRuns(
-        deviceId,
-        runParams
-      )
-      if (seq !== reqSeq.current) return
-      // The server already returns runs in the requested order, so there is
-      // nothing to re-sort or reverse here.
-      setRuns(items.map(runFromApi))
-      setTotal(pageMeta.total)
-      setKnownStreamKeys((prev) => {
-        const next = new Set(prev)
-        for (const r of items) for (const k of r.streamKeys) next.add(k)
-        return next.size === prev.length ? prev : [...next].sort()
-      })
-      setLoadError(null)
-    } catch (err) {
-      if (seq !== reqSeq.current) return
-      setLoadError(xgMessage(err))
-    }
-  }, [deviceId, serverParams])
-
-  // 5 s polling (same convention as the recordings table) so open sessions'
-  // rollups keep growing while a backlog drains. The expanded session's
-  // segment list refreshes on the same tick.
   useEffect(() => {
-    void refresh()
-    const t = setInterval(() => {
-      void refresh()
-      if (expandedSessionId) void refreshSegments(expandedSessionId).catch(() => {})
-    }, POLL_MS)
-    return () => clearInterval(t)
-  }, [refresh, refreshSegments, expandedSessionId])
+    const pageKeys = runsQuery.data?.streamKeys
+    if (!pageKeys || pageKeys.length === 0) return
+    setKnownStreamKeys((prev) => {
+      const next = new Set(prev)
+      for (const k of pageKeys) next.add(k)
+      return next.size === prev.length ? prev : [...next].sort()
+    })
+  }, [runsQuery.data])
+
+  // The expanded session's ordered segment index, on the same 5 s cadence.
+  const segmentsQuery = useSessionSegments(deviceId, expandedSessionId, {
+    poll: true,
+  })
+  const expandedSegments = segmentsQuery.data
+  const segmentsLoading = segmentsQuery.isPending && expandedSessionId !== null
+
+  // Surface a segment-index failure the way the old inline load did: say so
+  // and collapse, rather than leaving a silently empty expansion.
+  useEffect(() => {
+    if (expandedSessionId && segmentsQuery.error && !segmentsQuery.data) {
+      toast.error(xgMessage(segmentsQuery.error))
+      setExpandedSessionId(null)
+    }
+  }, [expandedSessionId, segmentsQuery.error, segmentsQuery.data])
+
+  const invalidateSessions = useInvalidateSessions(deviceId)
 
   // Sessions carried by the runs on this page — footer detail only; the page
   // itself is measured in runs.
@@ -423,23 +414,10 @@ export function DeviceSessionsCard({
     if (next === null) setExpandedSessionId(null)
   }
 
-  async function toggleSession(session: MediaSession) {
-    if (expandedSessionId === session.id) {
-      setExpandedSessionId(null)
-      return
-    }
-    setExpandedSessionId(session.id)
-    if (!segmentsBySession[session.id]) {
-      setSegmentsLoading(true)
-      try {
-        await refreshSegments(session.id)
-      } catch (err) {
-        toast.error(xgMessage(err))
-        setExpandedSessionId(null)
-      } finally {
-        setSegmentsLoading(false)
-      }
-    }
+  function toggleSession(session: MediaSession) {
+    // The segment query keys off the expanded id, so expanding IS the fetch;
+    // a session expanded before renders instantly from its cached index.
+    setExpandedSessionId((prev) => (prev === session.id ? null : session.id))
   }
 
   async function confirmDelete() {
@@ -450,7 +428,7 @@ export function DeviceSessionsCard({
       toast.success("Session deleted")
       if (expandedSessionId === deleting.id) setExpandedSessionId(null)
       setDeleting(null)
-      await refresh()
+      invalidateSessions()
     } catch (err) {
       toast.error(xgMessage(err))
     } finally {
@@ -748,7 +726,9 @@ export function DeviceSessionsCard({
                           <TableBody>
                             {run.sessions.map((s) => {
                               const sessionExpanded = expandedSessionId === s.id
-                              const segments = segmentsBySession[s.id]
+                              const segments = sessionExpanded
+                                ? expandedSegments
+                                : undefined
                               const segmentCount = s.segmentCount ?? 0
                               return [
                                 <TableRow

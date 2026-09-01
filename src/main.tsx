@@ -1,8 +1,10 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { RouterProvider, createRouter } from "@tanstack/react-router"
+import { QueryClientProvider } from "@tanstack/react-query"
 
 import "./index.css"
+import { queryClient } from "@/lib/query-client"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
@@ -35,13 +37,18 @@ declare module "@tanstack/react-router" {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider>
-      <TooltipProvider>
-        <XorgateRoot>
-          <RouterProvider router={router} />
-        </XorgateRoot>
-        <Toaster />
-      </TooltipProvider>
-    </ThemeProvider>
+    {/* The query cache sits ABOVE the router so it survives every navigation:
+        a tab switch or back-navigation renders straight out of the cache
+        instead of refetching behind a spinner. */}
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <XorgateRoot>
+            <RouterProvider router={router} />
+          </XorgateRoot>
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   </StrictMode>
 )

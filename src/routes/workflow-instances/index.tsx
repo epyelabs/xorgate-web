@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
+import { useWorkflowInstances } from "@/queries/workflows"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon } from "lucide-react"
@@ -43,15 +44,7 @@ const PAGE_SIZES = [25, 50, 100]
 const DEFAULT_SIZE = 25
 const EXPORT_CAP = 5000
 
-interface RunsData {
-  workspaceId: string | null
-  runs: WorkflowRunSummary[]
-  total: number
-}
-
 function WorkflowInstancesListPage() {
-  const [data, setData] = useState<RunsData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<RunStatus | "any">("any")
   const [page, setPage] = useState(1)
@@ -69,47 +62,30 @@ function WorkflowInstancesListPage() {
     setPage(1)
   }
 
-  // Server-side page/sort/status; the workspace scope comes from the
-  // X-Workspace-Id header attached by apiRequest.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await listWorkflowInstances({
-          limit: size,
-          offset: (page - 1) * size,
-          order,
-          status,
-        })
-        const parsed = listWorkflowRunsResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /workflow-runs response shape")
-        }
-        if (cancelled) return
-        setError(null)
-        setData({
-          workspaceId: currentWorkspaceId,
-          runs: parsed.data.runs,
-          total: parsed.data.page?.total ?? parsed.data.runs.length,
-        })
-      } catch (err) {
-        const message = (err as Error).message
-        if (cancelled) return
-        setError(message)
-        setData({ workspaceId: currentWorkspaceId, runs: [], total: 0 })
-        toast.error(message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [currentWorkspaceId, page, size, order, status])
+  // Server-side page/sort/status; the workspace scope is both a request
+  // header and part of the query key, so a workspace switch reads (or starts)
+  // that workspace's own cache entry. Filter changes hold the current rows on
+  // screen while the next page loads (keepPreviousData in the hook).
+  const runsQuery = useWorkflowInstances({
+    limit: size,
+    offset: (page - 1) * size,
+    order,
+    status,
+  })
+  const data = runsQuery.data ?? null
+  const isLoading = runsQuery.isPending
+  const error =
+    data || !runsQuery.error ? null : (runsQuery.error as Error).message
 
-  const isLoading = !data || data.workspaceId !== currentWorkspaceId
+  useEffect(() => {
+    if (runsQuery.error && !runsQuery.data) {
+      toast.error((runsQuery.error as Error).message)
+    }
+  }, [runsQuery.error, runsQuery.data])
 
   // Client-side template/device search over the current page.
   const q = query.trim().toLowerCase()
-  const runs = isLoading ? [] : data.runs
+  const runs = data?.runs ?? []
   const visible = q
     ? runs.filter(
         (r) =>

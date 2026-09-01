@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { RequirePermission } from "@/components/require-permission"
@@ -15,7 +15,8 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import type { MembershipRole, MembershipWithUser } from "@xorgate/sdk"
-import { xg, xgMessage } from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
+import { useInvalidateMembers, useMembers } from "@/queries/org"
 import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
@@ -69,17 +70,9 @@ function initials(member: MembershipWithUser): string {
   return (member.user?.email?.[0] ?? "?").toUpperCase()
 }
 
-interface MembersData {
-  organizationId: string | null
-  members: MembershipWithUser[]
-}
-
 function MembersPage() {
-  const [data, setData] = useState<MembersData | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [removing, setRemoving] = useState<MembershipWithUser | null>(null)
-  const [reloadNonce, setReloadNonce] = useState(0)
 
   const authUserId = useAuthStore((s) => s.user?.id ?? null)
   const authMemberships = useAuthStore((s) => s.memberships)
@@ -94,31 +87,24 @@ function MembersPage() {
   }, [authMemberships, currentOrganizationId])
   const canManage = callerRole === "owner" || callerRole === "admin"
 
+  // The org id lives in the query key, so an org switch reads (or starts)
+  // that org's own cache entry; revisiting this page inside staleTime renders
+  // instantly with no request.
+  const membersQuery = useMembers()
+  const isLoading = membersQuery.isPending
+  const members = membersQuery.data ?? []
+  const error =
+    membersQuery.data || !membersQuery.error
+      ? null
+      : xgMessage(membersQuery.error)
+
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const memberships = await xg().memberships.list()
-        if (cancelled) return
-        setError(null)
-        setData({ organizationId: currentOrganizationId, members: memberships })
-      } catch (err) {
-        const message = xgMessage(err)
-        if (cancelled) return
-        setError(message)
-        setData({ organizationId: currentOrganizationId, members: [] })
-        toast.error(message)
-      }
-    })()
-    return () => {
-      cancelled = true
+    if (membersQuery.error && !membersQuery.data) {
+      toast.error(xgMessage(membersQuery.error))
     }
-  }, [currentOrganizationId, reloadNonce])
+  }, [membersQuery.error, membersQuery.data])
 
-  const isLoading = !data || data.organizationId !== currentOrganizationId
-  const members = isLoading ? [] : data.members
-
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), [])
+  const reload = useInvalidateMembers()
 
   const columns: DataTableColumn<MembershipWithUser>[] = [
     {

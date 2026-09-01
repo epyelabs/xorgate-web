@@ -1,8 +1,7 @@
-import { useEffect, useState, type CSSProperties } from "react"
+import { type CSSProperties } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { ArrowRightIcon } from "lucide-react"
-import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -15,9 +14,8 @@ import {
   formatUnit,
   metricLabel,
 } from "@/lib/telemetry-meta"
-import { xg, xgMessage } from "@/lib/xorgate"
-import type { Device, IoCapabilities } from "@xorgate/sdk"
-import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { xgMessage } from "@/lib/xorgate"
+import { useDevice, useDeviceModel } from "@/queries/devices"
 import { RecentSessionsSection } from "./-components/recent-sessions-section"
 
 // The device Overview: a fast, at-a-glance landing dashboard assembled from the
@@ -34,39 +32,23 @@ function DeviceOverviewPage() {
   const { id } = Route.useParams()
   const { latest } = useLiveTelemetry(id)
 
-  const [device, setDevice] = useState<Device | null>(null)
-  const [caps, setCaps] = useState<IoCapabilities | null>(null)
-  const [metaLoading, setMetaLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
   // Device + model (drives the live health tiles the model's caps allow).
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const fetched = await xg().devices.get(id)
-        if (cancelled) return
-        setDevice(fetched)
-        useBreadcrumbStore
-          .getState()
-          .setDeviceName(fetched.name ?? fetched.serial)
-
-        const model = await xg().deviceModels.get(fetched.deviceModelId)
-        if (!cancelled) setCaps(model.ioCapabilities)
-      } catch (err) {
-        const message = xgMessage(err)
-        if (!cancelled) {
-          setLoadError(message)
-          toast.error(message)
-        }
-      } finally {
-        if (!cancelled) setMetaLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
+  // Same query keys the layout polls, so on a tab switch both answer straight
+  // from the cache: no request, no skeleton.
+  const deviceQuery = useDevice(id)
+  const device = deviceQuery.data ?? null
+  const modelQuery = useDeviceModel(device?.deviceModelId)
+  const caps = modelQuery.data?.ioCapabilities ?? null
+  const metaLoading =
+    deviceQuery.isPending || (device !== null && modelQuery.isPending)
+  // A failed background refetch keeps the last good tiles; only a fetch with
+  // nothing behind it is worth the operator's attention.
+  const loadError =
+    !device && deviceQuery.error
+      ? xgMessage(deviceQuery.error)
+      : device && !caps && modelQuery.error
+        ? xgMessage(modelQuery.error)
+        : null
 
   // Recent recorded telemetry: fetch whatever the DB has, once. No time window
   // and no metric filter, so the newest stored samples show up even if the

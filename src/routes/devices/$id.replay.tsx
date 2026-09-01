@@ -1,24 +1,19 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { ArrowLeftIcon } from "lucide-react"
-import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { IoCapabilities, MetricName } from "@xorgate/sdk"
+import type { MetricName } from "@xorgate/sdk"
 import {
   useReplayManifest,
   useReplayPlayer,
   useReplayTelemetry,
   type UseReplayManifestParams,
 } from "@xorgate/react"
-import {
-  xg,
-  xgMessage,
-  type ActiveStreamsViewType,
-  type ImuView,
-} from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
+import { useDevice, useDeviceModel } from "@/queries/devices"
 import {
   gpsMetrics,
   imuMetrics,
@@ -70,9 +65,17 @@ function DeviceReplayPage() {
     streamKey: streamKeyParam,
   } = Route.useSearch()
 
-  const [caps, setCaps] = useState<IoCapabilities | null>(null)
-  const [imuView, setImuView] = useState<ImuView | null>(null)
-  const [viewType, setViewType] = useState<ActiveStreamsViewType>("card")
+  // Device + model: seeds the view variant (persisted per-device setting) and
+  // the capability-driven readout layout, same query keys as the live streams
+  // page, so entering a replay from the Media tab costs no extra request.
+  const device = useDevice(id).data ?? null
+  const caps = useDeviceModel(device?.deviceModelId).data?.ioCapabilities ?? null
+  const imuView = device?.uiPrefs.imuView ?? null
+  // Local (non-persisted) view toggle; until the operator touches it, the
+  // view follows the device's saved Active Streams preference.
+  const [viewOverride, setViewType] = useState<"card" | "map" | null>(null)
+  const viewType =
+    viewOverride ?? device?.uiPrefs.activeStreamsViewType ?? "card"
   const [following, setFollowing] = useState(true)
 
   // One params object per distinct replay target; keyed by its serialized
@@ -86,27 +89,6 @@ function DeviceReplayPage() {
     }
     return null
   }, [sessionId, fromParam, toParam, streamKeyParam])
-
-  // Device + model: seeds the view variant (persisted per-device setting) and
-  // the capability-driven readout layout, same as the live streams page.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const device = await xg().devices.get(id)
-        if (cancelled) return
-        setViewType(device.uiPrefs.activeStreamsViewType ?? "card")
-        setImuView(device.uiPrefs.imuView ?? null)
-        const model = await xg().deviceModels.get(device.deviceModelId)
-        if (!cancelled) setCaps(model.ioCapabilities)
-      } catch (err) {
-        if (!cancelled) toast.error(xgMessage(err))
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
 
   // Manifest (with its own presigned-URL refresh cycle) + the player. A
   // refetch that describes the same replay swaps only URLs; the timeline and

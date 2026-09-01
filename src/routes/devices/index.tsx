@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
-import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,11 +21,14 @@ import {
   type DataTableColumn,
 } from "@/components/data-table"
 import { Badge } from "@/components/ui/badge"
-import { xg, xgMessage } from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
 import type { Device, DeviceStatus } from "@xorgate/sdk"
 
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
+import { useDeviceModels, useFleet, useInvalidateDevices } from "@/queries/devices"
+import { presenceDeviceIds, useLiveDeviceStatuses } from "@/store/presence"
+import { DevicePresence } from "@/components/device-presence"
 import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
@@ -80,95 +82,54 @@ const DEVICE_STATUS_COLOR: Record<DeviceStatus, string> = {
 type SortKey = "lastSeenAt" | "createdAt"
 const PAGE_SIZES = [25, 50, 100]
 const DEFAULT_SIZE = 25
-// The KPI tiles aggregate the whole fleet, so the page loads every device (in
-// pages of FLEET_PAGE) and slices/filters/sorts client-side. FLEET_CAP guards
-// against an unbounded load on a very large fleet.
-const FLEET_PAGE = 500
-const FLEET_CAP = 5000
 
-interface DevicesData {
-  workspaceId: string | null
-  devices: Device[]
-}
+const NO_DEVICES: Device[] = []
 
 function DevicesListPage() {
-  const [data, setData] = useState<DevicesData | null>(null)
-  // Model id → name, for the Model column (the platform-wide catalog is tiny).
-  // Best-effort: on failure the column falls back to the short id, as before.
-  const [modelNames, setModelNames] = useState<Record<string, string>>({})
-  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | "any">("any")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [provisionOpen, setProvisionOpen] = useState(false)
-  const [reloadNonce, setReloadNonce] = useState(0)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(DEFAULT_SIZE)
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [order, setOrder] = useState<"asc" | "desc">("desc")
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        // Load the whole fleet (paged) so the KPI counts are accurate; the
-        // table paginates/filters/sorts this client-side. Default server order
-        // (updatedAt desc) is the table's baseline order.
-        const all: Device[] = []
-        let offset = 0
-        let total = Infinity
-        while (offset < total && all.length < FLEET_CAP) {
-          const { items, page: pageMeta } = await xg().devices.list({
-            limit: FLEET_PAGE,
-            offset,
-          })
-          all.push(...items)
-          total = pageMeta.total
-          if (items.length === 0) break
-          offset += FLEET_PAGE
-        }
-        if (cancelled) return
-        setError(null)
-        setData({ workspaceId: currentWorkspaceId, devices: all })
-        setSelected(new Set())
-        setPage(1)
-      } catch (err) {
-        const message = xgMessage(err)
-        if (cancelled) return
-        setError(message)
-        setData({ workspaceId: currentWorkspaceId, devices: [] })
-        toast.error(message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [currentWorkspaceId, reloadNonce])
+  // Same freshness contract as the device layout: polled while visible,
+  // refetched on return, and every row on the page watched over MQTT so the
+  // status column flips the moment a device comes back rather than at the
+  // next poll. The query key carries the workspace id, so switching
+  // workspaces switches to (or starts) that workspace's own cache entry —
+  // the old "stale workspace = loading" comparison is gone with the effect.
+  const fleetQuery = useFleet({ poll: true })
+  const roster = fleetQuery.data ?? NO_DEVICES
+  const isLoading = fleetQuery.isPending
+  // A failed background poll keeps the last good fleet on screen; only a
+  // fetch with nothing behind it is an error worth the operator's attention.
+  const error =
+    fleetQuery.data || !fleetQuery.error ? null : xgMessage(fleetQuery.error)
 
-  // The model catalog, once per mount — names for the Model column.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const models = await xg().deviceModels.list()
-        if (cancelled) return
-        setModelNames(Object.fromEntries(models.map((m) => [m.id, m.name])))
-      } catch {
-        // fall back to short ids
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // Model id → name, for the Model column (the platform-wide catalog is
+  // tiny). Best-effort: on failure the column falls back to the short id.
+  const modelsQuery = useDeviceModels()
+  const modelNames = useMemo(
+    () =>
+      Object.fromEntries((modelsQuery.data ?? []).map((m) => [m.id, m.name])),
+    [modelsQuery.data]
+  )
 
-  const isLoading = !data || data.workspaceId !== currentWorkspaceId
-  const fleet = isLoading ? null : data.devices
+  // Selection and page are per-workspace concerns; reset them on switch.
+  useEffect(() => {
+    setSelected(new Set())
+    setPage(1)
+  }, [currentWorkspaceId])
+
+  // Presence overlay over the polled roster (see store/presence.ts).
+  const fleet = useLiveDeviceStatuses(roster)
 
   // Status filter + name/serial search (client-side over the whole fleet).
   const filtered = useMemo(() => {
-    if (!fleet) return []
     const q = query.trim().toLowerCase()
     return fleet.filter((d) => {
       if (statusFilter !== "any" && d.status !== statusFilter) return false
@@ -197,6 +158,18 @@ function DevicesListPage() {
   const pageCount = Math.max(1, Math.ceil(sorted.length / size))
   const safePage = Math.min(page, pageCount)
   const pageRows = sorted.slice((safePage - 1) * size, safePage * size)
+
+  // Live feeds for the rows on screen only: one MQTT connection per device,
+  // so the page, not the whole fleet, is the honest bound. Watched ids come
+  // from the polled roster, not the overlay, so presence can't keep itself
+  // alive.
+  const watched = useMemo(
+    () =>
+      presenceDeviceIds(
+        roster.filter((d) => pageRows.some((row) => row.id === d.id))
+      ),
+    [roster, pageRows]
+  )
 
   const isFiltered = query.trim() !== "" || statusFilter !== "any"
 
@@ -251,9 +224,13 @@ function DevicesListPage() {
   }
 
   const handleProvision = () => setProvisionOpen(true)
-  // Stable so it doesn't churn the dialog's polling effect. Re-fetches the
-  // device list once a registration is claimed so the new device appears.
-  const handleClaimed = useCallback(() => setReloadNonce((n) => n + 1), [])
+  // Stable so it doesn't churn the dialog's polling effect. Refreshes the
+  // fleet once a registration is claimed so the new device appears.
+  const invalidateDevices = useInvalidateDevices()
+  const handleClaimed = useCallback(
+    () => invalidateDevices(),
+    [invalidateDevices]
+  )
 
   const columns: DataTableColumn<Device>[] = [
     {
@@ -404,9 +381,11 @@ function DevicesListPage() {
         </header>
       </StickyHeader>
 
+      <DevicePresence deviceIds={watched} />
+
       {isLoading && !error ? (
         <DevicesKpiSkeleton />
-      ) : fleet ? (
+      ) : !isLoading ? (
         <DevicesKpi devices={fleet} />
       ) : null}
 

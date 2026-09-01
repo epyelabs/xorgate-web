@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
@@ -9,15 +9,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { isXorgateError } from "@xorgate/sdk"
 import { xgMessage } from "@/lib/xorgate"
 import { cn } from "@/lib/utils"
-import {
-  getWorkflowInstance,
-  rerunWorkflowInstance,
-} from "@/lib/workflow-instances-api"
-import {
-  getWorkflowRunResponseSchema,
-  type RunStatus,
-  type WorkflowRunDetail,
-} from "@/lib/workflow-run-schemas"
+import { rerunWorkflowInstance } from "@/lib/workflow-instances-api"
+import { type RunStatus } from "@/lib/workflow-run-schemas"
+import { useWorkflowInstance } from "@/queries/workflows"
 import { useSimProgress } from "@/hooks/use-sim-progress"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
@@ -74,9 +68,6 @@ function Section({
 
 function WorkflowInstanceDetailPage() {
   const { id } = Route.useParams()
-  const [run, setRun] = useState<WorkflowRunDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [notFound, setNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
   // RunGraph reuses the editor's node card, whose handles are typed from the
   // served catalog; the run graph edges carry those port ids. Load the catalog
@@ -88,71 +79,46 @@ function WorkflowInstanceDetailPage() {
     void useWorkflowCatalog.getState().ensureLoaded()
   }, [])
 
-  // One loader for the initial fetch AND the while-running poll (silent=true
-  // suppresses error toasts on transient poll failures).
-  const cancelledRef = useRef(false)
-  const loadRun = useCallback(
-    async (silent: boolean) => {
-      try {
-        const raw = await getWorkflowInstance(id)
-        const parsed = getWorkflowRunResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected /workflow-runs/:id response shape")
-        }
-        if (cancelledRef.current) return
-        const fetched = parsed.data.run
-        setRun(fetched)
-        useBreadcrumbStore
-          .getState()
-          .setInstanceName(
-            `${fetched.templateName} · ${fetched.deviceName ?? "simulation"}`,
-          )
-      } catch (err) {
-        if (isXorgateError(err) && err.status === 404) {
-          if (!cancelledRef.current && !silent) setNotFound(true)
-          return
-        }
-        if (silent) return
-        const message = xgMessage(err)
-        if (!cancelledRef.current) setError(message)
-        toast.error(message)
-      }
-    },
-    [id],
-  )
+  // The run row. The query polls itself at 2.5s exactly while the row says
+  // "running" (the refetchInterval reads its own data) and a transient poll
+  // failure keeps the last good detail on screen — the old silent-poll
+  // plumbing, handled by the cache.
+  const runQuery = useWorkflowInstance(id)
+  const run = runQuery.data ?? null
+  const notFound =
+    isXorgateError(runQuery.error) && runQuery.error.status === 404
+  const error =
+    run || !runQuery.error || notFound ? null : xgMessage(runQuery.error)
 
   useEffect(() => {
-    cancelledRef.current = false
-    ;(async () => {
-      await loadRun(false)
-    })()
-    return () => {
-      cancelledRef.current = true
+    if (error) toast.error(error)
+  }, [error])
+
+  useEffect(() => {
+    if (run) {
+      useBreadcrumbStore
+        .getState()
+        .setInstanceName(
+          `${run.templateName} · ${run.deviceName ?? "simulation"}`,
+        )
     }
-  }, [loadRun])
+  }, [run])
 
   // Live updates while the run executes (M6): subscribe to the run's progress
-  // topics (wf/run/... for production, wf/sim/... for simulations) and poll
-  // the run row for the authoritative terminal state (QoS 0 topics are the
-  // live view only; a sub-second Lambda run can outrace the subscription).
+  // topics (wf/run/... for production, wf/sim/... for simulations); the poll
+  // above stays the authoritative terminal state (QoS 0 topics are the live
+  // view only; a sub-second Lambda run can outrace the subscription).
   const running = run?.status === "running"
   const live = useSimProgress(running ? (run?.progress?.topicPrefix ?? null) : null)
-
-  useEffect(() => {
-    if (!running) return
-    const timer = setInterval(() => void loadRun(true), 2500)
-    return () => clearInterval(timer)
-  }, [running, loadRun])
 
   // The status topic usually beats the poll to the terminal flip; refetch
   // immediately so steps/events/artifacts (written by finalize) appear fast.
   const liveTerminal = live.status !== null && live.status.status !== "running"
+  const { refetch: refetchRun } = runQuery
   useEffect(() => {
     if (!running || !liveTerminal) return
-    ;(async () => {
-      await loadRun(true)
-    })()
-  }, [running, liveTerminal, loadRun])
+    void refetchRun()
+  }, [running, liveTerminal, refetchRun])
 
   useEffect(() => {
     return () => {

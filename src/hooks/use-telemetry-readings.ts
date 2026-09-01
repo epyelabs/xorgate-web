@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react"
-import type { MetricName } from "@xorgate/sdk"
+import { useMemo } from "react"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import type { MetricName, TelemetryTablePage } from "@xorgate/sdk"
 import { xg, xgMessage } from "@/lib/xorgate"
 import type { HistoryPoint } from "@/lib/telemetry-meta"
+import { qk } from "@/queries/keys"
+import { useTenant } from "@/queries/tenant"
 
 export interface UseTelemetryReadings {
   // Rows in display order (per `order`), keyed by metric for the table.
@@ -34,7 +37,40 @@ export interface TelemetryReadingsParams {
   metric?: string
 }
 
-const EMPTY: UseTelemetryReadings = {
+// Module-scope so react-query can memoize the transform across renders.
+// Widens each row's positional value array into the `{ts, [metric]: value}`
+// points TelemetryTable renders; columns/units are the SERVER's answer, so
+// the header cannot change as you page (see the hook comment).
+function widen(data: TelemetryTablePage) {
+  const { columns, rows, page } = data
+
+  const units: Record<string, string> = {}
+  for (const c of columns) if (c.unit) units[c.key] = c.unit
+
+  // Rows arrive in the requested order, so there is nothing to sort. `v[i]`
+  // is null where the sample has no reading for that column — skipped, so the
+  // cell renders as "—".
+  const history = rows.map((r) => {
+    const point: HistoryPoint = { ts: Date.parse(r.ts) }
+    for (let i = 0; i < columns.length; i += 1) {
+      const value = r.v[i]
+      if (value !== null && value !== undefined) point[columns[i].key] = value
+    }
+    return point
+  })
+
+  return {
+    history,
+    metrics: columns.map((c) => c.key),
+    units,
+    total: page.total,
+    totalIsCapped: page.totalIsCapped ?? false,
+    coveredFrom: page.coveredFrom ?? null,
+    coveredTo: page.coveredTo ?? null,
+  }
+}
+
+const EMPTY: ReturnType<typeof widen> = {
   history: [],
   metrics: [],
   units: {},
@@ -42,8 +78,6 @@ const EMPTY: UseTelemetryReadings = {
   totalIsCapped: false,
   coveredFrom: null,
   coveredTo: null,
-  loading: true,
-  error: null,
 }
 
 /**
@@ -51,80 +85,51 @@ const EMPTY: UseTelemetryReadings = {
  *
  * The server assembles the table (`shape=table`): it owns the column set, the
  * column order and the units, and returns one row per timestamp with a
- * positional value array. This hook only widens those positional arrays into
- * the `{ts, [metric]: value}` points TelemetryTable renders.
+ * positional value array; `widen()` above is the only client-side step.
  *
- * ⚠ It deliberately does NOT derive columns or units from the rows. That is
- * what it used to do, and it is why the header changed as you paged: a metric
- * that was all-null on the current page lost its unit, and with no metric filter
- * the table changed width. Both are now the server's answer, and the same
- * answer on every page.
- *
- * It also no longer needs the device model, so the tab renders after ONE
- * request instead of getDevice → getDeviceModel → readings.
+ * Cached per (device, filter) and carried across filter changes with
+ * `keepPreviousData`: paging or reordering keeps the current rows on screen
+ * while the next page loads behind them, instead of flashing the loading
+ * table — and a page you have already visited renders instantly from cache.
  */
 export function useTelemetryReadings(
   deviceId: string,
   params: TelemetryReadingsParams
 ): UseTelemetryReadings {
   const { from, to, order, limit, offset, metric } = params
+  const { orgId, wsId, ready } = useTenant()
 
-  const [state, setState] = useState<UseTelemetryReadings>(EMPTY)
+  const query = useQuery({
+    queryKey: qk.telemetryReadings(orgId, wsId, deviceId, {
+      from,
+      to,
+      order,
+      limit,
+      offset,
+      metric,
+    }),
+    queryFn: () =>
+      xg().telemetry.readings(deviceId, {
+        from,
+        to,
+        order,
+        limit,
+        offset,
+        metric: metric ? (metric.split(",") as MetricName[]) : undefined,
+      }),
+    enabled: ready && !!deviceId,
+    select: widen,
+    placeholderData: keepPreviousData,
+  })
 
-  useEffect(() => {
-    if (!deviceId) return
-    let cancelled = false
-
-    setState((s) => ({ ...s, loading: true, error: null }))
-    ;(async () => {
-      try {
-        const data = await xg().telemetry.readings(deviceId, {
-          from,
-          to,
-          order,
-          limit,
-          offset,
-          metric: metric ? (metric.split(",") as MetricName[]) : undefined,
-        })
-        if (cancelled) return
-        const { columns, rows, page } = data
-
-        const units: Record<string, string> = {}
-        for (const c of columns) if (c.unit) units[c.key] = c.unit
-
-        // Widen each positional array. Rows arrive in the requested order, so
-        // there is nothing to sort. `v[i]` is null where the sample has no
-        // reading for that column — skipped, so the cell renders as "—".
-        const history = rows.map((r) => {
-          const point: HistoryPoint = { ts: Date.parse(r.ts) }
-          for (let i = 0; i < columns.length; i += 1) {
-            const value = r.v[i]
-            if (value !== null && value !== undefined) point[columns[i].key] = value
-          }
-          return point
-        })
-
-        setState({
-          history,
-          metrics: columns.map((c) => c.key),
-          units,
-          total: page.total,
-          totalIsCapped: page.totalIsCapped ?? false,
-          coveredFrom: page.coveredFrom ?? null,
-          coveredTo: page.coveredTo ?? null,
-          loading: false,
-          error: null,
-        })
-      } catch (err) {
-        if (cancelled) return
-        setState((s) => ({ ...s, loading: false, error: xgMessage(err) }))
-      }
-    })()
-
-    return () => {
-      cancelled = true
+  return useMemo(() => {
+    const data = query.data ?? EMPTY
+    return {
+      ...data,
+      // Pending only with nothing at all to show; a filter change over held
+      // rows is not a loading state.
+      loading: query.isPending,
+      error: !query.data && query.error ? xgMessage(query.error) : null,
     }
-  }, [deviceId, from, to, order, limit, offset, metric])
-
-  return state
+  }, [query.data, query.isPending, query.error])
 }

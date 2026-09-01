@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
+import {
+  useDeviceAttachments,
+  useDeviceAttachmentsCache,
+  useDeviceWorkflowRuns,
+} from "@/queries/workflows"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
@@ -27,13 +32,8 @@ import {
 } from "@/components/data-table"
 import { RunStatusCell } from "@/components/run-status"
 import { formatRelative } from "@/lib/relative-time"
+import { detachWorkflow, listDeviceRuns } from "@/lib/device-workflows-api"
 import {
-  detachWorkflow,
-  listDeviceAttachments,
-  listDeviceRuns,
-} from "@/lib/device-workflows-api"
-import {
-  listDeviceAttachmentsResponseSchema,
   triggerSummary,
   type DeviceWorkflowAttachment,
 } from "@/lib/device-workflow-schemas"
@@ -71,9 +71,6 @@ export const Route = createFileRoute("/devices/$id/workflows")({
 
 function DeviceWorkflowsPage() {
   const { id } = Route.useParams()
-  const [attachments, setAttachments] = useState<
-    DeviceWorkflowAttachment[] | null
-  >(null)
   const [subTab, setSubTab] = useState<SubTab>("runs")
   const [attachOpen, setAttachOpen] = useState(false)
   const [runTarget, setRunTarget] = useState<DeviceWorkflowAttachment | null>(
@@ -83,10 +80,6 @@ function DeviceWorkflowsPage() {
 
   // Recent runs: server-side sort (by start time), pagination, and date filter;
   // client-side search over the loaded page.
-  const [runsData, setRunsData] = useState<{
-    runs: WorkflowRunSummary[]
-    total: number
-  } | null>(null)
   const [runsPage, setRunsPage] = useState(1)
   const [runsSize, setRunsSize] = useState(RUNS_DEFAULT_SIZE)
   const [runsOrder, setRunsOrder] = useState<"asc" | "desc">("desc")
@@ -96,79 +89,53 @@ function DeviceWorkflowsPage() {
   const runsFrom = runsRange.mode === "all" ? undefined : runsRange.from
   const runsTo = runsRange.mode === "all" ? undefined : runsRange.to
 
-  // Attachments load once (small per-device config list).
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await listDeviceAttachments(id)
-        const parsed = listDeviceAttachmentsResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected device workflows response shape")
-        }
-        if (cancelled) return
-        setAttachments(parsed.data.attachments)
-      } catch (err) {
-        if (cancelled) return
-        setAttachments([])
-        toast.error((err as Error).message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
+  // Attachments: a small per-device config list, cached so a tab switch
+  // renders it instantly. Writes edit the cached list in place below.
+  const attachmentsQuery = useDeviceAttachments(id)
+  // On a failed load fall back to an empty table (with the toast below), as
+  // the old inline load did, rather than a skeleton that never resolves.
+  const attachments =
+    attachmentsQuery.data ?? (attachmentsQuery.isError ? [] : null)
+  const attachmentsCache = useDeviceAttachmentsCache(id)
 
-  // Runs re-fetch on paging/sort change.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const raw = await listDeviceRuns(id, {
-          limit: runsSize,
-          offset: (runsPage - 1) * runsSize,
-          order: runsOrder,
-          from: runsFrom,
-          to: runsTo,
-        })
-        const parsed = listWorkflowRunsResponseSchema.safeParse(raw)
-        if (!parsed.success) {
-          throw new Error("Unexpected workflow runs response shape")
-        }
-        if (cancelled) return
-        setRunsData({
-          runs: parsed.data.runs,
-          total: parsed.data.page?.total ?? parsed.data.runs.length,
-        })
-      } catch (err) {
-        if (cancelled) return
-        setRunsData({ runs: [], total: 0 })
-        toast.error((err as Error).message)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id, runsPage, runsSize, runsOrder, runsFrom, runsTo])
+  // Runs: filter changes are new query keys; the held page stays on screen
+  // while the next one loads instead of flashing the loading table.
+  const runsDataQuery = useDeviceWorkflowRuns(id, {
+    limit: runsSize,
+    offset: (runsPage - 1) * runsSize,
+    order: runsOrder,
+    from: runsFrom,
+    to: runsTo,
+  })
+  const runsData =
+    runsDataQuery.data ??
+    (runsDataQuery.isError ? { runs: [], total: 0 } : null)
 
-  const replaceAttachment = (next: DeviceWorkflowAttachment) =>
-    setAttachments((prev) =>
-      prev ? prev.map((a) => (a.id === next.id ? next : a)) : prev
-    )
+  // Surface load failures once, only when there is nothing to show.
+  useEffect(() => {
+    if (attachmentsQuery.error && !attachmentsQuery.data) {
+      toast.error((attachmentsQuery.error as Error).message)
+    }
+  }, [attachmentsQuery.error, attachmentsQuery.data])
+  useEffect(() => {
+    if (runsDataQuery.error && !runsDataQuery.data) {
+      toast.error((runsDataQuery.error as Error).message)
+    }
+  }, [runsDataQuery.error, runsDataQuery.data])
+
+  const replaceAttachment = attachmentsCache.replace
 
   const handleDetach = useCallback(
     async (attachment: DeviceWorkflowAttachment) => {
       try {
         await detachWorkflow(id, attachment.id)
-        setAttachments((prev) =>
-          prev ? prev.filter((a) => a.id !== attachment.id) : prev
-        )
+        attachmentsCache.remove(attachment.id)
         toast.success(`Detached "${attachment.templateName}"`)
       } catch (err) {
         toast.error((err as Error).message)
       }
     },
-    [id]
+    [id, attachmentsCache]
   )
 
   const attachmentColumns: DataTableColumn<DeviceWorkflowAttachment>[] = [
@@ -482,11 +449,7 @@ function DeviceWorkflowsPage() {
         attachedTemplateIds={attachments?.map((a) => a.templateId) ?? []}
         open={attachOpen}
         onOpenChange={setAttachOpen}
-        onAttached={(attachment) =>
-          setAttachments((prev) =>
-            prev ? [attachment, ...prev] : [attachment]
-          )
-        }
+        onAttached={attachmentsCache.prepend}
       />
 
       <RunNowDialog

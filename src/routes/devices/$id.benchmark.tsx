@@ -1,10 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
-import { toast } from "sonner"
-import { xg, xgMessage } from "@/lib/xorgate"
+import { xgMessage } from "@/lib/xorgate"
 import type { IoCapabilities } from "@xorgate/sdk"
-import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { useDevice, useDeviceModel } from "@/queries/devices"
 import { gpsMetrics, imuMetrics, signalMetrics } from "@/lib/capability-metrics"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -211,37 +210,22 @@ function statusBadge(status: RunStatus) {
 
 function DeviceBenchmarkPage() {
   const { id } = Route.useParams()
-  const [caps, setCaps] = useState<IoCapabilities | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [states, setStates] =
     useState<Record<string, ModuleState>>(initialStates)
   const timersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
 
-  // Fetch device → model, same shape as the streams tab, to read ioCapabilities.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const device = await xg().devices.get(id)
-        if (cancelled) return
-        useBreadcrumbStore
-          .getState()
-          .setDeviceName(device.name ?? device.serial)
-
-        const model = await xg().deviceModels.get(device.deviceModelId)
-        if (!cancelled) setCaps(model.ioCapabilities)
-      } catch (err) {
-        const message = xgMessage(err)
-        if (!cancelled) {
-          setLoadError(message)
-          toast.error(message)
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
+  // Device → model to read ioCapabilities, from the same cached queries the
+  // other tabs share.
+  const deviceQuery = useDevice(id)
+  const device = deviceQuery.data ?? null
+  const modelQuery = useDeviceModel(device?.deviceModelId)
+  const caps = modelQuery.data?.ioCapabilities ?? null
+  const loadError =
+    !device && deviceQuery.error
+      ? xgMessage(deviceQuery.error)
+      : device && !caps && modelQuery.error
+        ? xgMessage(modelQuery.error)
+        : null
 
   // Clear any in-flight simulated runs when leaving the tab.
   useEffect(() => {

@@ -34,6 +34,10 @@ import {
 // because the change-detection helper is part of this module's surface.
 import { deepEqual } from "@/lib/deep-equal"
 export { deepEqual }
+import { useQueryClient } from "@tanstack/react-query"
+import { getCachedDevice } from "@/queries/devices"
+import { qk } from "@/queries/keys"
+import { useTenant } from "@/queries/tenant"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven
@@ -157,7 +161,15 @@ export interface DeviceSettings {
 }
 
 export function useDeviceSettings(id: string): DeviceSettings {
-  const [device, setDevice] = useState<Device | null>(null)
+  // Seed from the query cache so the tab paints the row the layout already
+  // holds instead of a skeleton; the fetch below still runs and replaces it
+  // with the authoritative answer (the cached copy may lag a recent save).
+  const queryClient = useQueryClient()
+  const { orgId, wsId } = useTenant()
+  const [seed] = useState<Device | null>(
+    () => getCachedDevice(queryClient, orgId, wsId, id) ?? null
+  )
+  const [device, setDevice] = useState<Device | null>(seed)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   // key -> in-flight count (a key can be queued more than once).
@@ -166,8 +178,8 @@ export function useDeviceSettings(id: string): DeviceSettings {
   // What the UI shows (state + optimistic edits) and what a failed save rolls
   // back to. Refs because commits are built from the latest value, not from
   // whatever this render closed over.
-  const optimisticRef = useRef<Device | null>(null)
-  const serverRef = useRef<Device | null>(null)
+  const optimisticRef = useRef<Device | null>(seed)
+  const serverRef = useRef<Device | null>(seed)
   // Saves run one at a time, in click order: two controls PUT the same row, so
   // overlapping requests would race on last-write-wins. Queuing keeps every
   // click (nothing is dropped) while keeping the writes ordered.
@@ -180,6 +192,17 @@ export function useDeviceSettings(id: string): DeviceSettings {
     optimisticRef.current = next
     setDevice(next)
   }, [])
+
+  // Server-confirmed rows are written back into the query cache, so the
+  // layout header (name, status badge, model) shows a save in the same frame
+  // instead of at its next poll. Only rows the SERVER answered with go in —
+  // never the optimistic form state.
+  const writeThrough = useCallback(
+    (row: Device) => {
+      queryClient.setQueryData(qk.device(orgId, wsId, id), row)
+    },
+    [queryClient, orgId, wsId, id]
+  )
 
   const bumpPending = useCallback((key: string, delta: number) => {
     setPending((prev) => {
@@ -199,6 +222,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         const fetched = await xg().devices.get(id)
         if (cancelled) return
         serverRef.current = fetched
+        writeThrough(fetched)
         applyDevice(fetched)
       } catch (err) {
         if (isXorgateError(err) && err.status === 404) {
@@ -213,7 +237,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     return () => {
       cancelled = true
     }
-  }, [id, applyDevice])
+  }, [id, applyDevice, writeThrough])
 
   const configStatus = computeConfigStatus(device)
   const pendingCount = Object.keys(pending).length
@@ -243,6 +267,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
           const fetched = await xg().devices.get(id)
           if (cancelled) return
           serverRef.current = fetched
+          writeThrough(fetched)
           // Merge only the server-owned fields. The rest of the object is the
           // live form state and must not be reset under the operator's hands.
           applyDevice({
@@ -266,7 +291,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     // `configStatus` is recomputed every render; keying the effect on the
     // boolean keeps this to one interval per pending episode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, hasPending(configStatus), pendingCount, applyDevice])
+  }, [id, hasPending(configStatus), pendingCount, applyDevice, writeThrough])
 
   const commit = useCallback(
     (key: string, patch: DeviceSettingsPatch) => {
@@ -356,6 +381,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
           }
           if (updated === null) throw new Error("Nothing to save")
           serverRef.current = updated
+          writeThrough(updated)
           // Re-seed only what this save owns: later queued edits are already
           // optimistically applied and must survive. config/uiPrefs come back
           // wholesale below; `name` is the one field re-seeded individually.
@@ -392,7 +418,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         }
       })
     },
-    [id, applyDevice, bumpPending]
+    [id, applyDevice, bumpPending, writeThrough]
   )
 
   const commitRecording = useCallback(

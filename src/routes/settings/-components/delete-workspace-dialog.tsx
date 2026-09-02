@@ -49,7 +49,9 @@ export function DeleteWorkspaceDialog({
             <span className="font-medium text-foreground">
               {workspace?.name}
             </span>{" "}
-            and detaches its resources. This action cannot be undone.
+            and every device in it — recorded video, telemetry history,
+            live-video channels and cloud identities included. This action
+            cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

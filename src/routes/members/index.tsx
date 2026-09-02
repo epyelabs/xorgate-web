@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { RequirePermission } from "@/components/require-permission"
 import { toast } from "sonner"
-import { PlusIcon, Trash2Icon } from "lucide-react"
+import { LogOutIcon, MoreHorizontalIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { DestroyDialog } from "@/components/destroy-dialog"
 import {
   Tooltip,
   TooltipContent,
@@ -15,7 +26,7 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { StickyHeader } from "@/components/sticky-header"
 import type { MembershipRole, MembershipWithUser } from "@xorgate/sdk"
-import { xgMessage } from "@/lib/xorgate"
+import { xg, xgMessage } from "@/lib/xorgate"
 import { useInvalidateMembers, useMembers } from "@/queries/org"
 import { formatRelative } from "@/lib/relative-time"
 import { useAuthStore } from "@/store/auth"
@@ -70,9 +81,16 @@ function initials(member: MembershipWithUser): string {
   return (member.user?.email?.[0] ?? "?").toUpperCase()
 }
 
+const ROLES: MembershipRole[] = ["owner", "admin", "member", "viewer"]
+
 function MembersPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [removing, setRemoving] = useState<MembershipWithUser | null>(null)
+  // Handing the owner role over is confirmed in its own dialog; this holds
+  // the member it names. Leaving the organization likewise.
+  const [promoting, setPromoting] = useState<MembershipWithUser | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const navigate = useNavigate()
 
   const authUserId = useAuthStore((s) => s.user?.id ?? null)
   const authMemberships = useAuthStore((s) => s.memberships)
@@ -105,6 +123,54 @@ function MembersPage() {
   }, [membersQuery.error, membersQuery.data])
 
   const reload = useInvalidateMembers()
+  const refreshMe = useAuthStore((s) => s.refreshMe)
+  const ownMembership = members.find((m) => m.userId === authUserId) ?? null
+  const ownerCount = members.filter((m) => m.role === "owner").length
+
+  // Role changes short of `owner` are an admin's; granting `owner` (or
+  // touching an owner at all) is the owner's alone. The API enforces both and
+  // the last-owner rule; the menu just does not offer what would be refused.
+  async function changeRole(member: MembershipWithUser, role: MembershipRole) {
+    try {
+      await xg().memberships.updateRole(member.id, role)
+      toast.success(`${displayName(member)} is now ${ROLE_LABEL[role].toLowerCase()}`)
+      reload()
+      // Not our own row, but /me carries roles too and a new owner should see
+      // the owner-only controls without a reload.
+      void refreshMe()
+    } catch (err) {
+      toast.error(xgMessage(err))
+    }
+  }
+
+  async function confirmPromote() {
+    if (!promoting) return
+    await changeRole(promoting, "owner")
+    setPromoting(null)
+  }
+
+  /**
+   * Leaving: remove our own membership. The store's auth subscriber notices
+   * the organization gone from /me and re-points the selection at the next
+   * one (or none); this page only has to get out of the way.
+   */
+  async function confirmLeave() {
+    if (!ownMembership) return
+    try {
+      await xg().memberships.remove(ownMembership.id)
+      toast.success("You left the organization")
+      await refreshMe()
+      void navigate({ to: "/", replace: true })
+    } catch (err) {
+      toast.error(xgMessage(err))
+    }
+  }
+
+  const orgName =
+    useAuthStore
+      .getState()
+      .organizations.find((o) => o.id === currentOrganizationId)?.name ??
+    "this organization"
 
   const columns: DataTableColumn<MembershipWithUser>[] = [
     {
@@ -162,19 +228,80 @@ function MembersPage() {
       header: "",
       align: "right",
       cell: (member) => {
-        // Owner/admin can remove others. Removing yourself (leaving the org) is a
-        // separate flow, so the self row has no action.
-        if (!canManage || member.userId === authUserId) return null
+        const isSelf = member.userId === authUserId
+        // Your own row offers exactly one thing: leaving. Everyone may leave,
+        // except the last owner (the API refuses; hand over or delete first).
+        if (isSelf) {
+          const lastOwner = member.role === "owner" && ownerCount <= 1
+          return (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              disabled={lastOwner}
+              title={
+                lastOwner
+                  ? "You are the only owner. Make someone else an owner, or delete the organization."
+                  : undefined
+              }
+              onClick={() => setLeaving(true)}
+            >
+              <LogOutIcon />
+              Leave
+            </Button>
+          )
+        }
+        if (!canManage) return null
+        // Admins cannot touch an owner's row at all; owners can.
+        if (member.role === "owner" && callerRole !== "owner") return null
+        const assignable = ROLES.filter(
+          (r) => r !== member.role && (r !== "owner" || callerRole === "owner")
+        )
         return (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-destructive"
-            aria-label={`Remove ${displayName(member)}`}
-            onClick={() => setRemoving(member)}
-          >
-            <Trash2Icon />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground"
+                aria-label={`Actions for ${displayName(member)}`}
+              >
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Change role</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {assignable.map((role) => (
+                    <DropdownMenuItem
+                      key={role}
+                      onSelect={() =>
+                        role === "owner"
+                          ? setPromoting(member)
+                          : void changeRole(member, role)
+                      }
+                    >
+                      {ROLE_LABEL[role]}
+                      {role === "owner" ? (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          confirm…
+                        </span>
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => setRemoving(member)}
+              >
+                <Trash2Icon />
+                Remove from organization
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )
       },
     },
@@ -253,6 +380,45 @@ function MembersPage() {
         }}
         member={removing}
         onRemoved={reload}
+      />
+      <DestroyDialog
+        open={promoting !== null}
+        onOpenChange={(open) => {
+          if (!open) setPromoting(null)
+        }}
+        title={`Make ${promoting ? displayName(promoting) : "this member"} an owner?`}
+        description={`They gain full control of ${orgName}, including deleting it and changing anyone's role — yours too.`}
+        warning={
+          <>
+            <span className="font-medium text-foreground">
+              Owners are equals.
+            </span>{" "}
+            You keep your own owner role; either of you can later demote the
+            other or leave, as long as one owner remains.
+          </>
+        }
+        confirmLabel="Make owner"
+        pendingLabel="Updating…"
+        onConfirm={confirmPromote}
+      />
+      <DestroyDialog
+        open={leaving}
+        onOpenChange={setLeaving}
+        title={`Leave ${orgName}?`}
+        description="You lose access to its workspaces, devices and recordings immediately. Your account is untouched."
+        warning={
+          <>
+            <span className="font-medium text-foreground">
+              Only an owner or admin can add you back.
+            </span>{" "}
+            {ownMembership?.role === "owner"
+              ? "You give up your owner role; the remaining owners keep the organization."
+              : null}
+          </>
+        }
+        confirmLabel="Leave organization"
+        pendingLabel="Leaving…"
+        onConfirm={confirmLeave}
       />
     </div>
   )

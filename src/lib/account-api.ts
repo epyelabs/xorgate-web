@@ -118,3 +118,54 @@ export function uploadAvatar(input: {
 export function removeAvatar(): Promise<{ user: AccountUser }> {
   return request("DELETE", "/me/avatar")
 }
+
+/**
+ * `DELETE /me`: close the account. The API removes the Cognito user, the
+ * profile and picture, every membership and the live-plane policy, and refuses
+ * with `409 OWNS_ORGANIZATIONS` while the caller is the only owner of an
+ * organization. The caller signs out afterwards; there is nothing to read back.
+ */
+export async function deleteMe(): Promise<void> {
+  const token = await getIdToken()
+  if (!token) throw new Error("Not authenticated")
+  const response = await fetch(`${BASE_URL}/v1/me`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (response.status === 204) return
+  const payload = (await response.json().catch(() => null)) as {
+    error?: {
+      code?: string
+      message?: string
+      details?: { organizations?: BlockingOrganization[] }
+    }
+  } | null
+  if (response.status === 409 && payload?.error?.code === "OWNS_ORGANIZATIONS") {
+    throw new OwnsOrganizationsError(payload.error.details?.organizations ?? [])
+  }
+  throw new Error(
+    payload?.error?.message ?? `Request failed (${response.status})`
+  )
+}
+
+export interface BlockingOrganization {
+  id: string
+  name: string
+  slug: string
+}
+
+/**
+ * `DELETE /me` refused because the caller is the only owner of these
+ * organizations. Carried as data rather than prose so the account page can
+ * link to each one instead of quoting the API's sentence back.
+ */
+export class OwnsOrganizationsError extends Error {
+  readonly organizations: BlockingOrganization[]
+  constructor(organizations: BlockingOrganization[]) {
+    super(
+      "Make someone else an owner of, or delete, the organizations you are the only owner of first"
+    )
+    this.name = "OwnsOrganizationsError"
+    this.organizations = organizations
+  }
+}

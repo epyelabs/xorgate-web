@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { GoogleSignInButton } from "@/components/google-sign-in-button"
 import { useAuthStore } from "@/store/auth"
 import { signupSchema, confirmSignupSchema } from "@/lib/schemas"
+import { PRIVACY_URL, TERMS_URL } from "@/lib/legal-links"
 
 type Stage = "register" | "confirm"
 
@@ -200,13 +201,23 @@ export function SignupForm({
       </Card>
       <FieldDescription className="px-6 text-center">
         By continuing, you agree to our{" "}
-        <Link to="/terms" className="underline underline-offset-4">
+        <a
+          href={TERMS_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-4"
+        >
           Terms of Service
-        </Link>{" "}
+        </a>{" "}
         and{" "}
-        <Link to="/privacy" className="underline underline-offset-4">
+        <a
+          href={PRIVACY_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-4"
+        >
           Privacy Policy
-        </Link>
+        </a>
         .
       </FieldDescription>
     </div>

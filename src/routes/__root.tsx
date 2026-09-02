@@ -116,11 +116,6 @@ const AUTH_ROUTES = ["/login", "/signup", "/auth/callback"]
 // users.
 const CHROMELESS_AUTHED_ROUTES = ["/onboarding"]
 
-// Public documents. They render bare for everyone, signed in or not, and
-// skip the session-restore hold so a link from the login page (or a
-// bookmark) shows the document immediately.
-const PUBLIC_ROUTES = ["/privacy", "/terms"]
-
 function RootLayout() {
   const isLoading = useAuthStore((s) => s.isLoading)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -152,10 +147,6 @@ function RootLayout() {
   }, [])
 
   const isOnAuthRoute = AUTH_ROUTES.includes(location.pathname)
-
-  if (PUBLIC_ROUTES.includes(location.pathname)) {
-    return <Outlet />
-  }
 
   if (isLoading || (isAuthenticated && isOnAuthRoute)) {
     return <AppLoadingScreen label="Restoring your session" />

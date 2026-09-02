@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { ImageUpIcon, Trash2Icon } from "lucide-react"
+import { DestroyDialog } from "@/components/destroy-dialog"
+import { EntityLogo } from "@/components/entity-logo"
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -14,15 +16,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StickyHeader } from "@/components/sticky-header"
 import { UserAvatar } from "@/components/user-avatar"
 import { requireAuth } from "@/lib/auth-guard"
-import { changePassword, isFederatedUser } from "@/lib/cognito"
+import {
+  changePassword,
+  isFederatedUser,
+  redirectToHostedLogout,
+} from "@/lib/cognito"
 import { ACCEPTED_TYPES, encodeAvatar } from "@/lib/image"
 import {
+  deleteMe,
+  OwnsOrganizationsError,
   removeAvatar,
   updateMe,
   uploadAvatar,
   type AccountUser,
+  type BlockingOrganization,
 } from "@/lib/account-api"
 import { useAuthStore } from "@/store/auth"
+import { useWorkspaceStore } from "@/store/workspace"
 
 export const Route = createFileRoute("/account")({
   beforeLoad: requireAuth,
@@ -78,8 +88,12 @@ function AccountPage() {
             </TabsList>
           </div>
           {/* TabsContent defaults to text-xs; the forms below are text-sm. */}
-          <TabsContent value="profile" className="max-w-2xl text-sm">
+          <TabsContent
+            value="profile"
+            className="flex max-w-2xl flex-col gap-8 text-sm"
+          >
             <ProfileSection user={user} />
+            <DangerZoneSection user={user} />
           </TabsContent>
           <TabsContent value="password" className="max-w-2xl text-sm">
             <PasswordSection />
@@ -261,6 +275,160 @@ function ProfileSection({ user }: { user: AccountUser }) {
           </Button>
         </div>
       </form>
+    </section>
+  )
+}
+
+/**
+ * Closing the account. Lives at the bottom of the profile tab rather than in a
+ * tab of its own: it is the last thing on the page about "you", below
+ * everything that can still be edited.
+ *
+ * /me does not say how many owners each organization has, so the screen
+ * cannot know in advance which ones would block the deletion. It lists the
+ * organizations the caller OWNS as a heads-up and lets the API decide; a 409
+ * comes back with the exact blocking set, which is then shown with a link
+ * into each organization's settings (hand it over on Members, or delete it).
+ */
+function DangerZoneSection({ user }: { user: AccountUser }) {
+  const memberships = useAuthStore((s) => s.memberships)
+  const organizations = useAuthStore((s) => s.organizations)
+  const logout = useAuthStore((s) => s.logout)
+  const setCurrentOrganization = useWorkspaceStore(
+    (s) => s.setCurrentOrganization
+  )
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [blocking, setBlocking] = useState<BlockingOrganization[] | null>(null)
+
+  const owned = organizations.filter((org) =>
+    memberships.some((m) => m.organizationId === org.id && m.role === "owner")
+  )
+
+  async function confirm() {
+    try {
+      await deleteMe()
+    } catch (err) {
+      if (err instanceof OwnsOrganizationsError) {
+        setBlocking(err.organizations)
+        setOpen(false)
+        toast.error(err.message)
+        return
+      }
+      toast.error(
+        err instanceof Error ? err.message : "Could not delete your account"
+      )
+      return
+    }
+    toast.success("Your account has been deleted")
+    // The credential is gone server-side; this clears what the browser still
+    // holds — the same sequence as the sidebar's Log out.
+    logout()
+    if (redirectToHostedLogout()) return
+    void navigate({ to: "/login", replace: true })
+  }
+
+  async function openOrganization(orgId: string) {
+    await setCurrentOrganization(orgId)
+    void navigate({ to: "/settings" })
+  }
+
+  const shown = blocking ?? owned
+
+  return (
+    <section className="flex flex-col gap-4 border-t border-border pt-6">
+      <div>
+        <h2 className="text-sm font-medium text-destructive">Delete account</h2>
+        <p className="text-sm text-muted-foreground">
+          Permanently removes your sign-in, profile, picture, live-video access
+          and your membership in every organization. Organizations you belong to
+          are not deleted.
+        </p>
+      </div>
+
+      {shown.length > 0 ? (
+        <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            {blocking
+              ? "You are the only owner of these organizations. Make another member an owner (Members) or delete them (Settings) first; an organization cannot be left without an owner."
+              : `You own ${owned.length === 1 ? "an organization" : `${owned.length} organizations`}. If you are the only owner of any of them, you will be asked to hand it over or delete it first.`}
+          </p>
+          <ul className="flex flex-col gap-2">
+            {shown.map((org) => (
+              <li
+                key={org.id}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <EntityLogo
+                    name={org.name}
+                    src={
+                      organizations.find((o) => o.id === org.id)?.logoUrl ??
+                      null
+                    }
+                    className="size-6 shrink-0"
+                  />
+                  <span className="truncate text-sm">{org.name}</span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void openOrganization(org.id)}
+                >
+                  Open settings
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={blocking !== null && blocking.length > 0}
+          onClick={() => setOpen(true)}
+        >
+          <Trash2Icon />
+          Delete my account
+        </Button>
+      </div>
+
+      <DestroyDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete your account?"
+        description={
+          <>
+            The account for{" "}
+            <span className="font-medium text-foreground">{user.email}</span> is
+            closed and you are signed out everywhere.
+          </>
+        }
+        warning={
+          <>
+            <span className="font-medium text-foreground">
+              This cannot be undone.
+            </span>{" "}
+            Your profile and picture are erased and you lose access to{" "}
+            {memberships.length === 0
+              ? "the console"
+              : memberships.length === 1
+                ? (organizations.find(
+                    (o) => o.id === memberships[0]!.organizationId
+                  )?.name ?? "your organization")
+                : `${memberships.length} organizations`}
+            . Signing up again with the same email starts from nothing.
+          </>
+        }
+        confirmText={user.email}
+        confirmLabel="Delete my account"
+        pendingLabel="Deleting…"
+        onConfirm={confirm}
+      />
     </section>
   )
 }

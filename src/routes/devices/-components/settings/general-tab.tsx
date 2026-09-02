@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { xg, xgMessage } from "@/lib/xorgate"
+import { useInvalidateDevices } from "@/queries/devices"
 import type {
   AgentBuild as LatestAgentBuild,
   Device,
@@ -73,6 +74,7 @@ export function GeneralTab({
   updatingAgent: boolean
 }) {
   const navigate = useNavigate()
+  const invalidateDevices = useInvalidateDevices()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const agentMode = reportedAgentMode(device)
@@ -174,6 +176,9 @@ export function GeneralTab({
       toast.error(xgMessage(err))
       return
     }
+    // The fleet list is cached; without this the deleted device stays in it
+    // until the next poll, and its own keys would refetch a 404.
+    invalidateDevices(device.id)
     toast.success("Device deleted")
     setDeleteOpen(false)
     navigate({ to: "/devices" })
@@ -388,7 +393,9 @@ export function GeneralTab({
         <CardHeader>
           <CardTitle className="text-destructive">Danger zone</CardTitle>
           <CardDescription>
-            Permanently delete this device and all of its data.
+            Permanently delete this device: its recordings, telemetry history,
+            live-video channels and cloud identity. The agent, if still running,
+            must be re-enrolled with a new claim code.
           </CardDescription>
           <CardAction>
             <Button variant="destructive" onClick={() => setDeleteOpen(true)}>

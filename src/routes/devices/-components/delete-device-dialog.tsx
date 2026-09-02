@@ -39,9 +39,11 @@ export function DeleteDeviceDialog({
           <DialogTitle>Delete device</DialogTitle>
           <DialogDescription>
             This permanently deletes{" "}
-            <span className="font-medium text-foreground">{deviceName}</span> and
-            its telemetry, media, and identity records. This action cannot be
-            undone.
+            <span className="font-medium text-foreground">{deviceName}</span>:
+            its recorded video, telemetry history, live-video channels and its
+            cloud identity and certificate. A device agent still running loses
+            its connection and must be re-enrolled with a new claim code. This
+            action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

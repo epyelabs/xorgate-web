@@ -9,6 +9,8 @@ import {
 import type { Organization } from "@xorgate/sdk"
 import type { BrandedWorkspace } from "@/lib/branding-api"
 import { useAuthStore } from "@/store/auth"
+import { queryClient } from "@/lib/query-client"
+import { qk } from "@/queries/keys"
 
 interface WorkspaceState {
   currentOrganizationId: string | null
@@ -35,6 +37,13 @@ interface WorkspaceState {
   // routes answer with the updated row, so there is nothing to re-fetch.
   applyWorkspace: (workspace: BrandedWorkspace) => void
   deleteWorkspace: (id: string) => Promise<void>
+  /**
+   * Destroy the CURRENT organization. The API tears down every workspace and
+   * device under it; here the org's cached queries go, then /me is refetched
+   * and the auth-store subscriber below re-initializes the selection onto the
+   * next organization (or none).
+   */
+  deleteOrganization: (id: string) => Promise<void>
   reset: () => void
 }
 
@@ -143,7 +152,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       deleteWorkspace: async (id) => {
+        const orgId = get().currentOrganizationId
         await xg().workspaces.delete(id)
+        // Its fleet and every per-device key hang off this prefix; a refetch
+        // would only 404 now.
+        if (orgId) queryClient.removeQueries({ queryKey: qk.ws(orgId, id) })
         set((state) => {
           const workspaces = state.workspaces.filter((w) => w.id !== id)
           // If the active workspace was deleted, fall back to the first
@@ -154,6 +167,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               : state.currentWorkspaceId
           return { workspaces, currentWorkspaceId }
         })
+      },
+
+      deleteOrganization: async (id) => {
+        await xg().organizations.delete(id)
+        queryClient.removeQueries({ queryKey: qk.org(id) })
+        await useAuthStore.getState().refreshMe()
       },
 
       reset: () => {

@@ -1,5 +1,9 @@
 import { useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { toast } from "sonner"
+import { DestroyDialog } from "@/components/destroy-dialog"
+import { useCurrentRole } from "@/lib/permissions"
+import { xgMessage } from "@/lib/xorgate"
 import { requireAuth } from "@/lib/auth-guard"
 import { RequirePermission } from "@/components/require-permission"
 import { MoreHorizontalIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
@@ -222,6 +226,13 @@ function OrganizationSettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {activeOrg ? (
+            <DangerZoneCard
+              organization={activeOrg}
+              workspaceCount={workspaces.length}
+            />
+          ) : null}
         </TabsContent>
 
         <TabsContent value="credentials">
@@ -295,5 +306,84 @@ function OrganizationSettingsPage() {
         workspace={deleting}
       />
     </div>
+  )
+}
+
+/**
+ * Deleting the organization. Owner only, and rendered for nobody else: an
+ * admin who cannot do it has nothing to read here. The role check is explicit
+ * rather than `useHasPermission`, which fails open while memberships load —
+ * fine for a page, wrong for a button that destroys everything.
+ *
+ * On success the store has already refetched /me; its subscriber sees this
+ * organization gone from the list and moves the selection to the next one, or
+ * to none. All this card does is get out of the way.
+ */
+function DangerZoneCard({
+  organization,
+  workspaceCount,
+}: {
+  organization: { id: string; name: string }
+  workspaceCount: number
+}) {
+  const role = useCurrentRole()
+  const deleteOrganization = useWorkspaceStore((s) => s.deleteOrganization)
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+
+  if (role !== "owner") return null
+
+  async function confirm() {
+    try {
+      await deleteOrganization(organization.id)
+      toast.success(`${organization.name} deleted`)
+      void navigate({ to: "/", replace: true })
+    } catch (err) {
+      toast.error(xgMessage(err))
+    }
+  }
+
+  return (
+    <>
+      <Card className="mt-4 ring-destructive/30">
+        <CardHeader>
+          <CardTitle className="text-destructive">Danger zone</CardTitle>
+          <CardDescription>
+            Permanently delete this organization: every workspace and device
+            in it, with their recordings and telemetry, every API key, and
+            every member&apos;s access, including yours.
+          </CardDescription>
+          <CardAction>
+            <Button variant="destructive" onClick={() => setOpen(true)}>
+              Delete organization
+            </Button>
+          </CardAction>
+        </CardHeader>
+      </Card>
+
+      <DestroyDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Delete ${organization.name}?`}
+        description="The organization, its workspaces, devices, API keys and memberships are removed immediately."
+        warning={
+          <>
+            <span className="font-medium text-foreground">
+              This cannot be undone.
+            </span>{" "}
+            {workspaceCount === 1
+              ? "1 workspace and every device in it are"
+              : `${workspaceCount} workspaces and every device in them are`}{" "}
+            deleted, including recorded video, telemetry history and each
+            device&apos;s cloud identity. A device agent still running loses
+            its connection and must be re-enrolled.
+          </>
+        }
+        confirmText={organization.name}
+        confirmLabel="Delete organization"
+        pendingLabel="Deleting…"
+        onConfirm={confirm}
+      />
+    </>
   )
 }

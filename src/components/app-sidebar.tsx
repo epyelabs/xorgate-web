@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/sidebar"
 import {
   Box,
-  CreditCard,
   KeyRound,
   LayoutDashboard,
   Settings,
@@ -44,7 +43,9 @@ const organizationNav = [
   },
   { title: "API Keys", url: "/api-keys", icon: <KeyRound /> },
   { title: "Members", url: "/members", icon: <Users /> },
-  { title: "Billing", url: "/billing", icon: <CreditCard /> },
+  // Billing is hidden until the feature is ready; the /billing route still
+  // exists, it just is not linked from the sidebar.
+  // { title: "Billing", url: "/billing", icon: <CreditCard /> },
   { title: "Settings", url: "/settings", icon: <Settings /> },
 ]
 

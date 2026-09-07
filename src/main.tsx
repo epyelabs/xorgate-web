@@ -1,6 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { RouterProvider, createRouter } from "@tanstack/react-router"
+import { createRouter } from "@tanstack/react-router"
 import { QueryClientProvider } from "@tanstack/react-query"
 
 import "./index.css"
@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { XorgateRoot } from "@/components/xorgate-root"
 import { RoutePendingScreen } from "@/components/app-loading-screen"
+import { AppRouter } from "@/components/app-router"
 import { routeTree } from "./routeTree.gen"
 
 // Route guards block in beforeLoad on /me (and the workspace bootstrap on
@@ -44,7 +45,7 @@ createRoot(document.getElementById("root")!).render(
       <ThemeProvider>
         <TooltipProvider>
           <XorgateRoot>
-            <RouterProvider router={router} />
+            <AppRouter router={router} />
           </XorgateRoot>
           <Toaster />
         </TooltipProvider>

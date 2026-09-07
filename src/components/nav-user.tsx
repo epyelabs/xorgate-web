@@ -28,8 +28,7 @@ import {
   SunIcon,
   User,
 } from "lucide-react"
-import { useAuthStore } from "@/store/auth"
-import { redirectToHostedLogout } from "@/lib/cognito"
+import { performSignOut } from "@/lib/sign-out"
 import { useTheme, type Theme } from "@/components/theme-provider"
 
 interface NavUserData {
@@ -47,16 +46,11 @@ const ThemeIcon = {
 
 export function NavUser({ user }: { user: NavUserData }) {
   const navigate = useNavigate()
-  const logout = useAuthStore((s) => s.logout)
   const { isMobile } = useSidebar()
   const { theme, setTheme } = useTheme()
 
   function handleLogout() {
-    logout()
-    // With Google federation wired, also clear the Hosted-UI cookie; that
-    // round trip lands on /login by itself.
-    if (redirectToHostedLogout()) return
-    navigate({ to: "/login" })
+    void performSignOut(navigate)
   }
 
   const CurrentThemeIcon = ThemeIcon[theme]

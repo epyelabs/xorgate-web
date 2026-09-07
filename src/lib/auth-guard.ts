@@ -133,6 +133,10 @@ export async function requireProfile(opts: {
     // token is gone, and the correct screen is the login page, not an error the
     // user can only retry into the same wall.
     if ((await getCurrentSession()) === null) {
+      // Same hold as a deliberate sign-out: logout() empties the query cache
+      // while the current page is still mounted, and the redirect below only
+      // replaces it a frame or two later. LoginPage drops the hold.
+      useAuthStore.getState().beginSignOut()
       useAuthStore.getState().logout()
       throw redirect({
         to: "/login",

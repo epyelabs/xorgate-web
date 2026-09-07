@@ -27,6 +27,12 @@ interface AuthState {
   // until it has: an empty array means "this user has none" ONLY when this is
   // true, and "we don't know yet" when it is false. Read them together.
   profileLoaded: boolean
+  // True from the moment a sign-out starts until the login page is on screen
+  // (or the document navigates away for the Hosted-UI round trip). Clearing
+  // the session tears the query cache out from under whatever page the user
+  // pressed "Log out" on, and that page re-renders as a wall of empty
+  // skeletons; this flag is what holds a screen over it instead.
+  signingOut: boolean
   error: string | null
 
   initialize: () => Promise<void>
@@ -40,6 +46,11 @@ interface AuthState {
   signup: (email: string, password: string) => Promise<void>
   confirmSignup: (email: string, code: string) => Promise<void>
   logout: () => void
+  // Raises the sign-out hold BEFORE `logout()` runs. Both happen in one event
+  // handler, so React paints a single frame: the hold, never the gutted page.
+  beginSignOut: () => void
+  // Drops the hold once the login page has taken over.
+  endSignOut: () => void
   refreshMe: () => Promise<void>
   // Writes a profile back after the account screen changes it, so the sidebar
   // and its dropdown show the new name or picture in the same frame — the
@@ -130,6 +141,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   isAuthenticated: false,
   profileLoaded: false,
+  signingOut: false,
   error: null,
 
   initialize: async () => {
@@ -244,6 +256,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       profileLoaded: false,
     })
   },
+
+  beginSignOut: () => set({ signingOut: true }),
+
+  endSignOut: () => set({ signingOut: false }),
 
   refreshMe: async () => {
     if (!get().isAuthenticated) return

@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { LoginForm } from "@/components/login-form"
 import { XorgateLogo } from "@/components/xorgate-logo"
@@ -29,6 +30,14 @@ export const Route = createFileRoute("/login")({
 })
 
 function LoginPage() {
+  // The sign-out hold stays up until the login page is actually on screen.
+  // Releasing it here rather than in the sign-out helper also covers the
+  // guard-driven sign-out (a dead session failing /me), which redirects here
+  // without going through that helper at all.
+  useEffect(() => {
+    useAuthStore.getState().endSignOut()
+  }, [])
+
   return (
     <div className="relative isolate flex min-h-svh flex-col items-center justify-center gap-6 bg-shell p-6 md:p-10">
       <AccentField variant="grid-full" />

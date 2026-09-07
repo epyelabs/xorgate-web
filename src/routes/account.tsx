@@ -16,11 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StickyHeader } from "@/components/sticky-header"
 import { UserAvatar } from "@/components/user-avatar"
 import { requireAuth } from "@/lib/auth-guard"
-import {
-  changePassword,
-  isFederatedUser,
-  redirectToHostedLogout,
-} from "@/lib/cognito"
+import { changePassword, isFederatedUser } from "@/lib/cognito"
+import { performSignOut } from "@/lib/sign-out"
 import { ACCEPTED_TYPES, encodeAvatar } from "@/lib/image"
 import {
   deleteMe,
@@ -293,7 +290,6 @@ function ProfileSection({ user }: { user: AccountUser }) {
 function DangerZoneSection({ user }: { user: AccountUser }) {
   const memberships = useAuthStore((s) => s.memberships)
   const organizations = useAuthStore((s) => s.organizations)
-  const logout = useAuthStore((s) => s.logout)
   const setCurrentOrganization = useWorkspaceStore(
     (s) => s.setCurrentOrganization
   )
@@ -323,9 +319,7 @@ function DangerZoneSection({ user }: { user: AccountUser }) {
     toast.success("Your account has been deleted")
     // The credential is gone server-side; this clears what the browser still
     // holds — the same sequence as the sidebar's Log out.
-    logout()
-    if (redirectToHostedLogout()) return
-    void navigate({ to: "/login", replace: true })
+    void performSignOut(navigate)
   }
 
   async function openOrganization(orgId: string) {

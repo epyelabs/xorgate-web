@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { ArrowLeftIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,7 +42,7 @@ export const Route = createFileRoute("/devices/$id/replay")({
     streamKey:
       typeof search.streamKey === "string" ? search.streamKey : undefined,
   }),
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceReplayPage,
 })
 

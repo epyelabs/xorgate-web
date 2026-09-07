@@ -1,6 +1,7 @@
 import { redirect } from "@tanstack/react-router"
 import { getCurrentSession } from "@/lib/cognito"
 import { useAuthStore } from "@/store/auth"
+import { useWorkspaceStore } from "@/store/workspace"
 
 // Restoring a Cognito session is async, so a guard that read the auth store
 // synchronously would wave a private page through on a hard refresh (auth still
@@ -40,6 +41,11 @@ export const DEFAULT_AUTHED_ROUTE = "/devices"
 // Where a signed-in user with no organization is sent instead.
 export const ONBOARDING_ROUTE = "/onboarding"
 
+// Where a signed-in user whose organization has no workspace is sent. Devices
+// and workflow instances live inside a workspace, so those pages have nothing
+// to address without one.
+export const NO_WORKSPACE_ROUTE = "/no-workspace"
+
 // beforeLoad guard for /onboarding, and the shared half of requireAuth:
 // authentication only, with NO organization requirement. Onboarding must use
 // this one rather than requireAuth, or the org check below would bounce the
@@ -76,6 +82,28 @@ export async function requireAuth(opts: {
   await requireProfile(opts)
   if (useAuthStore.getState().organizations.length > 0) return
   throw redirect({ to: ONBOARDING_ROUTE, replace: true })
+}
+
+// beforeLoad guard for the workspace-scoped routes — /devices/* and
+// /workflow-instances/*. Everything they read is fetched with the workspace
+// header, so inside an organization with no workspace they can only render an
+// error: the fleet list 400s, and a device id in the URL belongs to nothing.
+// Those users go to /no-workspace, which explains the gap and offers the way
+// out, instead of a raw failure on a page they cannot use.
+//
+// ensureWorkspaces() is what makes this safe to run on every navigation: it
+// waits for the list to actually land, so an empty `workspaces` here means the
+// organization has none rather than that the fetch has not finished. When it
+// cannot load at all it throws, and the route error boundary shows a
+// retryable screen — the one outcome that is recoverable, unlike being
+// bounced somewhere else on a guess.
+export async function requireWorkspace(opts: {
+  location: { href: string }
+}): Promise<void> {
+  await requireAuth(opts)
+  await useWorkspaceStore.getState().ensureWorkspaces()
+  if (useWorkspaceStore.getState().workspaces.length > 0) return
+  throw redirect({ to: NO_WORKSPACE_ROUTE, replace: true })
 }
 
 // Makes `organizations` safe to branch on, and is the whole reason onboarding

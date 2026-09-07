@@ -12,8 +12,24 @@ const h = vi.hoisted(() => {
     me: vi.fn(),
     getCurrentSession: vi.fn(),
     signOut: vi.fn(),
+    listWorkspaces: vi.fn(),
   }
 })
+
+// The workspace store persists its selection to localStorage, which the node
+// test environment does not have — without a stand-in every store write logs a
+// zustand warning over the test output. Nothing here asserts on what is stored.
+if (!("localStorage" in globalThis)) {
+  const store = new Map<string, string>()
+  Object.defineProperty(globalThis, "localStorage", {
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+    },
+  })
+}
 
 vi.mock("@/lib/cognito", () => ({
   getCurrentSession: h.getCurrentSession,
@@ -29,8 +45,17 @@ vi.mock("@/lib/account-api", () => ({
   fetchMe: h.me,
 }))
 
+// auth-guard reaches the workspace store (requireWorkspace), which registers
+// its tenancy getters against this module at import time — so the mock has to
+// carry them even though no test here calls the API.
 vi.mock("@/lib/xorgate", () => ({
   xgMessage: (e: unknown) => String(e),
+  registerOrgIdGetter: vi.fn(),
+  registerWorkspaceIdGetter: vi.fn(),
+  xg: vi.fn(() => ({ workspaces: { list: h.listWorkspaces } })),
+  xgBootstrap: vi.fn(() => {
+    throw new Error("xgBootstrap() is not stubbed for this test")
+  }),
 }))
 
 const LIVE_SESSION = {
@@ -38,6 +63,7 @@ const LIVE_SESSION = {
 }
 
 const ORG = { id: "org-1", name: "Acme Robotics", slug: "acme-robotics" }
+const WORKSPACE = { id: "ws-1", name: "Default", slug: "default" }
 
 function meResponse(organizations: unknown[]) {
   return {
@@ -67,9 +93,14 @@ async function attempt(fn: () => Promise<void>) {
 beforeEach(() => {
   // initPromise, the /me flight and the zustand store are all module state.
   vi.resetModules()
+  // The workspace store rehydrates its persisted selection on import, so a
+  // leftover organization id would survive resetModules and pre-answer the
+  // very question these tests are asking.
+  localStorage.clear()
   h.me.mockReset()
   h.getCurrentSession.mockReset()
   h.signOut.mockReset()
+  h.listWorkspaces.mockReset()
 })
 
 describe("requireAuth organization check", () => {
@@ -168,5 +199,72 @@ describe("/onboarding bounce-back", () => {
     await requireProfile({ location: { href: "/onboarding" } })
 
     expect(useAuthStore.getState().organizations).toHaveLength(1)
+  })
+})
+
+describe("requireWorkspace", () => {
+  it("passes a user whose organization has a workspace", async () => {
+    h.getCurrentSession.mockResolvedValue(LIVE_SESSION)
+    h.me.mockResolvedValue(meResponse([ORG]))
+    h.listWorkspaces.mockResolvedValue([WORKSPACE])
+
+    const { requireWorkspace } = await import("@/lib/auth-guard")
+    expect((await attempt(() => requireWorkspace(AT))).passed).toBe(true)
+  })
+
+  it("sends a user whose organization has no workspace to /no-workspace", async () => {
+    h.getCurrentSession.mockResolvedValue(LIVE_SESSION)
+    h.me.mockResolvedValue(meResponse([ORG]))
+    h.listWorkspaces.mockResolvedValue([])
+
+    const { requireWorkspace } = await import("@/lib/auth-guard")
+    const result = await attempt(() => requireWorkspace(AT))
+
+    expect(result.redirectTo).toBe("/no-workspace")
+  })
+
+  // Same shape as the /me regression above: a failed list is byte-for-byte an
+  // organization with no workspaces, and treating the two alike would lock a
+  // user out of their own devices on a network blip.
+  it("does NOT redirect to /no-workspace when the workspace list fails", async () => {
+    h.getCurrentSession.mockResolvedValue(LIVE_SESSION)
+    h.me.mockResolvedValue(meResponse([ORG]))
+    h.listWorkspaces.mockRejectedValue(new Error("NETWORK GET /v1/workspaces"))
+
+    const { requireWorkspace } = await import("@/lib/auth-guard")
+    const result = await attempt(() => requireWorkspace(AT))
+
+    expect(result.redirectTo).toBeUndefined()
+    expect(result.thrown).toBeInstanceOf(Error)
+  })
+
+  it("still sends an org-less user to onboarding rather than /no-workspace", async () => {
+    h.getCurrentSession.mockResolvedValue(LIVE_SESSION)
+    h.me.mockResolvedValue(meResponse([]))
+
+    const { requireWorkspace } = await import("@/lib/auth-guard")
+    const result = await attempt(() => requireWorkspace(AT))
+
+    expect(result.redirectTo).toBe("/onboarding")
+    expect(h.listWorkspaces).not.toHaveBeenCalled()
+  })
+
+  // The guard and the auth-store subscriber both reach for the list in the
+  // same tick on a cold boot; without the shared flight that is two requests,
+  // and the second could answer first and publish a stale list.
+  it("shares one workspace fetch across concurrent guards", async () => {
+    h.getCurrentSession.mockResolvedValue(LIVE_SESSION)
+    h.me.mockResolvedValue(meResponse([ORG]))
+    h.listWorkspaces.mockResolvedValue([WORKSPACE])
+
+    const { requireWorkspace } = await import("@/lib/auth-guard")
+    const results = await Promise.all([
+      attempt(() => requireWorkspace(AT)),
+      attempt(() => requireWorkspace(AT)),
+      attempt(() => requireWorkspace(AT)),
+    ])
+
+    expect(results.every((r) => r.passed)).toBe(true)
+    expect(h.listWorkspaces).toHaveBeenCalledTimes(1)
   })
 })

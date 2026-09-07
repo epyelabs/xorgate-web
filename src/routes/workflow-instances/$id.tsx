@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { AlertTriangleIcon, RadioIcon, RotateCwIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -24,7 +24,7 @@ import { RunTrace } from "./-components/run-trace"
 import { formatDuration } from "@/components/data-table"
 
 export const Route = createFileRoute("/workflow-instances/$id")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: WorkflowInstanceDetailPage,
 })
 

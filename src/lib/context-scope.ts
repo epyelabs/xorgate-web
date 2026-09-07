@@ -29,3 +29,15 @@ export function shouldLeaveOnContextSwitch(
       : WORKSPACE_SCOPED_DETAIL
   return patterns.some((pattern) => pattern.test(pathname))
 }
+
+// Every page that only makes sense inside a workspace — the lists as well as
+// the detail pages above, since they too are fetched with the workspace header.
+// An organization with no workspace has nothing to show on any of them, which
+// is what requireWorkspace gates on at navigation time and what the shell
+// re-checks when an organization switch lands the user in that state without
+// navigating (see useWorkspaceRouteGuard).
+const WORKSPACE_SCOPED = [/^\/devices(\/|$)/, /^\/workflow-instances(\/|$)/]
+
+export function isWorkspaceScoped(pathname: string): boolean {
+  return WORKSPACE_SCOPED.some((pattern) => pattern.test(pathname))
+}

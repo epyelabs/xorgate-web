@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
@@ -28,7 +28,7 @@ import { TelemetryTab } from "./-components/settings/telemetry-tab"
 // filters). The default is encoded as an ABSENT param, keeping the common URL
 // clean.
 export const Route = createFileRoute("/devices/$id/settings")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => ({
     tab: SETTINGS_TABS.includes(search.tab as SettingsTab)
       ? (search.tab as SettingsTab)

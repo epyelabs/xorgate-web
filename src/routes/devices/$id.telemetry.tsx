@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import {
   CalendarIcon,
   ChevronLeftIcon,
@@ -102,7 +102,7 @@ export const Route = createFileRoute("/devices/$id/telemetry")({
       size,
     }
   },
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceTelemetryPage,
 })
 

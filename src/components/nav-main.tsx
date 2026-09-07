@@ -19,6 +19,7 @@ import { ChevronRightIcon } from "lucide-react"
 export function NavMain({
   label,
   items,
+  empty,
 }: {
   label: string
   items: {
@@ -31,8 +32,21 @@ export function NavMain({
       url: string
     }[]
   }[]
+  // Stands in for the menu when the group has no reachable targets — a
+  // workspace-scoped group inside an organization with no workspace. The group
+  // keeps its label so the section does not silently vanish from the sidebar.
+  empty?: React.ReactNode
 }) {
   const { pathname } = useLocation()
+
+  if (items.length === 0 && empty) {
+    return (
+      <SidebarGroup>
+        <SidebarGroupLabel>{label}</SidebarGroupLabel>
+        {empty}
+      </SidebarGroup>
+    )
+  }
 
   return (
     <SidebarGroup>

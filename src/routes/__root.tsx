@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/auth"
 import { useWorkspaceStore } from "@/store/workspace"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { ensureAuthInitialized } from "@/lib/auth-guard"
+import { useWorkspaceRouteGuard } from "@/lib/use-workspace-route-guard"
 import { markAppShellMounted } from "@/lib/app-shell"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
 import { AppLoadingScreen } from "@/components/app-loading-screen"
@@ -69,6 +70,7 @@ function resolveCrumbs(
     ]
   }
   if (pathname === "/onboarding") return [{ label: "Get started" }]
+  if (pathname === "/no-workspace") return [{ label: "No workspace" }]
   if (pathname === "/forbidden") return [{ label: "Access denied" }]
   if (pathname === "/settings") return [{ label: "Settings" }]
   if (pathname === "/members") return [{ label: "Members" }]
@@ -145,6 +147,11 @@ function RootLayout() {
   useEffect(() => {
     void ensureAuthInitialized()
   }, [])
+
+  // requireWorkspace covers arriving at a workspace-scoped page. This covers
+  // the other direction: the workspace going away under a page already open,
+  // which is a store change rather than a navigation, so no guard re-runs.
+  useWorkspaceRouteGuard()
 
   const isOnAuthRoute = AUTH_ROUTES.includes(location.pathname)
 

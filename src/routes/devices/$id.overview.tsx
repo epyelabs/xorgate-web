@@ -1,6 +1,6 @@
 import { type CSSProperties } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { ArrowRightIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -22,7 +22,7 @@ import { RecentSessionsSection } from "./-components/recent-sessions-section"
 // same hooks/components the deeper tabs use. It deliberately does NOT mount the
 // live WebRTC grid (that stays on Active Streams) so opening a device is cheap.
 export const Route = createFileRoute("/devices/$id/overview")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceOverviewPage,
 })
 

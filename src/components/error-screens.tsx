@@ -44,7 +44,16 @@ const IN_SHELL = [
   "group-has-data-[collapsible=icon]/sidebar-wrapper:min-h-[calc(100svh-3rem)]",
 ].join(" ")
 
-function ErrorScreen({
+/**
+ * The shared frame for a whole-page state: one panel, centered on the track the
+ * user is actually looking at. Exported because the non-error states that take
+ * over a page too — /no-workspace — have to sit in the same frame, and a second
+ * copy of these class strings would drift from this one.
+ *
+ * `code` is optional: the 404/403 screens name their status, a state that has
+ * no HTTP status of its own simply omits it.
+ */
+export function StatusScreen({
   icon,
   code,
   title,
@@ -53,7 +62,7 @@ function ErrorScreen({
   actions,
 }: {
   icon: ReactNode
-  code: string
+  code?: string
   title: string
   description: ReactNode
   detail?: ReactNode
@@ -71,9 +80,11 @@ function ErrorScreen({
             {icon}
           </div>
           <div className="flex flex-col items-center gap-1">
-            <span className="font-mono text-xs tracking-widest text-muted-foreground">
-              {code}
-            </span>
+            {code ? (
+              <span className="font-mono text-xs tracking-widest text-muted-foreground">
+                {code}
+              </span>
+            ) : null}
             <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
           </div>
           <p className="text-xs/relaxed text-muted-foreground">{description}</p>
@@ -116,7 +127,7 @@ export function NotFoundScreen() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
   return (
-    <ErrorScreen
+    <StatusScreen
       icon={<Snail />}
       code="404"
       title="Page not found"
@@ -142,7 +153,7 @@ export function ForbiddenScreen({ permission }: { permission?: Permission }) {
   const allowed = permission ? rolesWithPermission(permission) : []
 
   return (
-    <ErrorScreen
+    <StatusScreen
       icon={<ShieldAlertIcon />}
       code="403"
       title="You don't have access to this page"
@@ -188,7 +199,7 @@ export function AppErrorScreen({
   const message = xgMessage(error)
 
   return (
-    <ErrorScreen
+    <StatusScreen
       icon={<TriangleAlertIcon />}
       code="Error"
       title="Something went wrong"

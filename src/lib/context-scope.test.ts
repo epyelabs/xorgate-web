@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { shouldLeaveOnContextSwitch } from "./context-scope"
+import { isWorkspaceScoped, shouldLeaveOnContextSwitch } from "./context-scope"
 
 describe("shouldLeaveOnContextSwitch", () => {
   it("leaves workspace-scoped detail pages on either switch", () => {
@@ -32,5 +32,32 @@ describe("shouldLeaveOnContextSwitch", () => {
       expect(shouldLeaveOnContextSwitch("/billing", scope)).toBe(false)
       expect(shouldLeaveOnContextSwitch("/settings", scope)).toBe(false)
     }
+  })
+})
+
+describe("isWorkspaceScoped", () => {
+  it("covers the lists as well as the detail pages", () => {
+    expect(isWorkspaceScoped("/devices")).toBe(true)
+    expect(isWorkspaceScoped("/devices/abc-123")).toBe(true)
+    expect(isWorkspaceScoped("/devices/abc-123/telemetry")).toBe(true)
+    expect(isWorkspaceScoped("/workflow-instances")).toBe(true)
+    expect(isWorkspaceScoped("/workflow-instances/run-9")).toBe(true)
+  })
+
+  it("leaves the organization-level pages alone", () => {
+    expect(isWorkspaceScoped("/workflow-templates")).toBe(false)
+    expect(isWorkspaceScoped("/workflow-templates/t-1")).toBe(false)
+    expect(isWorkspaceScoped("/members")).toBe(false)
+    expect(isWorkspaceScoped("/api-keys")).toBe(false)
+    expect(isWorkspaceScoped("/settings")).toBe(false)
+    expect(isWorkspaceScoped("/account")).toBe(false)
+    expect(isWorkspaceScoped("/no-workspace")).toBe(false)
+  })
+
+  it("does not match a path that merely starts with the same letters", () => {
+    // The trailing-boundary group is what keeps a future /devices-archive (or
+    // a typo'd URL) from being read as the devices section.
+    expect(isWorkspaceScoped("/devices-archive")).toBe(false)
+    expect(isWorkspaceScoped("/workflow-instances-old")).toBe(false)
   })
 })

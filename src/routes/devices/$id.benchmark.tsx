@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { xgMessage } from "@/lib/xorgate"
 import type { IoCapabilities } from "@xorgate/sdk"
 import { useDevice, useDeviceModel } from "@/queries/devices"
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 
 export const Route = createFileRoute("/devices/$id/benchmark")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceBenchmarkPage,
 })
 

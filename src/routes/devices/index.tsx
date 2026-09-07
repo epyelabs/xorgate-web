@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,7 +34,7 @@ import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 
 export const Route = createFileRoute("/devices/")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DevicesListPage,
 })
 

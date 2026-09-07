@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { EllipsisVerticalIcon, PowerIcon, ZapIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -43,7 +43,7 @@ import { useBreadcrumbStore } from "@/store/breadcrumb"
 // request and flashes no skeleton: each leaf renders the cached answer and
 // refreshes behind it only once it goes stale.
 export const Route = createFileRoute("/devices/$id")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceLayout,
 })
 

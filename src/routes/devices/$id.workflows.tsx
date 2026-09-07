@@ -5,7 +5,7 @@ import {
   useDeviceAttachmentsCache,
   useDeviceWorkflowRuns,
 } from "@/queries/workflows"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
   MoreHorizontalIcon,
@@ -65,7 +65,7 @@ const RUNS_DEFAULT_SIZE = 25
 type SubTab = "attached" | "runs"
 
 export const Route = createFileRoute("/devices/$id/workflows")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceWorkflowsPage,
 })
 

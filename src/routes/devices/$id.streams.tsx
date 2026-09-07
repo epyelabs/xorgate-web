@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
 import { xgMessage } from "@/lib/xorgate"
 import { useDevice, useDeviceModel } from "@/queries/devices"
@@ -11,7 +11,7 @@ import {
 import { LiveVideoGrid } from "@/components/live-video-grid"
 
 export const Route = createFileRoute("/devices/$id/streams")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: DeviceStreamsPage,
 })
 

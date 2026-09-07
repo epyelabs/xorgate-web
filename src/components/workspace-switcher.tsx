@@ -36,12 +36,52 @@ export function WorkspaceSwitcher() {
   )
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const isLoading = useWorkspaceStore((s) => s.isLoadingWorkspaces)
+  const workspacesLoadedFor = useWorkspaceStore((s) => s.workspacesLoadedFor)
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const activeWorkspace =
     workspaces.find((p) => p.id === currentWorkspaceId) ?? null
+
+  // A switcher with nothing to switch between is a dead end: it opens onto a
+  // disabled "No workspaces yet" row and the create action buried under it. So
+  // when the organization genuinely has none, the control becomes the action
+  // instead — one click to the dialog the dropdown was hiding.
+  //
+  // Gated on the list having actually landed, not on it merely being empty:
+  // mid-fetch (a cold boot, an organization switch) `workspaces` is empty for
+  // want of an answer, and flashing "Create workspace" at someone who already
+  // has one reads as data loss.
+  const hasNoWorkspaces =
+    currentOrganizationId !== null &&
+    workspacesLoadedFor === currentOrganizationId &&
+    workspaces.length === 0
+
+  if (hasNoWorkspaces) {
+    return (
+      <>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            {/* Dashed border to read as an empty slot rather than a filled
+                selection, and unlike the switchers this one keeps its hover
+                state — it is a button, and should answer to the pointer like
+                one. The tooltip only surfaces on the icon rail, where the plus
+                is on its own. */}
+            <SidebarMenuButton
+              onClick={() => setDialogOpen(true)}
+              tooltip="Create workspace"
+              className="border border-dashed border-sidebar-border bg-background"
+            >
+              <PlusIcon className="text-muted-foreground" />
+              <span className="truncate font-normal">Create workspace</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <CreateWorkspaceDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      </>
+    )
+  }
 
   const triggerLabel = (() => {
     if (!currentOrganizationId) return "Select an organization"

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as NoWorkspaceRouteImport } from './routes/no-workspace'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ForbiddenRouteImport } from './routes/forbidden'
@@ -45,6 +46,11 @@ const SignupRoute = SignupRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NoWorkspaceRoute = NoWorkspaceRouteImport.update({
+  id: '/no-workspace',
+  path: '/no-workspace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/forbidden': typeof ForbiddenRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/no-workspace': typeof NoWorkspaceRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -209,6 +216,7 @@ export interface FileRoutesByTo {
   '/forbidden': typeof ForbiddenRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/no-workspace': typeof NoWorkspaceRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/forbidden': typeof ForbiddenRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
+  '/no-workspace': typeof NoWorkspaceRoute
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -269,6 +278,7 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/forgot-password'
     | '/login'
+    | '/no-workspace'
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/forgot-password'
     | '/login'
+    | '/no-workspace'
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/forbidden'
     | '/forgot-password'
     | '/login'
+    | '/no-workspace'
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
@@ -356,6 +368,7 @@ export interface RootRouteChildren {
   ForbiddenRoute: typeof ForbiddenRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
+  NoWorkspaceRoute: typeof NoWorkspaceRoute
   OnboardingRoute: typeof OnboardingRoute
   SignupRoute: typeof SignupRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -384,6 +397,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/no-workspace': {
+      id: '/no-workspace'
+      path: '/no-workspace'
+      fullPath: '/no-workspace'
+      preLoaderRoute: typeof NoWorkspaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -599,6 +619,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForbiddenRoute: ForbiddenRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
+  NoWorkspaceRoute: NoWorkspaceRoute,
   OnboardingRoute: OnboardingRoute,
   SignupRoute: SignupRoute,
   AuthCallbackRoute: AuthCallbackRoute,

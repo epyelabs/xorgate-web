@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { useWorkflowInstances } from "@/queries/workflows"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import { ChevronDownIcon, FilterIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,7 @@ import { useWorkspaceStore } from "@/store/workspace"
 import { StickyHeader } from "@/components/sticky-header"
 
 export const Route = createFileRoute("/workflow-instances/")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   component: WorkflowInstancesListPage,
 })
 

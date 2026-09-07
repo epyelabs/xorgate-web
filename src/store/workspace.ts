@@ -17,11 +17,24 @@ interface WorkspaceState {
   currentWorkspaceId: string | null
   workspaces: BrandedWorkspace[]
   isLoadingWorkspaces: boolean
+  // The organization `workspaces` actually reflects, or null when no list has
+  // landed for the current one yet. `workspaces: []` carries no meaning on its
+  // own — it is equally "this organization has none" and "we have not asked" —
+  // exactly the trap that made org-less users flap through onboarding, so read
+  // the two together (see requireWorkspace in lib/auth-guard.ts).
+  workspacesLoadedFor: string | null
 
   initialize: () => Promise<void>
   setCurrentOrganization: (orgId: string) => Promise<void>
   setCurrentWorkspace: (workspaceId: string) => void
   loadWorkspaces: () => Promise<void>
+  /**
+   * Guarantees `workspaces` is trustworthy for the active organization, or
+   * throws. Cheap once loaded, so route guards can call it on every
+   * navigation. A no-op when no organization is selected: requireAuth has
+   * already sent that user to onboarding.
+   */
+  ensureWorkspaces: () => Promise<void>
   createOrganization: (input: { name: string; slug: string }) => Promise<Organization>
   createWorkspace: (input: {
     name: string
@@ -47,6 +60,11 @@ interface WorkspaceState {
   reset: () => void
 }
 
+// The workspace list fetch currently in flight, and the organization it is
+// for. Module scope rather than store state: it is plumbing, not something a
+// component should ever render off.
+let flight: { orgId: string; promise: Promise<void> } | null = null
+
 export const useWorkspaceStore = create<WorkspaceState>()(
   persist(
     (set, get) => ({
@@ -54,6 +72,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       currentWorkspaceId: null,
       workspaces: [],
       isLoadingWorkspaces: false,
+      workspacesLoadedFor: null,
 
       initialize: async () => {
         const orgs = useAuthStore.getState().organizations
@@ -67,6 +86,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             currentOrganizationId: nextOrgId,
             currentWorkspaceId: null,
             workspaces: [],
+            workspacesLoadedFor: null,
           })
         }
 
@@ -81,6 +101,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           currentOrganizationId: orgId,
           currentWorkspaceId: null,
           workspaces: [],
+          workspacesLoadedFor: null,
         })
         await get().loadWorkspaces()
       },
@@ -90,28 +111,63 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       loadWorkspaces: async () => {
-        if (!get().currentOrganizationId) {
-          set({ workspaces: [], isLoadingWorkspaces: false })
-          return
-        }
-        set({ isLoadingWorkspaces: true })
-        try {
-          // The SDK unwraps this envelope verbatim, so `logoUrl` really is on
-          // the rows even though its published `Workspace` type predates it.
-          const workspaces = (await xg().workspaces.list()) as BrandedWorkspace[]
-          const persistedWorkspaceId = get().currentWorkspaceId
-          const stillValid =
-            persistedWorkspaceId && workspaces.some((p) => p.id === persistedWorkspaceId)
-          const nextWorkspaceId = stillValid
-            ? persistedWorkspaceId
-            : workspaces[0]?.id ?? null
+        const orgId = get().currentOrganizationId
+        if (!orgId) {
           set({
-            workspaces,
-            currentWorkspaceId: nextWorkspaceId,
+            workspaces: [],
+            workspacesLoadedFor: null,
             isLoadingWorkspaces: false,
           })
-        } catch {
-          set({ workspaces: [], isLoadingWorkspaces: false })
+          return
+        }
+        // Share one fetch per organization: the auth-store subscriber and a
+        // route guard both reach for this in the same tick on a cold boot, and
+        // the guard has to wait on the load the subscriber already started
+        // rather than race a second one against it.
+        if (flight && flight.orgId === orgId) return flight.promise
+        const promise = (async () => {
+          set({ isLoadingWorkspaces: true })
+          try {
+            // The SDK unwraps this envelope verbatim, so `logoUrl` really is on
+            // the rows even though its published `Workspace` type predates it.
+            const workspaces = (await xg().workspaces.list()) as BrandedWorkspace[]
+            // The organization can change while this is in flight (a fast
+            // switch); the answer belongs to the org that asked for it, so drop
+            // it rather than publish another organization's list.
+            if (get().currentOrganizationId !== orgId) return
+            const persistedWorkspaceId = get().currentWorkspaceId
+            const stillValid =
+              persistedWorkspaceId && workspaces.some((p) => p.id === persistedWorkspaceId)
+            const nextWorkspaceId = stillValid
+              ? persistedWorkspaceId
+              : workspaces[0]?.id ?? null
+            set({
+              workspaces,
+              currentWorkspaceId: nextWorkspaceId,
+              workspacesLoadedFor: orgId,
+              isLoadingWorkspaces: false,
+            })
+          } catch {
+            // Deliberately NOT marked loaded: a failed list is byte-for-byte
+            // an organization with no workspaces, and treating the two alike
+            // would lock a user out of their own devices until a reload.
+            if (get().currentOrganizationId !== orgId) return
+            set({ workspaces: [], isLoadingWorkspaces: false })
+          }
+        })().finally(() => {
+          if (flight?.orgId === orgId) flight = null
+        })
+        flight = { orgId, promise }
+        return promise
+      },
+
+      ensureWorkspaces: async () => {
+        const orgId = get().currentOrganizationId
+        if (!orgId) return
+        if (get().workspacesLoadedFor === orgId) return
+        await get().loadWorkspaces()
+        if (get().workspacesLoadedFor !== get().currentOrganizationId) {
+          throw new Error("Could not load this organization's workspaces")
         }
       },
 
@@ -129,6 +185,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set((state) => ({
           workspaces: [workspace, ...state.workspaces],
           currentWorkspaceId: workspace.id,
+          // Onboarding creates the first workspace before any list has landed,
+          // and the row in hand IS the organization's workspaces. Without this
+          // the guards would still read "not loaded" and re-fetch to learn what
+          // they already know.
+          workspacesLoadedFor: state.currentOrganizationId,
         }))
         return workspace
       },
@@ -176,10 +237,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       reset: () => {
+        flight = null
         set({
           currentOrganizationId: null,
           currentWorkspaceId: null,
           workspaces: [],
+          workspacesLoadedFor: null,
           isLoadingWorkspaces: false,
         })
       },

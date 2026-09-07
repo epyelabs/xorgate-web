@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { requireAuth } from "@/lib/auth-guard"
+import { requireWorkspace } from "@/lib/auth-guard"
 import { type DateRangeMode } from "@/components/data-table"
 import { type MediaSessionStatus } from "@/lib/xorgate"
 import {
@@ -17,7 +17,7 @@ const RANGE_MODES: DateRangeMode[] = ["all", "1h", "6h", "24h", "7d", "custom"]
 // a filtered view is shareable/bookmarkable and Back restores it. Defaults are
 // encoded as *absent* params, keeping the common case a clean URL.
 export const Route = createFileRoute("/devices/$id/media")({
-  beforeLoad: requireAuth,
+  beforeLoad: requireWorkspace,
   validateSearch: (search: Record<string, unknown>): SessionsSearch => {
     const sizeNum = Number(search.size)
     const size = SESSION_PAGE_SIZES.includes(sizeNum) ? sizeNum : undefined

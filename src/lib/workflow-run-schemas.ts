@@ -19,6 +19,9 @@ export const runStepStatusSchema = z.enum(["ok", "failed", "skipped"])
 
 // One node's execution in the run trace (mirrors a node in the definition).
 export const runStepSchema = z.object({
+  // ADDITIVE: topological order (absent on responses from older backends;
+  // the trace falls back to array order).
+  seq: z.number().optional(),
   nodeId: z.string(),
   label: z.string(),
   status: runStepStatusSchema,
@@ -33,11 +36,24 @@ export const runEventSchema = z.object({
   occurredAt: z.string(),
   confidence: z.number(),
   clip: z.boolean(),
+  // ADDITIVE: the evidence clip key (when `clip`) and the full event payload
+  // (the row's jsonb; absent on responses from older backends).
+  clipKey: z.string().nullable().optional(),
   payloadSummary: z.string(),
+  payload: z.unknown().optional(),
 })
 
 // Where a v2 run's S3 artifacts live (run detail `artifacts` column; null on
 // PoC runs). Keys are fetchable via GET /workflow-runs/{id}/artifact-url.
+// The MP4 the Fargate host muxes from one visualization node's annotated
+// frames (`video/<nodeId>.mp4`; ADDITIVE, absent on Lambda and older runs).
+export const runVideoArtifactSchema = z.object({
+  key: z.string(),
+  frames: z.number(),
+  fps: z.number(),
+})
+export type RunVideoArtifact = z.infer<typeof runVideoArtifactSchema>
+
 export const runArtifactsSchema = z.object({
   eventsKey: z.string().nullable(),
   outputs: z.record(
@@ -48,6 +64,7 @@ export const runArtifactsSchema = z.object({
       format: z.string(),
     }),
   ),
+  videos: z.record(z.string(), runVideoArtifactSchema).optional(),
 })
 export type RunArtifacts = z.infer<typeof runArtifactsSchema>
 

@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  AlertTriangleIcon,
   CheckIcon,
-  DownloadIcon,
-  ImageIcon,
+  FolderIcon,
   ListIcon,
   Loader2Icon,
   MinusIcon,
@@ -15,13 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { xg } from "@/lib/xorgate"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
-import type {
-  RunEvent,
-  RunStepStatus,
-  WorkflowRunDetail,
-} from "@/lib/workflow-run-schemas"
+import type { RunStepStatus, WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 import {
   detectionsPayloadSchema,
   type DetectionsPayload,
@@ -29,18 +22,20 @@ import {
 } from "@/lib/workflow-sim-schemas"
 import type { SimProgress } from "@/hooks/use-sim-progress"
 import type { WebcamIngest } from "@/hooks/use-webcam-ingest"
-import { DetectionBoxes, DetectionVideo } from "./detection-overlay"
+import { DetectionBoxes } from "./detection-overlay"
 import type { SimPhase } from "./simulator-panel"
-import {
-  firstVideoBinding,
-  formatSeconds,
-  type SourceBinding,
-} from "./simulator-types"
+import { formatSeconds } from "./simulator-types"
+import { DataTab } from "./output/data-tab"
+import { EventsTab } from "./output/events-tab"
+import { RunHeader } from "./output/run-header"
+import { TraceTab } from "./output/trace-tab"
+import { VideoTab } from "./output/video-tab"
 
 // The simulator "Output" area, backed by a REAL run: while in flight it shows
 // the live step trace / events / preview frames arriving over IoT WSS; once
-// the run row lands it flips to results (trace, events, overlayed video from
-// the post-run detections record set, Data Capture downloads).
+// the run row lands it flips to the engine's actual artifacts (run header,
+// the muxed visualization MP4, the step accordion, the event accordion, and
+// every file under the run prefix, viewable and downloadable).
 
 function StepStatusIcon({ status }: { status: RunStepStatus }) {
   if (status === "ok") return <CheckIcon className="size-3 text-emerald-600" />
@@ -48,7 +43,8 @@ function StepStatusIcon({ status }: { status: RunStepStatus }) {
   return <MinusIcon className="size-3 text-muted-foreground" />
 }
 
-function StepRow({
+// Live trace row (the in-flight view; the landed run uses the accordion).
+function LiveStepRow({
   label,
   status,
   output,
@@ -79,7 +75,7 @@ function StepRow({
   )
 }
 
-function EventRow({ event }: { event: SimEvent | RunEvent }) {
+function LiveEventRow({ event }: { event: SimEvent }) {
   const at = "occurredAt" in event ? event.occurredAt : ""
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5">
@@ -203,7 +199,8 @@ function LiveWebcamView({
 }
 
 // Latest engine-rendered preview JPEG per node (the Q2 fallback plane),
-// streamed while media graphs run; full-res frames land in S3.
+// streamed while media graphs run; full-res frames land in S3 and are muxed
+// into the output video once the run lands.
 function PreviewFrames({
   progress,
   nodeLabels,
@@ -244,10 +241,7 @@ export function SimulatorOutput({
   progress,
   run,
   ranDefinition,
-  bindings,
-  detections,
   webcam,
-  onDownload,
 }: {
   phase: SimPhase
   prepMessage: string | null
@@ -256,59 +250,17 @@ export function SimulatorOutput({
   progress: SimProgress
   run: WorkflowRunDetail | null
   ranDefinition: WorkflowDefinition | null
-  bindings: Record<string, SourceBinding>
-  detections: DetectionsPayload[] | null
   webcam: WebcamIngest | null
-  onDownload: (key: string) => void
 }) {
+  // Labels from the definition that RAN (the run row's snapshot once it
+  // lands; the POSTed definition before that).
   const nodeLabels = useMemo(() => {
     const map = new Map<string, string>()
-    for (const n of ranDefinition?.nodes ?? []) {
+    for (const n of (run?.definition ?? ranDefinition)?.nodes ?? []) {
       map.set(n.id, n.data.label || n.type)
     }
     return map
-  }, [ranDefinition])
-
-  // Local playback source for the overlay: an uploaded file plays from its
-  // object URL; an on-device session fetches a presigned URL for its FIRST
-  // segment (a session is N standalone files, so there is no single object to
-  // scrub — the box overlay still replays over the whole run's records).
-  const videoBinding = useMemo(() => firstVideoBinding(bindings), [bindings])
-  const [sessionUrl, setSessionUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (
-      phase !== "succeeded" ||
-      !videoBinding ||
-      videoBinding.kind !== "video-session"
-    )
-      return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { segments } = await xg().media.segments(
-          videoBinding.deviceId,
-          videoBinding.session.id,
-        )
-        const first = [...segments].sort((a, b) =>
-          a.startTs < b.startTs ? -1 : 1,
-        )[0]
-        if (!first) return
-        const { url } = await xg().media.segmentPlaybackUrl(
-          videoBinding.deviceId,
-          videoBinding.session.id,
-          first.seq,
-        )
-        if (!cancelled) setSessionUrl(url)
-      } catch {
-        // No local playback; the preview frames remain the visual.
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [phase, videoBinding])
-  const videoUrl =
-    videoBinding?.kind === "video-file" ? videoBinding.url : sessionUrl
+  }, [run, ranDefinition])
 
   // --- idle / preparing ---------------------------------------------------------
 
@@ -373,7 +325,7 @@ export function SimulatorOutput({
         {steps.length > 0 ? (
           <div className="flex flex-col">
             {steps.map((s) => (
-              <StepRow
+              <LiveStepRow
                 key={s.seq}
                 label={nodeLabels.get(s.nodeId) ?? s.label}
                 status={s.status}
@@ -386,7 +338,7 @@ export function SimulatorOutput({
         {progress.events.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             {progress.events.map((ev, i) => (
-              <EventRow key={i} event={ev} />
+              <LiveEventRow key={i} event={ev} />
             ))}
           </div>
         ) : null}
@@ -395,7 +347,7 @@ export function SimulatorOutput({
     )
   }
 
-  // --- terminal: results ----------------------------------------------------------
+  // --- terminal: the run's real artifacts -----------------------------------------
 
   if (!run) {
     return (
@@ -406,51 +358,19 @@ export function SimulatorOutput({
     )
   }
 
-  const artifactRows: { key: string; label: string; meta: string }[] = []
-  if (run.artifacts) {
-    for (const [nodeId, out] of Object.entries(run.artifacts.outputs)) {
-      artifactRows.push({
-        key: out.recordsKey,
-        label: nodeLabels.get(nodeId) ?? nodeId,
-        meta: `${out.count} record${out.count === 1 ? "" : "s"} · ${out.format}`,
-      })
-    }
-    if (run.artifacts.eventsKey) {
-      artifactRows.push({
-        key: run.artifacts.eventsKey,
-        label: "Events",
-        meta: "events.jsonl",
-      })
-    }
-  }
-
-  const showVideoTab = videoUrl !== null && detections !== null
-  const defaultTab = phase === "failed" ? "trace" : showVideoTab ? "video" : "trace"
+  const hasVideo = Object.keys(run.artifacts?.videos ?? {}).length > 0
+  const defaultTab = hasVideo && phase !== "failed" ? "video" : "trace"
 
   return (
     <div className="flex flex-col gap-2">
-      {phase === "failed" ? (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
-          <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="font-medium">{run.error ?? "Run failed"}</p>
-            {run.failedNodeId ? (
-              <p className="text-destructive/80">
-                Failed at: {nodeLabels.get(run.failedNodeId) ?? run.failedNodeId}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      <RunHeader run={run} engineTarget={engineTarget} nodeLabels={nodeLabels} />
 
       <Tabs defaultValue={defaultTab} className="gap-2">
         <TabsList variant="line" className="w-full justify-start">
-          {showVideoTab ? (
-            <TabsTrigger value="video">
-              <PlayIcon className="size-3.5" />
-              Video
-            </TabsTrigger>
-          ) : null}
+          <TabsTrigger value="video">
+            <PlayIcon className="size-3.5" />
+            Video
+          </TabsTrigger>
           <TabsTrigger value="trace">
             <ListIcon className="size-3.5" />
             Trace
@@ -464,83 +384,32 @@ export function SimulatorOutput({
               </Badge>
             ) : null}
           </TabsTrigger>
-          {artifactRows.length > 0 ? (
-            <TabsTrigger value="artifacts">
-              <ImageIcon className="size-3.5" />
-              Data
-            </TabsTrigger>
-          ) : null}
+          <TabsTrigger value="artifacts">
+            <FolderIcon className="size-3.5" />
+            Data
+          </TabsTrigger>
         </TabsList>
 
-        {showVideoTab ? (
-          <TabsContent value="video" className="flex flex-col gap-2">
-            <DetectionVideo src={videoUrl} records={detections} />
-            <p className="text-xs text-muted-foreground">
-              {detections.length} detection frame
-              {detections.length === 1 ? "" : "s"} overlaid from the run's
-              record set.
-            </p>
-          </TabsContent>
-        ) : null}
+        <TabsContent value="video" className="flex flex-col gap-2">
+          <VideoTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
+        </TabsContent>
 
         <TabsContent value="trace" className="flex flex-col">
-          {run.steps.map((s) => (
-            <StepRow
-              key={s.nodeId}
-              label={nodeLabels.get(s.nodeId) ?? s.label}
-              status={s.status}
-              output={s.output}
-              durationMs={s.durationMs}
-            />
-          ))}
-          <p className="pt-2 text-[11px] text-muted-foreground">
-            Ran on the {engineTarget ?? "v2"} engine
-            {run.durationMs !== null
-              ? ` in ${formatSeconds(run.durationMs / 1000)}`
-              : ""}
-            .
-          </p>
+          <TraceTab
+            run={run}
+            definition={ranDefinition}
+            nodeLabels={nodeLabels}
+            engineTarget={engineTarget}
+          />
         </TabsContent>
 
         <TabsContent value="events" className="flex flex-col gap-1.5">
-          {run.events.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-              No events emitted for this run.
-            </p>
-          ) : (
-            run.events.map((ev) => <EventRow key={ev.id} event={ev} />)
-          )}
+          <EventsTab run={run} />
         </TabsContent>
 
-        {artifactRows.length > 0 ? (
-          <TabsContent value="artifacts" className="flex flex-col gap-1.5">
-            {artifactRows.map((row) => (
-              <div
-                key={row.key}
-                className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium text-foreground">
-                    {row.label}
-                  </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {row.meta}
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onDownload(row.key)}
-                  title="Download"
-                  aria-label={`Download ${row.label}`}
-                >
-                  <DownloadIcon className="size-3.5" />
-                </Button>
-              </div>
-            ))}
-          </TabsContent>
-        ) : null}
+        <TabsContent value="artifacts" className="flex flex-col gap-1.5">
+          <DataTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
+        </TabsContent>
       </Tabs>
     </div>
   )

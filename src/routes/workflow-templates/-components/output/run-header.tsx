@@ -3,29 +3,31 @@ import { Badge } from "@/components/ui/badge"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 import { formatSeconds } from "../simulator-types"
 
-// Compact summary of the landed run row (mirrors result.json): status, engine
-// target, total duration, the engine's metrics, and the error + failed node
-// for failed runs.
-const METRIC_LABELS: Array<[key: string, label: string]> = [
-  ["nodes", "nodes"],
-  ["okSteps", "ok steps"],
-  ["events", "events"],
-  ["messages", "messages"],
-]
+// Compact summary of the landed run row: status, total duration, steps
+// completed out of the graph's nodes, events, and the error + failed node
+// for failed runs. Deliberately says nothing about which engine target ran
+// it: that is an infrastructure detail, not part of the result.
+function metric(run: WorkflowRunDetail, key: string): number | null {
+  const v = run.metrics[key]
+  return typeof v === "number" ? v : null
+}
 
 export function RunHeader({
   run,
-  engineTarget,
   nodeLabels,
 }: {
   run: WorkflowRunDetail
-  engineTarget: "lambda" | "fargate" | null
   nodeLabels: Map<string, string>
 }) {
   const failed = run.status === "failed"
-  const metrics = METRIC_LABELS.filter(([k]) => k in run.metrics).map(
-    ([k, label]) => `${run.metrics[k]} ${label}`,
-  )
+  const okSteps = metric(run, "okSteps") ?? run.steps.filter((s) => s.status === "ok").length
+  const nodes = metric(run, "nodes") ?? run.definition.nodes.length
+  const events = metric(run, "events") ?? run.events.length
+  const parts = [
+    run.durationMs !== null ? formatSeconds(run.durationMs / 1000) : null,
+    `${okSteps}/${nodes} steps completed`,
+    `${events} event${events === 1 ? "" : "s"}`,
+  ].filter(Boolean)
   return (
     <div className="flex flex-col gap-1.5" data-testid="run-header">
       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -33,14 +35,7 @@ export function RunHeader({
           {failed ? <XIcon /> : <CheckIcon />}
           {run.status}
         </Badge>
-        <span>
-          {engineTarget ?? "v2"} engine
-          {run.durationMs !== null ? ` · ${formatSeconds(run.durationMs / 1000)}` : ""}
-          {run.engineVersion !== null ? ` · engine v${run.engineVersion}` : ""}
-        </span>
-        {metrics.length > 0 ? (
-          <span className="font-mono text-[10px]">{metrics.join(" · ")}</span>
-        ) : null}
+        <span>{parts.join(" · ")}</span>
       </div>
       {failed ? (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">

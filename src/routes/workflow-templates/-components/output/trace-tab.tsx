@@ -31,12 +31,10 @@ export function TraceTab({
   run,
   definition,
   nodeLabels,
-  engineTarget,
 }: {
   run: WorkflowRunDetail
   definition: WorkflowDefinition | null
   nodeLabels: Map<string, string>
-  engineTarget: "lambda" | "fargate" | null
 }) {
   const nodeTypes = new Map((definition ?? run.definition).nodes.map((n) => [n.id, n.type]))
   const steps = run.steps
@@ -99,8 +97,7 @@ export function TraceTab({
         </Accordion>
       )}
       <p className="pt-2 text-[11px] text-muted-foreground">
-        Ran on the {engineTarget ?? "v2"} engine
-        {run.durationMs !== null ? ` in ${formatSeconds(run.durationMs / 1000)}` : ""}
+        {run.durationMs !== null ? `Finished in ${formatSeconds(run.durationMs / 1000)}` : "Finished"}
         {steps.length > 0 ? ` · ${steps.length} step${steps.length === 1 ? "" : "s"}, ${formatSeconds(totalMs / 1000)} in nodes` : ""}
         .
       </p>

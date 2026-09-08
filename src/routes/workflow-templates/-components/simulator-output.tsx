@@ -311,7 +311,7 @@ export function SimulatorOutput({
                 boots.
               </>
             ) : (
-              `Running on the ${engineTarget ?? "…"} engine…`
+              "Running the workflow…"
             )}
           </p>
         </div>
@@ -363,7 +363,7 @@ export function SimulatorOutput({
 
   return (
     <div className="flex flex-col gap-2">
-      <RunHeader run={run} engineTarget={engineTarget} nodeLabels={nodeLabels} />
+      <RunHeader run={run} nodeLabels={nodeLabels} />
 
       <Tabs defaultValue={defaultTab} className="gap-2">
         <TabsList variant="line" className="w-full justify-start">
@@ -399,7 +399,6 @@ export function SimulatorOutput({
             run={run}
             definition={ranDefinition}
             nodeLabels={nodeLabels}
-            engineTarget={engineTarget}
           />
         </TabsContent>
 

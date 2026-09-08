@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-mock"
+import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
@@ -53,6 +53,10 @@ const VISUALIZATION_OVERLAY_PORTS: Record<string, string[]> = {
   depth_map: ["depth"],
   masks: ["segments"],
 }
+
+// Config keys the full-screen code function editor owns; the generic form
+// never renders them as plain fields.
+const CODE_EDITOR_KEYS = new Set(["code", "versions", "deployedVersion"])
 
 // "minConfidence" -> "Min confidence", "cacheTtlSeconds" -> "Cache ttl seconds"
 function humanize(key: string): string {
@@ -266,7 +270,12 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
 
   const config = node.data.config
   const objectSchema = (entry?.configSchema ?? {}) as ObjectSchema
-  const properties = Object.entries(objectSchema.properties ?? {})
+  // Code function nodes: the served schema carries `code`, `versions` and
+  // `deployedVersion` (the engine's full config), which the function editor
+  // owns (Code / Versions tabs); the popover keeps the plain knobs only.
+  const properties = Object.entries(objectSchema.properties ?? {}).filter(
+    ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key),
+  )
   const requiredKeys = new Set(objectSchema.required ?? [])
 
   // Visualization overlays: only offer layers whose tagged input is connected.

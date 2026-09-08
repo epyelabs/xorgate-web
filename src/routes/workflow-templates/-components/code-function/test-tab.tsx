@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-mock"
+import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import {
   type FunctionConfig,
   runTestEvent,

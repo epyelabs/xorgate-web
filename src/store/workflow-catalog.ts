@@ -1,6 +1,5 @@
 import { create } from "zustand"
 import { xg, xgMessage } from "@/lib/xorgate"
-import { mergeMockFunctionNodes } from "@/lib/code-function-mock"
 import {
   type CatalogNode,
   type WorkflowCatalog,
@@ -42,10 +41,11 @@ export const useWorkflowCatalog = create<WorkflowCatalogState>((set, get) => ({
       if (!parsed.success) {
         throw new Error("Unexpected /workflow-catalog response shape")
       }
-      // UI/UX mockup: the "Code Function" category is injected client-side
-      // until the backend serves function.* node types (skipped per-type once
-      // it does — see code-function-mock.ts).
-      const catalog = mergeMockFunctionNodes(parsed.data)
+      // The "Code Function" category (function.javascript / function.python)
+      // is served by the backend like every other node since
+      // @xorgate/workflow-engine 0.3.0; nothing is injected client-side. The
+      // Test tab of the function editor is still local (code-function-runtime.ts).
+      const catalog = parsed.data
       set({
         catalog,
         byType: Object.fromEntries(catalog.nodes.map((n) => [n.type, n])),

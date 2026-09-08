@@ -139,3 +139,22 @@ export function useArtifactSize(runId: string, key: string | null): number | nul
   if (!key || size?.key !== key) return undefined
   return size.size
 }
+
+// Presign with bounded concurrency, for grids of many small objects (every
+// annotated frame at once): at most MAX_PRESIGN_IN_FLIGHT API calls run
+// together, the rest queue in order.
+const MAX_PRESIGN_IN_FLIGHT = 6
+let inFlight = 0
+const waiting: Array<() => void> = []
+export async function presignQueued(runId: string, key: string): Promise<string> {
+  if (inFlight >= MAX_PRESIGN_IN_FLIGHT) {
+    await new Promise<void>((resolve) => waiting.push(resolve))
+  }
+  inFlight += 1
+  try {
+    return await presign(runId, key)
+  } finally {
+    inFlight -= 1
+    waiting.shift()?.()
+  }
+}

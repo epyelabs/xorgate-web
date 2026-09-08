@@ -1,17 +1,82 @@
 import { z } from "zod"
-import {
-  DEFAULT_JS_CODE,
-  DEFAULT_PY_CODE,
-  FUNCTION_NODE_RUNTIMES,
-} from "./code-function-mock"
 
-// UI/UX MOCKUP — client-side "runtime" for Code Function nodes.
+// Client-side helpers for Code Function nodes (function.javascript /
+// function.python). The node types themselves are SERVED by the backend
+// (GET /workflow-catalog, from @xorgate/workflow-engine 0.3.0 onward) and
+// executed by the engine on the Fargate target in a sandboxed child process;
+// this module only owns what stays in the browser: the typed view over the
+// node's config, the per-language editor metadata, and the Test tab.
 //
-// Test runs: JavaScript actually executes in a throwaway Web Worker in the
-// user's own browser (same trust boundary as devtools); Python is simulated
-// with a canned result until the backend cloud runtime exists. Monitoring
-// data is deterministic per node id so the monitor tab looks stable across
-// reopens without any backend.
+// Test runs are still local: JavaScript executes in a throwaway Web Worker in
+// the user's own browser (same trust boundary as devtools); Python is
+// simulated with a canned result (a server-side test endpoint is a follow-up,
+// wf-engine-integration Q8). Monitoring data is deterministic per node id so
+// the monitor tab looks stable across reopens without any backend.
+
+export type FunctionLanguage = "javascript" | "python"
+
+export interface FunctionRuntimeInfo {
+  language: FunctionLanguage
+  /** Runtime label shown in the editor header (what the engine image runs). */
+  runtimeLabel: string
+  /** File name shown on the code tab. */
+  fileName: string
+  monacoLanguage: string
+}
+
+export const FUNCTION_NODE_RUNTIMES: Record<string, FunctionRuntimeInfo> = {
+  "function.javascript": {
+    language: "javascript",
+    runtimeLabel: "Node.js 20 sandbox",
+    fileName: "index.js",
+    monacoLanguage: "javascript",
+  },
+  "function.python": {
+    language: "python",
+    runtimeLabel: "Python 3.11 sandbox",
+    fileName: "handler.py",
+    monacoLanguage: "python",
+  },
+}
+
+export function isCodeFunctionType(catalogType: string | undefined): boolean {
+  return catalogType !== undefined && catalogType in FUNCTION_NODE_RUNTIMES
+}
+
+// Starter code, used only when a node's config carries no `code` (the served
+// catalog's configDefaults normally supply the engine's own starter).
+export const DEFAULT_JS_CODE = `/**
+ * Xorgate code function (JavaScript).
+ *
+ * Called once per JSON event arriving on the "event" input. Whatever the
+ * handler returns is emitted on the "result" output; return null or
+ * undefined to drop the event.
+ */
+async function handler(event, context) {
+  context.log("received event", event)
+
+  return {
+    ...event,
+    processedAt: new Date().toISOString(),
+  }
+}
+`
+
+export const DEFAULT_PY_CODE = `"""Xorgate code function (Python).
+
+Called once per JSON event arriving on the "event" input. Whatever the
+handler returns is emitted on the "result" output; return None to drop
+the event.
+"""
+
+def handler(event, context):
+    context.log("received event", event)
+
+    return {
+        **event,
+        "processed": True,
+    }
+`
 
 // --- Typed view over the node's loose config jsonb -----------------------------
 

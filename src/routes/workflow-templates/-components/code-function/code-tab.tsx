@@ -1,7 +1,7 @@
 import Editor from "@monaco-editor/react"
 import { InfoIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-mock"
+import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import type { FunctionConfig } from "@/lib/code-function-runtime"
 import { setupMonaco } from "@/lib/monaco-setup"
 import { useWorkflowEditor } from "@/store/workflow-editor"

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-mock"
+import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { useWorkflowEditor } from "@/store/workflow-editor"
 import { CodeTab } from "./code-tab"

@@ -5,16 +5,15 @@ import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 import { formatBytes } from "../simulator-types"
 import { ArtifactViewerDialog } from "./artifact-viewer-dialog"
+import { FrameThumb, FramesDialog } from "./frames-dialog"
 import {
   downloadArtifact,
   fetchArtifactText,
   presign,
-  presignQueued,
   useArtifactSize,
 } from "./artifact-fetch"
 import {
   buildArtifactGroups,
-  frameKey,
   inputKeysFromManifest,
   isViewable,
   JSON_VIEW_MAX_BYTES,
@@ -27,86 +26,56 @@ import {
 // its own size (header-only); the manifest is read once to list materialized
 // inputs. Frames show a small presigned thumbnail strip.
 
-// One presigned thumbnail; presigns itself on mount through the bounded
-// queue so "show all" on a long run never floods the API.
-function FrameThumb({ runId, nodeId, seq }: { runId: string; nodeId: string; seq: number }) {
-  const key = frameKey(runId, nodeId, seq)
-  const [url, setUrl] = useState<string | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    presignQueued(runId, key).then(
-      (u) => {
-        if (!cancelled) setUrl(u)
-      },
-      () => {},
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [runId, key])
-  return (
-    <a
-      href={url ?? undefined}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={key}
-      className="relative block h-14 w-24 shrink-0 overflow-hidden rounded border border-border bg-black"
-    >
-      {url ? (
-        <img
-          src={url}
-          alt={`Frame ${seq}`}
-          loading="lazy"
-          className="block size-full object-cover"
-          onError={(e) => {
-            ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
-          }}
-        />
-      ) : null}
-      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[9px] text-white">
-        #{seq}
-      </span>
-    </a>
-  )
-}
-
 // The annotated frames of one visualization node: a sample strip (first,
-// quartiles, last) labelled as such, or every frame in a wrapping grid.
+// quartiles, last) labelled as such. A thumbnail opens that frame full size
+// in the frames dialog; "Show all" opens the dialog on the grid of every
+// frame. Nothing leaves the editor page.
 function FrameStrip({
   runId,
   nodeId,
+  label,
   count,
   sampleSeqs,
 }: {
   runId: string
   nodeId: string
+  label: string
   count: number
   sampleSeqs: number[]
 }) {
-  const [showAll, setShowAll] = useState(false)
-  const seqs = showAll ? Array.from({ length: count }, (_, i) => i) : sampleSeqs
+  const [dialog, setDialog] = useState<{ open: boolean; seq: number | null }>({ open: false, seq: null })
   return (
     <div className="flex flex-col gap-1">
-      <div
-        className={showAll ? "flex max-h-72 flex-wrap gap-1 overflow-y-auto" : "flex gap-1 overflow-x-auto"}
-        data-testid={`frame-strip-${nodeId}`}
-      >
-        {seqs.map((seq) => (
-          <FrameThumb key={seq} runId={runId} nodeId={nodeId} seq={seq} />
+      <div className="flex gap-1 overflow-x-auto" data-testid={`frame-strip-${nodeId}`}>
+        {sampleSeqs.map((seq) => (
+          <FrameThumb
+            key={seq}
+            runId={runId}
+            nodeId={nodeId}
+            seq={seq}
+            onOpen={(s) => setDialog({ open: true, seq: s })}
+          />
         ))}
       </div>
       <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <span data-testid="frame-strip-caption">
-          {showAll
-            ? `All ${count} frames. Each opens full size in a new tab.`
-            : `Showing ${seqs.length} of ${count} frames (${seqs.map((s) => `#${s}`).join(", ")}). Each opens full size in a new tab.`}
+          Showing {sampleSeqs.length} of {count} frames ({sampleSeqs.map((s) => `#${s}`).join(", ")}). Click one to view it full size.
         </span>
         {count > sampleSeqs.length ? (
-          <Button type="button" variant="ghost" size="xs" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Show sample" : `Show all ${count}`}
+          <Button type="button" variant="ghost" size="xs" onClick={() => setDialog({ open: true, seq: null })}>
+            Show all {count}
           </Button>
         ) : null}
       </div>
+      <FramesDialog
+        runId={runId}
+        nodeId={nodeId}
+        label={label}
+        count={count}
+        open={dialog.open}
+        initialSeq={dialog.seq}
+        onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+      />
     </div>
   )
 }
@@ -176,6 +145,7 @@ function ArtifactRow({
           <FrameStrip
             runId={runId}
             nodeId={entry.nodeId}
+            label={entry.label}
             count={entry.frames.count}
             sampleSeqs={entry.frames.previewSeqs}
           />

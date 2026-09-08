@@ -9,7 +9,7 @@ import {
   downloadArtifact,
   fetchArtifactText,
   presign,
-  probeSize,
+  useArtifactSize,
 } from "./artifact-fetch"
 import {
   buildArtifactGroups,
@@ -22,8 +22,8 @@ import {
 } from "./run-artifacts"
 
 // Every file the run produced, grouped, each viewable (JSON / JSONL in the
-// tree viewer) and downloadable through a presigned URL. Sizes come from a
-// header-only probe per key; the manifest is read once to list materialized
+// tree viewer) and downloadable through a presigned URL. Each file row probes
+// its own size (header-only); the manifest is read once to list materialized
 // inputs. Frames show a small presigned thumbnail strip.
 
 function FrameStrip({
@@ -93,14 +93,14 @@ function FrameStrip({
 function ArtifactRow({
   runId,
   entry,
-  size,
   onView,
 }: {
   runId: string
   entry: ArtifactEntry
-  size: number | null | undefined
   onView: (entry: ArtifactEntry) => void
 }) {
+  const isDirectory = entry.frames !== undefined
+  const size = useArtifactSize(runId, isDirectory ? null : entry.key)
   const viewable = isViewable(entry)
   const tooLarge = size !== null && size !== undefined && size > JSON_VIEW_MAX_BYTES
   const isDir = entry.frames !== undefined
@@ -175,7 +175,6 @@ export function DataTab({
   const [manifestInputs, setManifestInputs] = useState<
     { nodeId: string; key: string }[] | null
   >(null)
-  const [sizes, setSizes] = useState<Record<string, number | null>>({})
   const [viewing, setViewing] = useState<ArtifactEntry | null>(null)
 
   // The manifest names the materialized inputs (Fargate telemetry runs).
@@ -201,39 +200,6 @@ export function DataTab({
     [run, definition, nodeLabels, manifestInputs],
   )
 
-  // Header-only size probe per file (frames are a directory: skipped).
-  const fileKeys = useMemo(
-    () => groups.flatMap((g) => g.entries.filter((e) => !e.frames).map((e) => e.key)),
-    [groups],
-  )
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const pending = fileKeys.filter((k) => !(k in sizes))
-      if (pending.length === 0) return
-      const probed = await Promise.all(
-        pending.map(async (key) => {
-          try {
-            return [key, await probeSize(await presign(run.id, key))] as const
-          } catch {
-            return [key, null] as const
-          }
-        }),
-      )
-      if (cancelled) return
-      setSizes((prev) => {
-        const next = { ...prev }
-        for (const [k, v] of probed) next[k] = v
-        return next
-      })
-    })()
-    return () => {
-      cancelled = true
-    }
-    // `sizes` is read to skip probed keys; re-running on its change would loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [run.id, fileKeys])
-
   return (
     <div className="flex flex-col gap-3" data-testid="data-tab">
       {groups.map((g) => (
@@ -244,7 +210,6 @@ export function DataTab({
               key={entry.id}
               runId={run.id}
               entry={entry}
-              size={entry.frames ? undefined : sizes[entry.key]}
               onView={setViewing}
             />
           ))}

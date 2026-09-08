@@ -12,16 +12,21 @@ export async function presign(runId: string, key: string): Promise<string> {
 
 // Object size without downloading it: Content-Length is a CORS-safelisted
 // response header, so a plain GET exposes it; the body is cancelled right
-// after the headers arrive. Null when the header is missing.
-export async function probeSize(url: string): Promise<number | null> {
+// after the headers arrive (and the request aborted after `timeoutMs`, so a
+// large object never holds the listing). Null when unknown.
+export async function probeSize(url: string, timeoutMs = 8000): Promise<number | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: controller.signal })
     const len = res.headers.get("content-length")
-    await res.body?.cancel().catch(() => {})
+    controller.abort() // drop the body; the headers are all we need
     if (!res.ok) return null
     return len !== null && len !== "" ? Number(len) : null
   } catch {
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -114,4 +119,23 @@ export function useArtifactUrl(runId: string, key: string | null): {
   }, [runId, key])
   if (!key || state.key !== key) return { url: null, error: null }
   return { url: state.url, error: state.error }
+}
+
+// Size of one artifact (header-only probe), fetched once per mounted row;
+// undefined while probing, null when unknown.
+export function useArtifactSize(runId: string, key: string | null): number | null | undefined {
+  const [size, setSize] = useState<{ key: string; size: number | null } | null>(null)
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    ;(async () => {
+      const probed = await probeSize(await presign(runId, key)).catch(() => null)
+      if (!cancelled) setSize({ key, size: probed })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [runId, key])
+  if (!key || size?.key !== key) return undefined
+  return size.size
 }

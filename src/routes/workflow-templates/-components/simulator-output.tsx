@@ -30,6 +30,7 @@ import { EventsTab } from "./output/events-tab"
 import { RunHeader } from "./output/run-header"
 import { TraceTab } from "./output/trace-tab"
 import { VideoTab } from "./output/video-tab"
+import { visualizationNodes } from "./output/run-artifacts"
 
 // The simulator "Output" area, backed by a REAL run: while in flight it shows
 // the live step trace / events / preview frames arriving over IoT WSS; once
@@ -358,7 +359,12 @@ export function SimulatorOutput({
     )
   }
 
+  // The Video tab exists only for graphs with a Visualization node: it plays
+  // the muxed MP4, or says why there is none (failed run, older run). A
+  // telemetry-only graph has nothing video-related to show, so no tab.
   const hasVideo = Object.keys(run.artifacts?.videos ?? {}).length > 0
+  const showVideoTab =
+    hasVideo || visualizationNodes(ranDefinition ?? run.definition).length > 0
   const defaultTab = hasVideo && phase !== "failed" ? "video" : "trace"
 
   return (
@@ -367,10 +373,12 @@ export function SimulatorOutput({
 
       <Tabs defaultValue={defaultTab} className="gap-2">
         <TabsList variant="line" className="w-full justify-start">
-          <TabsTrigger value="video">
-            <PlayIcon className="size-3.5" />
-            Video
-          </TabsTrigger>
+          {showVideoTab ? (
+            <TabsTrigger value="video">
+              <PlayIcon className="size-3.5" />
+              Video
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="trace">
             <ListIcon className="size-3.5" />
             Trace
@@ -390,9 +398,11 @@ export function SimulatorOutput({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="video" className="flex flex-col gap-2">
-          <VideoTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
-        </TabsContent>
+        {showVideoTab ? (
+          <TabsContent value="video" className="flex flex-col gap-2">
+            <VideoTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="trace" className="flex flex-col">
           <TraceTab

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { SquareFunctionIcon, Trash2Icon } from "lucide-react"
+import { PlusIcon, SquareFunctionIcon, Trash2Icon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,6 +35,7 @@ interface PropSchema {
   minimum?: number
   maximum?: number
   exclusiveMinimum?: number
+  minItems?: number
   items?: {
     type?: string
     enum?: unknown[]
@@ -82,73 +83,78 @@ function asStringArray(value: unknown): string[] {
 
 // --- Arrays of objects --------------------------------------------------------
 // The generic string-array input cannot hold these (it would render nothing
-// and, worse, overwrite the objects with strings on the first keystroke).
-// Every object array is edited as text, one item per line: a point-like item
-// (all-numeric properties such as { lat, lng }) as comma-separated numbers in
-// the schema's property order, anything else as one JSON object per line.
-// The draft is local; the config only changes once the whole text parses, so
-// a half-typed line never corrupts the definition.
+// and, worse, overwrite the objects with strings on the first keystroke). An
+// object array whose item properties are all primitive (a geofence polygon:
+// { lat, lng }) is edited as a numbered list of rows, one input per property,
+// with add / remove. Cells keep a local text draft so "-" or "43." can be
+// typed; the config updates only with fully parsed rows, so a half-typed cell
+// never corrupts the definition.
 
-function pointKeys(schema: PropSchema): string[] | null {
+const NUMERIC_TYPES = new Set(["number", "integer"])
+
+function itemKeys(schema: PropSchema): string[] | null {
   const props = schema.items?.properties
   if (!props) return null
   const keys = Object.keys(props)
   if (keys.length === 0) return null
-  return keys.every(
-    (k) => props[k].type === "number" || props[k].type === "integer"
+  const primitive = keys.every(
+    (k) => NUMERIC_TYPES.has(props[k].type ?? "") || props[k].type === "string"
   )
-    ? keys
-    : null
+  return primitive ? keys : null
 }
 
-function objectArrayToText(value: unknown, keys: string[] | null): string {
-  if (!Array.isArray(value)) return ""
-  return value
-    .map((item) => {
-      if (keys && item && typeof item === "object") {
-        return keys
-          .map((k) => String((item as Record<string, unknown>)[k] ?? ""))
-          .join(", ")
-      }
-      return JSON.stringify(item)
-    })
-    .join("\n")
+// "polygon" with { lat, lng } rows -> "vertex"; anything else -> "item".
+function itemNoun(keys: string[]): string {
+  return keys.length === 2 && keys.includes("lat") && keys.includes("lng")
+    ? "vertex"
+    : "item"
 }
 
-function parseObjectArrayText(
-  text: string,
-  keys: string[] | null
-): { items: Record<string, unknown>[] } | { error: string } {
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-  const items: Record<string, unknown>[] = []
-  for (const [i, line] of lines.entries()) {
-    if (keys) {
-      const parts = line.split(",").map((p) => p.trim())
-      if (
-        parts.length !== keys.length ||
-        parts.some((p) => p === "" || !Number.isFinite(Number(p)))
-      ) {
-        return { error: `Line ${i + 1}: expected ${keys.join(", ")}` }
-      }
-      items.push(Object.fromEntries(keys.map((k, j) => [k, Number(parts[j])])))
-    } else {
-      try {
-        const obj = JSON.parse(line) as unknown
-        if (!obj || typeof obj !== "object" || Array.isArray(obj))
-          throw new Error("not an object")
-        items.push(obj as Record<string, unknown>)
-      } catch {
-        return { error: `Line ${i + 1}: expected a JSON object` }
-      }
+function plural(noun: string, n: number): string {
+  if (n === 1) return noun
+  return noun === "vertex" ? "vertices" : `${noun}s`
+}
+
+type Row = Record<string, string>
+
+function rowsFromValue(value: unknown, keys: string[]): Row[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => {
+    const obj = (item && typeof item === "object" ? item : {}) as Record<
+      string,
+      unknown
+    >
+    return Object.fromEntries(
+      keys.map((k) => [
+        k,
+        obj[k] === undefined || obj[k] === null ? "" : String(obj[k]),
+      ])
+    )
+  })
+}
+
+function parseRows(
+  rows: Row[],
+  props: Record<string, PropSchema>
+): Record<string, unknown>[] | null {
+  const out: Record<string, unknown>[] = []
+  for (const row of rows) {
+    const item: Record<string, unknown> = {}
+    for (const [k, text] of Object.entries(row)) {
+      const t = text.trim()
+      if (t === "") return null
+      if (NUMERIC_TYPES.has(props[k].type ?? "")) {
+        const n = Number(t)
+        if (!Number.isFinite(n)) return null
+        item[k] = n
+      } else item[k] = t
     }
+    out.push(item)
   }
-  return { items }
+  return out
 }
 
-function ObjectArrayField({
+function ObjectListField({
   fieldId,
   schema,
   value,
@@ -159,50 +165,176 @@ function ObjectArrayField({
   value: unknown
   setValue: (v: unknown) => void
 }) {
-  const keys = pointKeys(schema)
-  const canonical = objectArrayToText(value, keys)
+  const props = schema.items?.properties ?? {}
+  const keys = Object.keys(props)
+  const noun = itemNoun(keys)
+  const canonicalKey = JSON.stringify(rowsFromValue(value, keys))
+  const [rows, setRows] = useState<Row[]>(
+    () => JSON.parse(canonicalKey) as Row[]
+  )
+  // Resync when the stored value changes from elsewhere (paste, undo, another node).
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setRows(JSON.parse(canonicalKey) as Row[])
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [canonicalKey])
+
+  const commit = (next: Row[]) => {
+    setRows(next)
+    const parsed = parseRows(next, props)
+    if (parsed) setValue(parsed.length > 0 ? parsed : undefined)
+  }
+  const incomplete = parseRows(rows, props) === null
+  const min = schema.minItems ?? 0
+  const tooFew = rows.length < min
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={`${fieldId}-list`}>
+      {rows.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <div
+            className="grid items-center gap-1 pr-7 pl-6 text-[10px] font-medium text-muted-foreground uppercase"
+            style={{
+              gridTemplateColumns: `repeat(${keys.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {keys.map((k) => (
+              <span key={k}>{k}</span>
+            ))}
+          </div>
+          {rows.map((row, i) => (
+            <div
+              key={i}
+              className="grid items-center gap-1"
+              style={{
+                gridTemplateColumns: `1.25rem repeat(${keys.length}, minmax(0, 1fr)) 1.5rem`,
+              }}
+              data-testid={`${fieldId}-row-${i}`}
+            >
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {i + 1}
+              </span>
+              {keys.map((k) => (
+                <Input
+                  key={k}
+                  id={i === 0 && k === keys[0] ? fieldId : undefined}
+                  type={
+                    NUMERIC_TYPES.has(props[k].type ?? "") ? "number" : "text"
+                  }
+                  step="any"
+                  min={props[k].minimum}
+                  max={props[k].maximum}
+                  aria-label={`${noun} ${i + 1} ${k}`}
+                  className="h-7 font-mono text-xs"
+                  value={row[k]}
+                  onChange={(e) =>
+                    commit(
+                      rows.map((r, j) =>
+                        j === i ? { ...r, [k]: e.target.value } : r
+                      )
+                    )
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove ${noun} ${i + 1}`}
+                title={`Remove ${noun}`}
+                onClick={() => commit(rows.filter((_, j) => j !== i))}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={cn(
+            "text-[11px]",
+            incomplete || tooFew ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {incomplete
+            ? `Fill in every ${keys.join(" and ")} to apply`
+            : tooFew
+              ? `${rows.length} ${plural(noun, rows.length)} (at least ${min} needed)`
+              : `${rows.length} ${plural(noun, rows.length)}`}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            commit([...rows, Object.fromEntries(keys.map((k) => [k, ""]))])
+          }
+        >
+          <PlusIcon className="size-3" />
+          Add {noun}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// Object arrays whose items are NOT all primitive fall back to raw JSON, one
+// object per line (none in the catalog today).
+function JsonLinesField({
+  fieldId,
+  value,
+  setValue,
+}: {
+  fieldId: string
+  value: unknown
+  setValue: (v: unknown) => void
+}) {
+  const canonical = Array.isArray(value)
+    ? value.map((v) => JSON.stringify(v)).join("\n")
+    : ""
   const [draft, setDraft] = useState(canonical)
   const [error, setError] = useState<string | null>(null)
-  // Resync when the stored value changes from elsewhere (paste, undo, another node).
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     setDraft(canonical)
     setError(null)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [canonical])
-  const count = Array.isArray(value) ? value.length : 0
   return (
     <div className="flex flex-col gap-1">
       <Textarea
         id={fieldId}
-        rows={Math.min(8, Math.max(3, count + 1))}
+        rows={4}
         className="font-mono text-xs"
-        placeholder={
-          keys ? `${keys.join(", ")} per line` : "one JSON object per line"
-        }
+        placeholder="one JSON object per line"
         aria-invalid={error !== null}
         value={draft}
         onChange={(e) => {
-          const text = e.target.value
-          setDraft(text)
-          const parsed = parseObjectArrayText(text, keys)
-          if ("error" in parsed) {
-            setError(parsed.error)
-            return
+          setDraft(e.target.value)
+          const items: unknown[] = []
+          const lines = e.target.value
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+          for (const [i, line] of lines.entries()) {
+            try {
+              const obj = JSON.parse(line) as unknown
+              if (!obj || typeof obj !== "object" || Array.isArray(obj))
+                throw new Error("not an object")
+              items.push(obj)
+            } catch {
+              setError(`Line ${i + 1}: expected a JSON object`)
+              return
+            }
           }
           setError(null)
-          setValue(parsed.items.length > 0 ? parsed.items : undefined)
+          setValue(items.length > 0 ? items : undefined)
         }}
       />
-      <span
-        className={cn(
-          "text-[11px]",
-          error ? "text-destructive" : "text-muted-foreground"
-        )}
-      >
-        {error ??
-          `${count} ${keys ? "vertices" : "items"}${keys ? ` (${keys.join(", ")} per line)` : ""}`}
-      </span>
+      {error ? (
+        <span className="text-[11px] text-destructive">{error}</span>
+      ) : null}
     </div>
   )
 }
@@ -310,14 +442,17 @@ function ConfigField({
       </div>
     )
   } else if (schema.type === "array" && schema.items?.type === "object") {
-    // Object array (geofence polygon) -> one item per line.
-    control = (
-      <ObjectArrayField
+    // Object array (geofence polygon) -> a numbered list of rows, one input
+    // per property; raw JSON lines only for non-primitive item shapes.
+    control = itemKeys(schema) ? (
+      <ObjectListField
         fieldId={fieldId}
         schema={schema}
         value={value}
         setValue={setValue}
       />
+    ) : (
+      <JsonLinesField fieldId={fieldId} value={value} setValue={setValue} />
     )
   } else if (schema.type === "array") {
     // String array (metrics, classes) -> comma-separated text input.

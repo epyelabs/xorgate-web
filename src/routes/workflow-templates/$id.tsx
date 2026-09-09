@@ -146,6 +146,8 @@ function WorkflowTemplateDetailPage() {
   const persistMeta = async (updates: {
     name?: string
     description?: string | null
+    // A present `tags` replaces the whole set server-side.
+    tags?: string[]
   }) => {
     try {
       const { template: updated } = await updateWorkflowTemplate(id, updates)

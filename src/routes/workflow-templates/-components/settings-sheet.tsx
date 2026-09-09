@@ -13,12 +13,16 @@ interface SettingsSheetProps {
   onOpenChange: (open: boolean) => void
   template: WorkflowTemplateDetail
   busy: boolean
-  onSave: (updates: { name: string; description: string | null }) => void
+  onSave: (updates: {
+    name: string
+    description: string | null
+    tags: string[]
+  }) => void
   onDelete: () => Promise<void>
   onShowUsage: () => void
 }
 
-// Side-sheet home for template metadata (name + description) and deletion,
+// Side-sheet home for template metadata (name, description, tags) and deletion,
 // opened from the header's overflow menu.
 export function SettingsSheet({
   open,
@@ -38,7 +42,7 @@ export function SettingsSheet({
         <SheetHeader className="gap-1 border-b border-border pb-3">
           <SheetTitle className="pr-8">Template settings</SheetTitle>
           <SheetDescription>
-            Edit the name and description, or delete the template.
+            Edit the name, description and tags, or delete the template.
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-auto px-6 py-4">

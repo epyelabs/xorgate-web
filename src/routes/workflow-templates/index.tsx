@@ -2,13 +2,16 @@ import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
+import { ChevronDownIcon, FilterIcon, PlusIcon, TagIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -27,8 +30,10 @@ import {
 import {
   useInvalidateWorkflowTemplates,
   useWorkflowTemplates,
+  useWorkflowTemplateTags,
 } from "@/queries/workflows"
 import { StickyHeader } from "@/components/sticky-header"
+import { TagChips } from "@/components/tag-chips"
 import { CreateTemplateDialog } from "./-components/create-template-dialog"
 
 export const Route = createFileRoute("/workflow-templates/")({
@@ -60,6 +65,7 @@ function initials(name: string): string {
 function WorkflowTemplatesListPage() {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<TemplateStatus | "any">("any")
+  const [tagFilter, setTagFilter] = useState<string[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(DEFAULT_SIZE)
@@ -77,7 +83,11 @@ function WorkflowTemplatesListPage() {
     order,
     sort: sortBy,
     status,
+    tags: tagFilter,
   })
+  // The org's tag vocabulary, for the filter menu. A failure here leaves the
+  // menu empty rather than breaking the page; the list is the thing that matters.
+  const tagsQuery = useWorkflowTemplateTags()
   const data = templatesQuery.data ?? null
   const isLoading = templatesQuery.isPending
   const error =
@@ -102,15 +112,22 @@ function WorkflowTemplatesListPage() {
           (t.description ?? "").toLowerCase().includes(q)
       )
     : templates
-  const isFiltered = q !== "" || statusFilter !== "any"
+  const isFiltered = q !== "" || statusFilter !== "any" || tagFilter.length > 0
 
   const setStatus = (next: TemplateStatus | "any") => {
     setStatusFilter(next)
     setPage(1)
   }
+  const toggleTag = (tag: string) => {
+    setTagFilter((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+    setPage(1)
+  }
   const clearFilters = () => {
     setQuery("")
     setStatusFilter("any")
+    setTagFilter([])
     setPage(1)
   }
   const onToggleSort = (columnId: string) => {
@@ -138,6 +155,7 @@ function WorkflowTemplatesListPage() {
         order,
         sort: sortBy,
         status,
+        tags: tagFilter,
       })
       const parsed = listWorkflowTemplatesResponseSchema.safeParse(raw)
       if (!parsed.success) break
@@ -188,6 +206,15 @@ function WorkflowTemplatesListPage() {
         />
       ),
       csvValue: (template) => template.status,
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      cell: (template) => (
+        <TagChips tags={template.tags} onSelect={toggleTag} />
+      ),
+      csvHeader: "Tags",
+      csvValue: (template) => template.tags.join(" "),
     },
     {
       id: "version",
@@ -266,6 +293,80 @@ function WorkflowTemplatesListPage() {
     </DropdownMenu>
   )
 
+  const availableTags = tagsQuery.data ?? []
+  // Anything selected that the vocabulary no longer offers (a tag removed from
+  // its last template while the filter was on) still has to be unselectable.
+  const orphanTags = tagFilter.filter(
+    (tag) => !availableTags.some((t) => t.tag === tag)
+  )
+  const tagFilterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <TagIcon />
+          tags:{" "}
+          {tagFilter.length === 0
+            ? "any"
+            : tagFilter.length === 1
+              ? tagFilter[0]
+              : `${tagFilter.length} selected`}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 overflow-auto">
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          Matches any selected tag
+        </DropdownMenuLabel>
+        {availableTags.length === 0 && orphanTags.length === 0 ? (
+          <DropdownMenuItem disabled>
+            {tagsQuery.isPending ? "Loading…" : "No tags yet"}
+          </DropdownMenuItem>
+        ) : null}
+        {orphanTags.map((tag) => (
+          <DropdownMenuCheckboxItem
+            key={tag}
+            checked
+            onSelect={(e) => {
+              e.preventDefault()
+              toggleTag(tag)
+            }}
+          >
+            {tag}
+          </DropdownMenuCheckboxItem>
+        ))}
+        {availableTags.map(({ tag, count }) => (
+          <DropdownMenuCheckboxItem
+            key={tag}
+            checked={tagFilter.includes(tag)}
+            onSelect={(e) => {
+              // Keep the menu open: picking several tags is the common case.
+              e.preventDefault()
+              toggleTag(tag)
+            }}
+          >
+            <span className="flex-1">{tag}</span>
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        {tagFilter.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                setTagFilter([])
+                setPage(1)
+              }}
+            >
+              Clear tags
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <div className="flex h-[calc(100svh-4rem)] min-h-0 min-w-0 flex-col gap-6 p-4 pt-0 group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
       <StickyHeader className="border-b border-border pb-4">
@@ -313,7 +414,12 @@ function WorkflowTemplatesListPage() {
                 placeholder: "Filter by name or description…",
               }}
               searchAlign="right"
-              filters={statusFilterMenu}
+              filters={
+                <>
+                  {statusFilterMenu}
+                  {tagFilterMenu}
+                </>
+              }
             />
           }
           pagination={{

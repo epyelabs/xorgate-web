@@ -73,6 +73,10 @@ export const qk = {
 
   workflowTemplates: (orgId: Id, wsId: Id) =>
     [...qk.ws(orgId, wsId), "workflow-templates"] as const,
+  // Under the templates prefix on purpose: invalidating the list refreshes the
+  // tag vocabulary too, which is what a save that changed tags needs.
+  workflowTemplateTags: (orgId: Id, wsId: Id) =>
+    [...qk.workflowTemplates(orgId, wsId), "tags"] as const,
   workflowTemplate: (orgId: Id, wsId: Id, templateId: string) =>
     [...qk.ws(orgId, wsId), "workflow-template", templateId] as const,
   workflowInstances: (orgId: Id, wsId: Id, params: Record<string, unknown>) =>

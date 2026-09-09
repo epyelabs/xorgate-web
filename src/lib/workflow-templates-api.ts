@@ -30,8 +30,19 @@ export async function listWorkflowTemplates(
   if (params.order) qs.set("order", params.order)
   if (params.sort) qs.set("sort", params.sort)
   if (params.status) qs.set("status", params.status)
+  // One comma-separated value rather than a repeated parameter: the API reads
+  // both as the same string, and a comma can never occur inside a tag.
+  if (params.tags?.length) qs.set("tag", params.tags.join(","))
   const suffix = qs.toString() ? `?${qs.toString()}` : ""
   return xg().request("GET", `/workflow-templates${suffix}`)
+}
+
+// The org's distinct tags with counts, for the list toolbar's filter. Cheap
+// enough to refetch whenever the list is invalidated.
+export async function listWorkflowTemplateTags(): Promise<{
+  tags: { tag: string; count: number }[]
+}> {
+  return xg().request("GET", "/workflow-templates/tags")
 }
 
 export async function getWorkflowTemplate(
@@ -43,13 +54,15 @@ export async function getWorkflowTemplate(
 export async function createWorkflowTemplate(input: {
   name: string
   description?: string
+  tags?: string[]
 }): Promise<{ template: WorkflowTemplateDetail }> {
   return xg().request("POST", "/workflow-templates", { body: input })
 }
 
 export async function updateWorkflowTemplate(
   id: string,
-  updates: { name?: string; description?: string | null },
+  // A present `tags` REPLACES the whole set; `[]` clears it.
+  updates: { name?: string; description?: string | null; tags?: string[] },
 ): Promise<{ template: WorkflowTemplateDetail }> {
   return xg().request("PUT", `/workflow-templates/${id}`, { body: updates })
 }

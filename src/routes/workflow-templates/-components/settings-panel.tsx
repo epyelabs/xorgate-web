@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { WorkflowTemplateDetail } from "@/lib/workflow-schemas"
+import { TagEditor } from "@/components/tag-editor"
 import { DeleteTemplateDialog } from "./delete-template-dialog"
 
-// Template metadata editing (name + description) plus the delete danger zone.
-// Rendered inside the settings side sheet, opened from the header's overflow
-// menu. `onSave` persists via the same updateWorkflowTemplate path the header
-// used; `onDelete` is only reachable once the template is detached everywhere
+// Template metadata editing (name, description, tags) plus the delete danger
+// zone. Rendered inside the settings side sheet, opened from the header's
+// overflow menu. `onSave` persists via the same updateWorkflowTemplate path the
+// header used; `onDelete` is only reachable once the template is detached everywhere
 // (the backend also refuses with a 409 while attachments exist).
 export function SettingsPanel({
   template,
@@ -19,25 +20,35 @@ export function SettingsPanel({
 }: {
   template: WorkflowTemplateDetail
   busy: boolean
-  onSave: (updates: { name: string; description: string | null }) => void
+  onSave: (updates: {
+    name: string
+    description: string | null
+    tags: string[]
+  }) => void
   onDelete: () => Promise<void>
   onShowUsage: () => void
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [name, setName] = useState(template.name)
   const [description, setDescription] = useState(template.description ?? "")
+  const [tags, setTags] = useState<string[]>(template.tags)
 
-  // Re-sync when the template reloads (e.g. after a save round-trip).
+  // Re-sync when the template reloads (e.g. after a save round-trip). The tags
+  // array is a new reference on every fetch, so the effect keys off its
+  // CONTENT; keying off the array itself would clobber an in-progress edit.
+  const savedTags = template.tags.join(",")
   useEffect(() => {
     setName(template.name)
     setDescription(template.description ?? "")
-  }, [template.name, template.description])
+    setTags(savedTags === "" ? [] : savedTags.split(","))
+  }, [template.name, template.description, savedTags])
 
   const trimmedName = name.trim()
   const trimmedDescription = description.trim()
   const changed =
     trimmedName !== template.name ||
-    trimmedDescription !== (template.description ?? "")
+    trimmedDescription !== (template.description ?? "") ||
+    tags.join(",") !== savedTags
   const canSave = changed && trimmedName.length > 0 && !busy
 
   const handleSave = () => {
@@ -45,6 +56,7 @@ export function SettingsPanel({
     onSave({
       name: trimmedName,
       description: trimmedDescription === "" ? null : trimmedDescription,
+      tags,
     })
   }
 
@@ -69,6 +81,15 @@ export function SettingsPanel({
           maxLength={280}
         />
       </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="settings-tags">Tags</Label>
+        <TagEditor
+          id="settings-tags"
+          tags={tags}
+          onChange={setTags}
+          disabled={busy}
+        />
+      </div>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={handleSave} disabled={!canSave}>
           Save changes
@@ -80,6 +101,7 @@ export function SettingsPanel({
             onClick={() => {
               setName(template.name)
               setDescription(template.description ?? "")
+              setTags(template.tags)
             }}
           >
             Reset

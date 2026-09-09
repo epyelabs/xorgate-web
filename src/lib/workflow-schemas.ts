@@ -73,6 +73,9 @@ export const workflowTemplateSummarySchema = z.object({
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
+  // Free-form labels, normalized server-side (lowercase, deduped, at most 20).
+  // Default rather than required: an API deployment predating tags omits them.
+  tags: z.array(z.string()).default([]),
   status: templateStatusSchema,
   currentVersion: z.number(),
   publishedVersion: z.number().nullable(),
@@ -106,7 +109,20 @@ export interface WorkflowTemplatesListParams {
   order?: "asc" | "desc"
   sort?: "updatedAt" | "createdAt" | "name"
   status?: TemplateStatus
+  // ANY-of: a template matches when it carries at least one of these. Sent as
+  // one comma-separated `tag` parameter, which is the same request as repeating
+  // the parameter (the API comma-joins duplicates either way).
+  tags?: string[]
 }
+
+// `GET /workflow-templates/tags`: the org's vocabulary, most used first.
+export const workflowTemplateTagsResponseSchema = z.object({
+  tags: z.array(z.object({ tag: z.string(), count: z.number() })),
+})
+
+export type WorkflowTemplateTagCount = z.infer<
+  typeof workflowTemplateTagsResponseSchema
+>["tags"][number]
 
 export const getWorkflowTemplateResponseSchema = z.object({
   template: workflowTemplateDetailSchema,
@@ -116,6 +132,19 @@ export const createWorkflowTemplateSchema = z.object({
   name: z.string().min(1, "Name is required").max(80, "Name is too long"),
   description: z.string().max(280, "Description is too long").optional(),
 })
+
+// The tag rules, mirrored from the backend's src/utils/tags.ts so the editor can
+// refuse a value before a round trip. The server is still the authority.
+export const TAG_PATTERN = /^[a-z0-9][a-z0-9._-]*$/
+export const MAX_TAG_LENGTH = 32
+export const MAX_TAGS_PER_TEMPLATE = 20
+
+/** Canonical form of one typed tag, or null when it cannot be one. */
+export function normalizeTag(raw: string): string | null {
+  const tag = raw.trim().toLowerCase()
+  if (tag.length === 0 || tag.length > MAX_TAG_LENGTH) return null
+  return TAG_PATTERN.test(tag) ? tag : null
+}
 
 export type WorkflowNodeDef = z.infer<typeof workflowNodeSchema>
 export type WorkflowEdgeDef = z.infer<typeof workflowEdgeSchema>

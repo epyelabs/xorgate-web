@@ -21,9 +21,13 @@ import {
   getWorkflowInstance,
   listWorkflowInstances,
 } from "@/lib/workflow-instances-api"
-import { listWorkflowTemplates } from "@/lib/workflow-templates-api"
+import {
+  listWorkflowTemplates,
+  listWorkflowTemplateTags,
+} from "@/lib/workflow-templates-api"
 import {
   listWorkflowTemplatesResponseSchema,
+  workflowTemplateTagsResponseSchema,
   type WorkflowTemplatesListParams,
 } from "@/lib/workflow-schemas"
 import { qk } from "@/queries/keys"
@@ -173,6 +177,26 @@ export function useWorkflowTemplates(params: WorkflowTemplatesListParams) {
     },
     enabled: ready,
     placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * The org's workflow-template tags with counts, for the list toolbar's filter.
+ * One small query, invalidated with the list it belongs to.
+ */
+export function useWorkflowTemplateTags() {
+  const { orgId, wsId, ready } = useTenant()
+  return useQuery({
+    queryKey: qk.workflowTemplateTags(orgId, wsId),
+    queryFn: async () => {
+      const parsed = workflowTemplateTagsResponseSchema.safeParse(
+        await listWorkflowTemplateTags()
+      )
+      if (!parsed.success)
+        throw new Error("Unexpected /workflow-templates/tags response shape")
+      return parsed.data.tags
+    },
+    enabled: ready,
   })
 }
 

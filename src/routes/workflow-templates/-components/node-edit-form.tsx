@@ -1,4 +1,5 @@
-import { SquareFunctionIcon, Trash2Icon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { PlusIcon, SquareFunctionIcon, Trash2Icon, XIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
@@ -21,7 +23,8 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 // GENERATED from the served catalog's per-node config JSON Schema (drafted from
 // the backend zod via zod-to-json-schema), so the form always matches what
 // publish validation will accept. Covers the shapes the M1 catalog emits:
-// number/integer, string, string enum, boolean, string array, enum array.
+// number/integer, string, string enum, boolean, string array, enum array,
+// and arrays of objects (a geofence polygon: one `lat, lng` vertex per line).
 
 // Loose structural view of a JSON Schema property (draft-07 subset).
 interface PropSchema {
@@ -32,7 +35,12 @@ interface PropSchema {
   minimum?: number
   maximum?: number
   exclusiveMinimum?: number
-  items?: { type?: string; enum?: unknown[] }
+  minItems?: number
+  items?: {
+    type?: string
+    enum?: unknown[]
+    properties?: Record<string, PropSchema>
+  }
 }
 
 interface ObjectSchema {
@@ -68,7 +76,267 @@ function humanize(key: string): string {
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : []
+}
+
+// --- Arrays of objects --------------------------------------------------------
+// The generic string-array input cannot hold these (it would render nothing
+// and, worse, overwrite the objects with strings on the first keystroke). An
+// object array whose item properties are all primitive (a geofence polygon:
+// { lat, lng }) is edited as a numbered list of rows, one input per property,
+// with add / remove. Cells keep a local text draft so "-" or "43." can be
+// typed; the config updates only with fully parsed rows, so a half-typed cell
+// never corrupts the definition.
+
+const NUMERIC_TYPES = new Set(["number", "integer"])
+
+function itemKeys(schema: PropSchema): string[] | null {
+  const props = schema.items?.properties
+  if (!props) return null
+  const keys = Object.keys(props)
+  if (keys.length === 0) return null
+  const primitive = keys.every(
+    (k) => NUMERIC_TYPES.has(props[k].type ?? "") || props[k].type === "string"
+  )
+  return primitive ? keys : null
+}
+
+// "polygon" with { lat, lng } rows -> "vertex"; anything else -> "item".
+function itemNoun(keys: string[]): string {
+  return keys.length === 2 && keys.includes("lat") && keys.includes("lng")
+    ? "vertex"
+    : "item"
+}
+
+function plural(noun: string, n: number): string {
+  if (n === 1) return noun
+  return noun === "vertex" ? "vertices" : `${noun}s`
+}
+
+type Row = Record<string, string>
+
+function rowsFromValue(value: unknown, keys: string[]): Row[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => {
+    const obj = (item && typeof item === "object" ? item : {}) as Record<
+      string,
+      unknown
+    >
+    return Object.fromEntries(
+      keys.map((k) => [
+        k,
+        obj[k] === undefined || obj[k] === null ? "" : String(obj[k]),
+      ])
+    )
+  })
+}
+
+function parseRows(
+  rows: Row[],
+  props: Record<string, PropSchema>
+): Record<string, unknown>[] | null {
+  const out: Record<string, unknown>[] = []
+  for (const row of rows) {
+    const item: Record<string, unknown> = {}
+    for (const [k, text] of Object.entries(row)) {
+      const t = text.trim()
+      if (t === "") return null
+      if (NUMERIC_TYPES.has(props[k].type ?? "")) {
+        const n = Number(t)
+        if (!Number.isFinite(n)) return null
+        item[k] = n
+      } else item[k] = t
+    }
+    out.push(item)
+  }
+  return out
+}
+
+function ObjectListField({
+  fieldId,
+  schema,
+  value,
+  setValue,
+}: {
+  fieldId: string
+  schema: PropSchema
+  value: unknown
+  setValue: (v: unknown) => void
+}) {
+  const props = schema.items?.properties ?? {}
+  const keys = Object.keys(props)
+  const noun = itemNoun(keys)
+  const canonicalKey = JSON.stringify(rowsFromValue(value, keys))
+  const [rows, setRows] = useState<Row[]>(
+    () => JSON.parse(canonicalKey) as Row[]
+  )
+  // Resync when the stored value changes from elsewhere (paste, undo, another node).
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setRows(JSON.parse(canonicalKey) as Row[])
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [canonicalKey])
+
+  const commit = (next: Row[]) => {
+    setRows(next)
+    const parsed = parseRows(next, props)
+    if (parsed) setValue(parsed.length > 0 ? parsed : undefined)
+  }
+  const incomplete = parseRows(rows, props) === null
+  const min = schema.minItems ?? 0
+  const tooFew = rows.length < min
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={`${fieldId}-list`}>
+      {rows.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <div
+            className="grid items-center gap-1 pr-7 pl-6 text-[10px] font-medium text-muted-foreground uppercase"
+            style={{
+              gridTemplateColumns: `repeat(${keys.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {keys.map((k) => (
+              <span key={k}>{k}</span>
+            ))}
+          </div>
+          {rows.map((row, i) => (
+            <div
+              key={i}
+              className="grid items-center gap-1"
+              style={{
+                gridTemplateColumns: `1.25rem repeat(${keys.length}, minmax(0, 1fr)) 1.5rem`,
+              }}
+              data-testid={`${fieldId}-row-${i}`}
+            >
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {i + 1}
+              </span>
+              {keys.map((k) => (
+                <Input
+                  key={k}
+                  id={i === 0 && k === keys[0] ? fieldId : undefined}
+                  type={
+                    NUMERIC_TYPES.has(props[k].type ?? "") ? "number" : "text"
+                  }
+                  step="any"
+                  min={props[k].minimum}
+                  max={props[k].maximum}
+                  aria-label={`${noun} ${i + 1} ${k}`}
+                  className="h-7 font-mono text-xs"
+                  value={row[k]}
+                  onChange={(e) =>
+                    commit(
+                      rows.map((r, j) =>
+                        j === i ? { ...r, [k]: e.target.value } : r
+                      )
+                    )
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove ${noun} ${i + 1}`}
+                title={`Remove ${noun}`}
+                onClick={() => commit(rows.filter((_, j) => j !== i))}
+              >
+                <XIcon className="size-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={cn(
+            "text-[11px]",
+            incomplete || tooFew ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {incomplete
+            ? `Fill in every ${keys.join(" and ")} to apply`
+            : tooFew
+              ? `${rows.length} ${plural(noun, rows.length)} (at least ${min} needed)`
+              : `${rows.length} ${plural(noun, rows.length)}`}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            commit([...rows, Object.fromEntries(keys.map((k) => [k, ""]))])
+          }
+        >
+          <PlusIcon className="size-3" />
+          Add {noun}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// Object arrays whose items are NOT all primitive fall back to raw JSON, one
+// object per line (none in the catalog today).
+function JsonLinesField({
+  fieldId,
+  value,
+  setValue,
+}: {
+  fieldId: string
+  value: unknown
+  setValue: (v: unknown) => void
+}) {
+  const canonical = Array.isArray(value)
+    ? value.map((v) => JSON.stringify(v)).join("\n")
+    : ""
+  const [draft, setDraft] = useState(canonical)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDraft(canonical)
+    setError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [canonical])
+  return (
+    <div className="flex flex-col gap-1">
+      <Textarea
+        id={fieldId}
+        rows={4}
+        className="font-mono text-xs"
+        placeholder="one JSON object per line"
+        aria-invalid={error !== null}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const items: unknown[] = []
+          const lines = e.target.value
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean)
+          for (const [i, line] of lines.entries()) {
+            try {
+              const obj = JSON.parse(line) as unknown
+              if (!obj || typeof obj !== "object" || Array.isArray(obj))
+                throw new Error("not an object")
+              items.push(obj)
+            } catch {
+              setError(`Line ${i + 1}: expected a JSON object`)
+              return
+            }
+          }
+          setError(null)
+          setValue(items.length > 0 ? items : undefined)
+        }}
+      />
+      {error ? (
+        <span className="text-[11px] text-destructive">{error}</span>
+      ) : null}
+    </div>
+  )
 }
 
 function ConfigField({
@@ -127,7 +395,9 @@ function ConfigField({
         min={schema.minimum ?? schema.exclusiveMinimum}
         max={schema.maximum}
         step={schema.type === "integer" ? 1 : "any"}
-        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        placeholder={
+          schema.default !== undefined ? String(schema.default) : undefined
+        }
         value={value === undefined || value === null ? "" : String(value)}
         onChange={(e) =>
           setValue(e.target.value === "" ? undefined : Number(e.target.value))
@@ -139,7 +409,8 @@ function ConfigField({
     // enumFilter rejects are hidden but still-selected values are preserved.
     const selected = new Set(asStringArray(value ?? schema.default))
     const options = schema.items.enum.filter(
-      (opt) => !enumFilter || enumFilter(String(opt)) || selected.has(String(opt)),
+      (opt) =>
+        !enumFilter || enumFilter(String(opt)) || selected.has(String(opt))
     )
     control = (
       <div className="flex flex-wrap gap-1">
@@ -161,7 +432,7 @@ function ConfigField({
                 "rounded-md border px-2 py-1 text-[11px] transition-colors",
                 on
                   ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent",
+                  : "border-border text-muted-foreground hover:bg-accent"
               )}
             >
               {key}
@@ -169,6 +440,19 @@ function ConfigField({
           )
         })}
       </div>
+    )
+  } else if (schema.type === "array" && schema.items?.type === "object") {
+    // Object array (geofence polygon) -> a numbered list of rows, one input
+    // per property; raw JSON lines only for non-primitive item shapes.
+    control = itemKeys(schema) ? (
+      <ObjectListField
+        fieldId={fieldId}
+        schema={schema}
+        value={value}
+        setValue={setValue}
+      />
+    ) : (
+      <JsonLinesField fieldId={fieldId} value={value} setValue={setValue} />
     )
   } else if (schema.type === "array") {
     // String array (metrics, classes) -> comma-separated text input.
@@ -191,9 +475,13 @@ function ConfigField({
     control = (
       <Input
         id={fieldId}
-        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        placeholder={
+          schema.default !== undefined ? String(schema.default) : undefined
+        }
         value={value === undefined || value === null ? "" : String(value)}
-        onChange={(e) => setValue(e.target.value === "" ? undefined : e.target.value)}
+        onChange={(e) =>
+          setValue(e.target.value === "" ? undefined : e.target.value)
+        }
       />
     )
   }
@@ -237,7 +525,9 @@ function CodeFunctionSummary({
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{runtime.runtimeLabel}</Badge>
         <Badge variant="secondary">
-          {fn.deployedVersion !== null ? `Live: v${fn.deployedVersion}` : "Not deployed"}
+          {fn.deployedVersion !== null
+            ? `Live: v${fn.deployedVersion}`
+            : "Not deployed"}
         </Badge>
       </div>
       <p className="text-[11px] text-muted-foreground">
@@ -263,7 +553,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const updateNodeLabel = useWorkflowEditor((s) => s.updateNodeLabel)
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
   const entry = useWorkflowCatalog((s) =>
-    node ? s.byType[node.data.catalogType] : undefined,
+    node ? s.byType[node.data.catalogType] : undefined
   )
 
   if (!node) return null
@@ -274,7 +564,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   // `deployedVersion` (the engine's full config), which the function editor
   // owns (Code / Versions tabs); the popover keeps the plain knobs only.
   const properties = Object.entries(objectSchema.properties ?? {}).filter(
-    ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key),
+    ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key)
   )
   const requiredKeys = new Set(objectSchema.required ?? [])
 
@@ -287,7 +577,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
     if (incoming.every((e) => typeof e.targetHandle === "string")) {
       const connected = new Set(incoming.map((e) => e.targetHandle as string))
       overlayFilter = (option) =>
-        (VISUALIZATION_OVERLAY_PORTS[option] ?? []).some((port) => connected.has(port))
+        (VISUALIZATION_OVERLAY_PORTS[option] ?? []).some((port) =>
+          connected.has(port)
+        )
     }
   }
 
@@ -313,7 +605,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
         </div>
 
         {entry?.description ? (
-          <p className="text-[11px] text-muted-foreground">{entry.description}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {entry.description}
+          </p>
         ) : (
           <p className="text-[11px] text-destructive">
             Unknown node type — not in the served catalog. It will fail publish
@@ -322,7 +616,10 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
         )}
 
         {entry?.ui.editor === "code" ? (
-          <CodeFunctionSummary nodeId={node.id} catalogType={node.data.catalogType} />
+          <CodeFunctionSummary
+            nodeId={node.id}
+            catalogType={node.data.catalogType}
+          />
         ) : entry?.ui.editor ? (
           <p className="rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
             This node gets a rich {entry.ui.editor} editor in a later milestone;

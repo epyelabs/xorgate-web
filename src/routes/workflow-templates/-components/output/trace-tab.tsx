@@ -26,7 +26,8 @@ const STATUS_WORD: Record<RunStepStatus, string> = {
 
 // One accordion item per step in seq order: header = status, label, node
 // type, duration; body = the untruncated output, ids, and the run error when
-// this is the node the run failed at.
+// this is the node the run failed at. No footer: the total duration is in the
+// status badge beside "Output" and the step count in the tab label.
 export function TraceTab({
   run,
   definition,
@@ -36,11 +37,12 @@ export function TraceTab({
   definition: WorkflowDefinition | null
   nodeLabels: Map<string, string>
 }) {
-  const nodeTypes = new Map((definition ?? run.definition).nodes.map((n) => [n.id, n.type]))
+  const nodeTypes = new Map(
+    (definition ?? run.definition).nodes.map((n) => [n.id, n.type])
+  )
   const steps = run.steps
     .map((s, i) => ({ ...s, order: s.seq ?? i }))
     .sort((a, b) => a.order - b.order)
-  const totalMs = steps.reduce((sum, s) => sum + s.durationMs, 0)
   return (
     <div className="flex flex-col" data-testid="trace-tab">
       {steps.length === 0 ? (
@@ -50,9 +52,13 @@ export function TraceTab({
       ) : (
         <Accordion type="multiple" className="flex flex-col">
           {steps.map((s) => {
-            const failedHere = s.status === "failed" && run.failedNodeId === s.nodeId
+            const failedHere =
+              s.status === "failed" && run.failedNodeId === s.nodeId
             return (
-              <AccordionItem key={`${s.order}:${s.nodeId}`} value={`${s.order}:${s.nodeId}`}>
+              <AccordionItem
+                key={`${s.order}:${s.nodeId}`}
+                value={`${s.order}:${s.nodeId}`}
+              >
                 <AccordionTrigger className="py-1.5 hover:no-underline">
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
                     <StepStatusIcon status={s.status} />
@@ -64,18 +70,25 @@ export function TraceTab({
                     </span>
                   </span>
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                    {s.status === "skipped" ? "skipped" : formatSeconds(s.durationMs / 1000)}
+                    {s.status === "skipped"
+                      ? "skipped"
+                      : formatSeconds(s.durationMs / 1000)}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="flex flex-col gap-1.5 pb-2.5">
-                  <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-[11px] whitespace-pre-wrap break-words text-foreground">
-                    {s.output || (s.status === "skipped" ? "(skipped: an upstream node did not produce its output)" : "(no output)")}
+                  <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-[11px] break-words whitespace-pre-wrap text-foreground">
+                    {s.output ||
+                      (s.status === "skipped"
+                        ? "(skipped: an upstream node did not produce its output)"
+                        : "(no output)")}
                   </pre>
                   <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-[10px] text-muted-foreground">
                     <dt>nodeId</dt>
                     <dd className="truncate text-foreground/80">{s.nodeId}</dd>
                     <dt>status</dt>
-                    <dd className="text-foreground/80">{STATUS_WORD[s.status]}</dd>
+                    <dd className="text-foreground/80">
+                      {STATUS_WORD[s.status]}
+                    </dd>
                     <dt>durationMs</dt>
                     <dd className="text-foreground/80">{s.durationMs}</dd>
                     {s.seq !== undefined ? (
@@ -96,11 +109,6 @@ export function TraceTab({
           })}
         </Accordion>
       )}
-      <p className="pt-2 text-[11px] text-muted-foreground">
-        {run.durationMs !== null ? `Finished in ${formatSeconds(run.durationMs / 1000)}` : "Finished"}
-        {steps.length > 0 ? ` · ${steps.length} step${steps.length === 1 ? "" : "s"}, ${formatSeconds(totalMs / 1000)} in nodes` : ""}
-        .
-      </p>
     </div>
   )
 }

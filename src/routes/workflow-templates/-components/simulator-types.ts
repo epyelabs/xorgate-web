@@ -57,6 +57,14 @@ export function isVideoSource(catalogType: string): boolean {
   return catalogType === "source.video"
 }
 
+// Sensor (telemetry) bindings: an uploaded CSV or a device's stored window.
+// Both can be previewed as a table / JSON before the run.
+export type TelemetryBinding = Extract<SourceBinding, { kind: "csv-file" | "device-telemetry" }>
+
+export function isTelemetryBinding(b: SourceBinding): b is TelemetryBinding {
+  return b.kind === "csv-file" || b.kind === "device-telemetry"
+}
+
 export function isVideoBinding(b: SourceBinding): b is VideoBinding {
   return (
     b.kind === "video-file" ||

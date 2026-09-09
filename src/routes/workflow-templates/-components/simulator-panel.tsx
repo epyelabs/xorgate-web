@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { Loader2Icon, PlayIcon, XIcon } from "lucide-react"
+import { CheckIcon, Loader2Icon, PlayIcon, XIcon } from "lucide-react"
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { isXorgateError } from "@xorgate/sdk"
 import { xgMessage } from "@/lib/xorgate"
@@ -34,8 +35,14 @@ import {
 } from "./simulator-bindings"
 import { SourceInputRow } from "./source-input-row"
 import { SourcePreviewDialog } from "./source-preview-dialog"
+import { SourceDataPreviewDialog } from "./source-data-preview-dialog"
 import { SimulatorOutput } from "./simulator-output"
-import type { SourceBinding, VideoBinding } from "./simulator-types"
+import {
+  formatSeconds,
+  isTelemetryBinding,
+  isVideoBinding,
+  type SourceBinding,
+} from "./simulator-types"
 
 // idle -> preparing (uploads/window resolution + POST) -> running (live
 // progress over IoT + run-row polling) -> succeeded | failed. The run row is
@@ -46,6 +53,56 @@ const POLL_MS = 2500
 // Once the IoT status topic says terminal, finalize (S3 event -> Lambda -> DB)
 // usually lands within a couple seconds; poll faster for the artifacts row.
 const POLL_FAST_MS = 1000
+
+// The run's state beside the "Output" label: Running while in flight, then
+// "Succeeded in 2.8s" (green) or "Failed after 2.8s" (red); nothing before
+// the first run.
+function RunStatusBadge({
+  phase,
+  durationMs,
+}: {
+  phase: SimPhase
+  durationMs: number | null
+}) {
+  const took = durationMs !== null ? formatSeconds(durationMs / 1000) : null
+  if (phase === "succeeded") {
+    return (
+      <Badge
+        variant="secondary"
+        className="gap-1 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+        data-testid="run-status-badge"
+      >
+        <CheckIcon />
+        Succeeded{took ? ` in ${took}` : ""}
+      </Badge>
+    )
+  }
+  if (phase === "failed") {
+    return (
+      <Badge
+        variant="destructive"
+        className="gap-1"
+        data-testid="run-status-badge"
+      >
+        <XIcon />
+        Failed{took ? ` after ${took}` : ""}
+      </Badge>
+    )
+  }
+  if (phase === "running" || phase === "preparing") {
+    return (
+      <Badge
+        variant="secondary"
+        className="gap-1"
+        data-testid="run-status-badge"
+      >
+        <Loader2Icon className="animate-spin" />
+        Running
+      </Badge>
+    )
+  }
+  return null
+}
 
 // Revoke any in-browser object URL a binding created, so uploaded-video previews
 // don't leak when unbound / replaced / on unmount.
@@ -96,7 +153,7 @@ export function SimulatorPanel({
   }, [nodes, byType])
 
   const [bindings, setBindings] = useState<Record<string, SourceBinding>>({})
-  const [preview, setPreview] = useState<VideoBinding | null>(null)
+  const [preview, setPreview] = useState<SourceBinding | null>(null)
 
   const [phase, setPhase] = useState<SimPhase>("idle")
   const [prepMessage, setPrepMessage] = useState<string | null>(null)
@@ -105,8 +162,12 @@ export function SimulatorPanel({
   const [rowIssues, setRowIssues] = useState<Record<string, string>>({})
   const [generalIssues, setGeneralIssues] = useState<string[]>([])
 
-  const [activeRun, setActiveRun] = useState<CreateSimulationResponse | null>(null)
-  const [ranDefinition, setRanDefinition] = useState<WorkflowDefinition | null>(null)
+  const [activeRun, setActiveRun] = useState<CreateSimulationResponse | null>(
+    null
+  )
+  const [ranDefinition, setRanDefinition] = useState<WorkflowDefinition | null>(
+    null
+  )
   const [runDetail, setRunDetail] = useState<WorkflowRunDetail | null>(null)
 
   // Both sections open initially; a started run collapses Sources so the
@@ -118,7 +179,7 @@ export function SimulatorPanel({
 
   // Live progress over IoT WSS; subscribed while a run is in flight.
   const progress = useSimProgress(
-    phase === "running" ? (activeRun?.progress.topicPrefix ?? null) : null,
+    phase === "running" ? (activeRun?.progress.topicPrefix ?? null) : null
   )
 
   // Webcam capture publisher (M5): while a run with a webcam binding is live,
@@ -126,10 +187,13 @@ export function SimulatorPanel({
   // (or unmount) publishes the end message so the engine drains cleanly.
   const webcamEntry = useMemo(() => {
     const entry = Object.entries(bindings).find(
-      ([, b]) => b.kind === "video-webcam",
+      ([, b]) => b.kind === "video-webcam"
     )
     return entry
-      ? { nodeId: entry[0], deviceId: (entry[1] as { deviceId?: string }).deviceId }
+      ? {
+          nodeId: entry[0],
+          deviceId: (entry[1] as { deviceId?: string }).deviceId,
+        }
       : null
   }, [bindings])
   const webcamIngest = useWebcamIngest({
@@ -231,12 +295,18 @@ export function SimulatorPanel({
     useWorkflowEditor.getState().setPublishIssues([])
     try {
       // Uploads + window resolution first (per-row failures land on the rows).
-      const resolved = await resolveApiBindings(templateId, bindings, setPrepMessage)
+      const resolved = await resolveApiBindings(
+        templateId,
+        bindings,
+        setPrepMessage
+      )
       if (Object.keys(resolved.uploadedKeys).length > 0) {
         // Cache upload keys so tweak-and-rerun skips the re-upload.
         setBindings((prev) => {
           const next = { ...prev }
-          for (const [nodeId, uploadKey] of Object.entries(resolved.uploadedKeys)) {
+          for (const [nodeId, uploadKey] of Object.entries(
+            resolved.uploadedKeys
+          )) {
             const b = next[nodeId]
             if (b && (b.kind === "video-file" || b.kind === "csv-file")) {
               next[nodeId] = { ...b, uploadKey }
@@ -248,7 +318,7 @@ export function SimulatorPanel({
 
       setPrepMessage("Starting simulation…")
       const definition = withSimulationCaptures(
-        useWorkflowEditor.getState().toDefinition(),
+        useWorkflowEditor.getState().toDefinition()
       )
       const res = await createSimulation(templateId, definition, resolved.api)
       setRanDefinition(definition)
@@ -265,7 +335,11 @@ export function SimulatorPanel({
         // XorgateError splits the wire envelope across fields; rebuild it for
         // the body-text parsers.
         const body = JSON.stringify({
-          error: { code: err.code, message: xgMessage(err), details: err.details },
+          error: {
+            code: err.code,
+            message: xgMessage(err),
+            details: err.details,
+          },
         })
         // 400 WORKFLOW_VALIDATION_FAILED: same shape as publish; light the
         // canvas + banner through the editor store.
@@ -273,7 +347,7 @@ export function SimulatorPanel({
         if (publishIssues && publishIssues.length > 0) {
           useWorkflowEditor.getState().setPublishIssues(publishIssues)
           toast.error(
-            `Simulation blocked: ${publishIssues.length} validation ${publishIssues.length === 1 ? "issue" : "issues"}`,
+            `Simulation blocked: ${publishIssues.length} validation ${publishIssues.length === 1 ? "issue" : "issues"}`
           )
           return
         }
@@ -289,7 +363,7 @@ export function SimulatorPanel({
           setRowIssues(rows)
           setGeneralIssues(general)
           setOpenSections((open) =>
-            open.includes("sources") ? open : ["sources", ...open],
+            open.includes("sources") ? open : ["sources", ...open]
           )
           return
         }
@@ -352,8 +426,8 @@ export function SimulatorPanel({
               ))}
               {sources.length === 0 ? (
                 <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                  Add a source node (Video, Telemetry) to the graph to test
-                  this workflow.
+                  Add a source node (Video, Telemetry) to the graph to test this
+                  workflow.
                 </p>
               ) : (
                 sources.map((s) => (
@@ -374,7 +448,15 @@ export function SimulatorPanel({
         </AccordionItem>
 
         <AccordionItem value="output">
-          <AccordionTrigger className="py-3">Output</AccordionTrigger>
+          <AccordionTrigger className="py-3">
+            <span className="flex items-center gap-2">
+              Output
+              <RunStatusBadge
+                phase={phase}
+                durationMs={runDetail?.durationMs ?? null}
+              />
+            </span>
+          </AccordionTrigger>
           <AccordionContent className="pb-3">
             <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
               <SimulatorOutput
@@ -413,8 +495,15 @@ export function SimulatorPanel({
       </div>
 
       <SourcePreviewDialog
-        binding={preview}
-        open={preview !== null}
+        binding={preview && isVideoBinding(preview) ? preview : null}
+        open={preview !== null && isVideoBinding(preview)}
+        onOpenChange={(open) => {
+          if (!open) setPreview(null)
+        }}
+      />
+      <SourceDataPreviewDialog
+        binding={preview && isTelemetryBinding(preview) ? preview : null}
+        open={preview !== null && isTelemetryBinding(preview)}
         onOpenChange={(open) => {
           if (!open) setPreview(null)
         }}

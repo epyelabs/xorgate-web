@@ -38,6 +38,7 @@ import { SourcePreviewDialog } from "./source-preview-dialog"
 import { SourceDataPreviewDialog } from "./source-data-preview-dialog"
 import { SimulatorOutput } from "./simulator-output"
 import {
+  formatSeconds,
   isTelemetryBinding,
   isVideoBinding,
   type SourceBinding,
@@ -54,8 +55,16 @@ const POLL_MS = 2500
 const POLL_FAST_MS = 1000
 
 // The run's state beside the "Output" label: Running while in flight, then
-// Succeeded (green) or Failed (red); nothing before the first run.
-function RunStatusBadge({ phase }: { phase: SimPhase }) {
+// "Succeeded in 2.8s" (green) or "Failed after 2.8s" (red); nothing before
+// the first run.
+function RunStatusBadge({
+  phase,
+  durationMs,
+}: {
+  phase: SimPhase
+  durationMs: number | null
+}) {
+  const took = durationMs !== null ? formatSeconds(durationMs / 1000) : null
   if (phase === "succeeded") {
     return (
       <Badge
@@ -64,7 +73,7 @@ function RunStatusBadge({ phase }: { phase: SimPhase }) {
         data-testid="run-status-badge"
       >
         <CheckIcon />
-        Succeeded
+        Succeeded{took ? ` in ${took}` : ""}
       </Badge>
     )
   }
@@ -76,7 +85,7 @@ function RunStatusBadge({ phase }: { phase: SimPhase }) {
         data-testid="run-status-badge"
       >
         <XIcon />
-        Failed
+        Failed{took ? ` after ${took}` : ""}
       </Badge>
     )
   }
@@ -442,7 +451,10 @@ export function SimulatorPanel({
           <AccordionTrigger className="py-3">
             <span className="flex items-center gap-2">
               Output
-              <RunStatusBadge phase={phase} />
+              <RunStatusBadge
+                phase={phase}
+                durationMs={runDetail?.durationMs ?? null}
+              />
             </span>
           </AccordionTrigger>
           <AccordionContent className="pb-3">

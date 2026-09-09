@@ -1,10 +1,9 @@
 import { AlertTriangleIcon } from "lucide-react"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
-import { formatSeconds } from "../simulator-types"
 
-// Compact summary of the landed run row: total duration, steps completed out
-// of the graph's nodes, events, and the error + failed node for failed runs.
-// The status badge sits beside the "Output" section label (simulator-panel).
+// The landed run's error + failed node, for failed runs; nothing for a
+// succeeded one (the status badge with the duration sits beside the "Output"
+// section label, and the tabs carry the step / event / file counts).
 // Deliberately says nothing about which engine target ran it: that is an
 // infrastructure detail, not part of the result.
 function metric(run: WorkflowRunDetail, key: string): number | null {
@@ -33,16 +32,12 @@ export function RunHeader({
   nodeLabels: Map<string, string>
 }) {
   const failed = run.status === "failed"
-  const { ok: okSteps, nodes } = stepCounts(run)
-  const events = metric(run, "events") ?? run.events.length
-  const parts = [
-    run.durationMs !== null ? formatSeconds(run.durationMs / 1000) : null,
-    `${okSteps}/${nodes} steps completed`,
-    `${events} event${events === 1 ? "" : "s"}`,
-  ].filter(Boolean)
+  // The wrapper stays mounted (hidden) so the landed state is addressable.
   return (
-    <div className="flex flex-col gap-1.5" data-testid="run-header">
-      <p className="text-[11px] text-muted-foreground">{parts.join(" · ")}</p>
+    <div
+      className={failed ? "flex flex-col gap-1.5" : "hidden"}
+      data-testid="run-header"
+    >
       {failed ? (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
           <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />

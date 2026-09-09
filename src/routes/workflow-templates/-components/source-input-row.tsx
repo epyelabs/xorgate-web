@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import {
-  FileTextIcon,
+  EyeIcon,
   HardDriveIcon,
   type LucideIcon,
   PlayIcon,
@@ -25,11 +25,11 @@ import { SourceWebcamDialog } from "./source-webcam-dialog"
 import {
   bindingLabel,
   bindingMeta,
+  isTelemetryBinding,
   isVideoBinding,
   isVideoSource,
   type SensorMode,
   type SourceBinding,
-  type VideoBinding,
   type VideoMode,
 } from "./simulator-types"
 
@@ -43,8 +43,8 @@ const VIDEO_ACTION: Record<VideoMode, { label: string; icon: LucideIcon }> = {
 }
 
 // One row of the "Sources (Inputs)" section: an unbound source shows a mode
-// dropdown + an action button; a bound source shows a chip (name + remove, and a
-// play affordance for video). The selector shape is driven by the source's group
+// dropdown + an action button; a bound source shows a chip (name + remove, a
+// play affordance for video, a data-preview affordance for telemetry). The selector shape is driven by the source's group
 // — video vs sensor (telemetry). `issue` renders a per-row binding error
 // (SIMULATION_BINDING_INVALID by nodeId, or a local upload/window failure).
 export function SourceInputRow({
@@ -62,7 +62,7 @@ export function SourceInputRow({
   issue?: string
   onBind: (binding: SourceBinding) => void
   onUnbind: () => void
-  onPreview: (binding: VideoBinding) => void
+  onPreview: (binding: SourceBinding) => void
 }) {
   const isVideo = isVideoSource(catalogType)
   const entry = useWorkflowCatalog((s) => s.byType[catalogType])
@@ -138,13 +138,20 @@ export function SourceInputRow({
             >
               <PlayIcon className="size-3.5" />
             </Button>
+          ) : isTelemetryBinding(binding) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onPreview(binding)}
+              title="Preview data"
+              aria-label="Preview data"
+            >
+              <EyeIcon className="size-3.5" />
+            </Button>
           ) : (
             <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground">
-              {binding.kind === "csv-file" ? (
-                <FileTextIcon className="size-3.5" />
-              ) : (
-                <HardDriveIcon className="size-3.5" />
-              )}
+              <HardDriveIcon className="size-3.5" />
             </span>
           )}
           <span className="min-w-0 flex-1" title={bindingLabel(binding)}>

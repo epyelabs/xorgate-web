@@ -34,8 +34,13 @@ import {
 } from "./simulator-bindings"
 import { SourceInputRow } from "./source-input-row"
 import { SourcePreviewDialog } from "./source-preview-dialog"
+import { SourceDataPreviewDialog } from "./source-data-preview-dialog"
 import { SimulatorOutput } from "./simulator-output"
-import type { SourceBinding, VideoBinding } from "./simulator-types"
+import {
+  isTelemetryBinding,
+  isVideoBinding,
+  type SourceBinding,
+} from "./simulator-types"
 
 // idle -> preparing (uploads/window resolution + POST) -> running (live
 // progress over IoT + run-row polling) -> succeeded | failed. The run row is
@@ -96,7 +101,7 @@ export function SimulatorPanel({
   }, [nodes, byType])
 
   const [bindings, setBindings] = useState<Record<string, SourceBinding>>({})
-  const [preview, setPreview] = useState<VideoBinding | null>(null)
+  const [preview, setPreview] = useState<SourceBinding | null>(null)
 
   const [phase, setPhase] = useState<SimPhase>("idle")
   const [prepMessage, setPrepMessage] = useState<string | null>(null)
@@ -413,8 +418,15 @@ export function SimulatorPanel({
       </div>
 
       <SourcePreviewDialog
-        binding={preview}
-        open={preview !== null}
+        binding={preview && isVideoBinding(preview) ? preview : null}
+        open={preview !== null && isVideoBinding(preview)}
+        onOpenChange={(open) => {
+          if (!open) setPreview(null)
+        }}
+      />
+      <SourceDataPreviewDialog
+        binding={preview && isTelemetryBinding(preview) ? preview : null}
+        open={preview !== null && isTelemetryBinding(preview)}
         onOpenChange={(open) => {
           if (!open) setPreview(null)
         }}

@@ -9,6 +9,7 @@ import {
   ZoomOutIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,7 @@ export function FrameThumb({
 }) {
   const key = frameKey(runId, nodeId, seq)
   const [url, setUrl] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     let cancelled = false
     presignQueued(runId, key).then(
@@ -65,17 +67,25 @@ export function FrameThumb({
       aria-label={`Open frame ${seq}`}
       className={
         fill
-          ? "relative block aspect-video w-full overflow-hidden rounded border border-border bg-black outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          : "relative block shrink-0 overflow-hidden rounded border border-border bg-black outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          ? "relative block aspect-video w-full overflow-hidden rounded border border-border bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          : "relative block shrink-0 overflow-hidden rounded border border-border bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       }
       style={fill ? undefined : { width, height: Math.round((width * 9) / 16) }}
+      data-loaded={loaded ? "true" : "false"}
     >
+      {/* Skeleton until the JPEG has decoded (presign + fetch), like the rest of the app's loading states. */}
+      {!loaded ? <Skeleton className="absolute inset-0 rounded-none" /> : null}
       {url ? (
         <img
           src={url}
           alt={`Frame ${seq}`}
           loading="lazy"
-          className="block size-full object-cover"
+          className={
+            loaded
+              ? "block size-full object-cover"
+              : "block size-full object-cover opacity-0"
+          }
+          onLoad={() => setLoaded(true)}
           onError={(e) => {
             ;(e.currentTarget as HTMLImageElement).style.visibility = "hidden"
           }}
@@ -165,10 +175,11 @@ function FrameViewer({
         </span>
       </div>
       <div
-        className="relative aspect-video w-full overflow-hidden rounded-md border border-border bg-black"
+        className="relative aspect-video w-full overflow-hidden rounded-md border border-border bg-muted"
         data-testid="frame-stage"
         data-loading={loading ? "true" : "false"}
       >
+        {!shown ? <Skeleton className="absolute inset-0 rounded-none" /> : null}
         {shown ? (
           <img
             src={shown.url}
@@ -191,7 +202,8 @@ function FrameViewer({
           <span className="absolute inset-0 flex items-center justify-center text-xs text-destructive">
             Could not load the frame: {error}
           </span>
-        ) : loading ? (
+        ) : loading && shown ? (
+          // Navigating: keep the last frame under a spinner so the stage never blanks.
           <span className="absolute inset-0 flex items-center justify-center bg-black/30">
             <Loader2Icon className="size-6 animate-spin text-white" />
           </span>

@@ -11,10 +11,7 @@ import { Button } from "@/components/ui/button"
 import { isXorgateError } from "@xorgate/sdk"
 import { xgMessage } from "@/lib/xorgate"
 import { createSimulation } from "@/lib/workflow-templates-api"
-import {
-  getRunArtifactUrl,
-  getWorkflowInstance,
-} from "@/lib/workflow-instances-api"
+import { getWorkflowInstance } from "@/lib/workflow-instances-api"
 import {
   getWorkflowRunResponseSchema,
   type WorkflowRunDetail,
@@ -23,9 +20,7 @@ import { parsePublishIssues } from "@/lib/workflow-catalog-schemas"
 import {
   parseBindingIssues,
   parseDispatchFailure,
-  parseDetectionRecords,
   type CreateSimulationResponse,
-  type DetectionsPayload,
 } from "@/lib/workflow-sim-schemas"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import { useSimProgress } from "@/hooks/use-sim-progress"
@@ -35,7 +30,6 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 import {
   BindingResolveError,
   resolveApiBindings,
-  SIM_CAPTURE_PREFIX,
   withSimulationCaptures,
 } from "./simulator-bindings"
 import { SourceInputRow } from "./source-input-row"
@@ -62,8 +56,9 @@ function revoke(binding: SourceBinding | undefined) {
 // The "Workflow Testing" pane. Reads the live graph's source nodes, lets the
 // user bind a concrete test input to each, and runs the CURRENT editor draft
 // as a real simulation run of the v2 engine (backend workflow-simulations.ts),
-// with live step/event/preview progress over IoT WSS and results (trace,
-// events, overlayed video, Data Capture downloads) once the run lands.
+// with live step/event/preview progress over IoT WSS and results (the run
+// header, the engine's output video, trace, events, every artifact) once the
+// run lands.
 export function SimulatorPanel({
   templateId,
   onClose,
@@ -113,7 +108,6 @@ export function SimulatorPanel({
   const [activeRun, setActiveRun] = useState<CreateSimulationResponse | null>(null)
   const [ranDefinition, setRanDefinition] = useState<WorkflowDefinition | null>(null)
   const [runDetail, setRunDetail] = useState<WorkflowRunDetail | null>(null)
-  const [detections, setDetections] = useState<DetectionsPayload[] | null>(null)
 
   // Both sections open initially; a started run collapses Sources so the
   // Output takes over (the user can re-open Sources anytime).
@@ -192,45 +186,12 @@ export function SimulatorPanel({
 
   // --- Terminal handling -------------------------------------------------------
 
-  // After a successful media run, replay the full detections record set from
-  // the Data Capture artifact (the live records topic is throttled to live
-  // pace by design; see the frozen wire-contract note). Auto-attached capture
-  // nodes (simcap-*) are preferred; any other capture artifact that parses as
-  // detections works too.
-  const loadDetections = useCallback(
-    async (detail: WorkflowRunDetail) => {
-      const outputs = detail.artifacts?.outputs ?? {}
-      const entries = Object.entries(outputs).sort(([a], [b]) => {
-        const ap = a.startsWith(SIM_CAPTURE_PREFIX) ? 0 : 1
-        const bp = b.startsWith(SIM_CAPTURE_PREFIX) ? 0 : 1
-        return ap - bp
-      })
-      for (const [, artifact] of entries) {
-        try {
-          const { url } = await getRunArtifactUrl(detail.id, artifact.recordsKey)
-          const res = await fetch(url)
-          if (!res.ok) continue
-          const parsed = parseDetectionRecords(await res.text(), artifact.format)
-          if (parsed.length > 0) {
-            setDetections(parsed)
-            return
-          }
-        } catch {
-          // Best-effort: the overlay simply stays off without records.
-        }
-      }
-    },
-    [],
-  )
-
-  const finishRun = useCallback(
-    (detail: WorkflowRunDetail) => {
-      setRunDetail(detail)
-      setPhase(detail.status === "succeeded" ? "succeeded" : "failed")
-      if (detail.status === "succeeded") void loadDetections(detail)
-    },
-    [loadDetections],
-  )
+  // The run row is the terminal source of truth; the Output renders it
+  // (header, the engine's output video, trace, events, artifacts).
+  const finishRun = useCallback((detail: WorkflowRunDetail) => {
+    setRunDetail(detail)
+    setPhase(detail.status === "succeeded" ? "succeeded" : "failed")
+  }, [])
 
   // Poll the run row while in flight. The IoT status topic can beat finalize
   // (or be missed entirely on a fast Lambda run), so the DB row decides.
@@ -266,7 +227,6 @@ export function SimulatorPanel({
     setRowIssues({})
     setGeneralIssues([])
     setRunDetail(null)
-    setDetections(null)
     setActiveRun(null)
     useWorkflowEditor.getState().setPublishIssues([])
     try {
@@ -343,19 +303,6 @@ export function SimulatorPanel({
       toast.error(xgMessage(err))
     } finally {
       setPrepMessage(null)
-    }
-  }
-
-  const downloadArtifact = async (runId: string, key: string) => {
-    try {
-      const { url } = await getRunArtifactUrl(runId, key)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = key.split("/").pop() ?? "artifact"
-      a.rel = "noopener"
-      a.click()
-    } catch (err) {
-      toast.error((err as Error).message)
     }
   }
 
@@ -438,12 +385,7 @@ export function SimulatorPanel({
                 progress={progress}
                 run={runDetail}
                 ranDefinition={ranDefinition}
-                bindings={bindings}
-                detections={detections}
                 webcam={webcamEntry ? webcamIngest : null}
-                onDownload={(key) => {
-                  if (activeRun) void downloadArtifact(activeRun.run.id, key)
-                }}
               />
             </div>
           </AccordionContent>

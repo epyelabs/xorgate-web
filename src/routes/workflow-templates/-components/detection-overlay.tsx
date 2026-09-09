@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react"
 import type { DetectionsPayload } from "@/lib/workflow-sim-schemas"
 
-// Client-side bounding-box overlay (open question Q2, primary plane): the
-// browser plays the bound media locally and draws boxes/labels from the
-// engine's ts-aligned json:detections records on top. For batch simulations
-// the records come from the post-run Data Capture artifact (the live records
-// topic is throttled to live pace and misses most frames by design).
+// Client-side bounding-box overlay for the LIVE webcam view only: the browser
+// shows its own camera stream and draws boxes/labels from the engine's
+// freshest json:detections record on top while the run is in progress.
+// Finished runs play the engine's real output (the muxed visualization MP4,
+// output/video-tab.tsx); nothing is drawn client-side for them.
 
 // Per-class overlay colours (border + label chip), roughly matching common
 // detector palettes: people red, animals purple, vehicles orange.
@@ -22,31 +21,6 @@ const DEFAULT_CLASS_COLOR = "#10b981"
 
 function classColor(cls: string): string {
   return CLASS_COLORS[cls] ?? DEFAULT_CLASS_COLOR
-}
-
-// Records are engine-timestamped (epoch ms anchored at the source's start);
-// the video timeline is seconds from 0. Anchoring t=0 at the first record's ts
-// holds for every batch binding: decode_sample stamps frames from the same
-// anchor the first frame got.
-function recordAt(
-  records: DetectionsPayload[],
-  timeSec: number,
-): DetectionsPayload | null {
-  if (records.length === 0) return null
-  const target = records[0].ts + timeSec * 1000
-  // Binary search: last record with ts <= target.
-  let lo = 0
-  let hi = records.length - 1
-  if (records[0].ts > target) return null
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1
-    if (records[mid].ts <= target) lo = mid
-    else hi = mid - 1
-  }
-  const rec = records[lo]
-  // A record only covers ~one sample interval; past a 1.5 s gap show nothing
-  // rather than a stale box.
-  return target - rec.ts <= 1500 ? rec : null
 }
 
 /** Absolutely-positioned boxes + labels for one detections record. */
@@ -79,56 +53,6 @@ export function DetectionBoxes({ record }: { record: DetectionsPayload }) {
           </div>
         )
       })}
-    </div>
-  )
-}
-
-/**
- * A locally played video with the detections record set replayed against its
- * timeline. Follows playback with a rAF loop (timeupdate alone is ~4 Hz, too
- * coarse for tracking boxes).
- */
-export function DetectionVideo({
-  src,
-  records,
-}: {
-  src: string
-  records: DetectionsPayload[]
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [current, setCurrent] = useState<DetectionsPayload | null>(null)
-
-  useEffect(() => {
-    let raf = 0
-    let lastTs = -1
-    const tick = () => {
-      const v = videoRef.current
-      if (v) {
-        const rec = recordAt(records, v.currentTime)
-        const ts = rec?.ts ?? -1
-        if (ts !== lastTs) {
-          lastTs = ts
-          setCurrent(rec)
-        }
-      }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [records])
-
-  return (
-    <div className="relative w-full overflow-hidden rounded-md border border-border bg-black">
-      <video
-        ref={videoRef}
-        src={src}
-        controls
-        autoPlay
-        muted
-        playsInline
-        className="block h-auto w-full"
-      />
-      {current ? <DetectionBoxes record={current} /> : null}
     </div>
   )
 }

@@ -32,15 +32,19 @@ export async function rerunWorkflowInstance(id: string): Promise<void> {
   await xg().request("POST", `/workflow-runs/${id}/rerun`)
 }
 
-// Presigned GET for a v2 run artifact (Data Capture records, events.jsonl,
-// visualization frames). `key` must come from the run detail's `artifacts`
-// map; the backend rejects keys outside the run's S3 prefix. URL expires in
-// ~5 minutes, so fetch fresh per download/read.
+// Presigned GET for any object under a v2 run's S3 prefix (Data Capture
+// records, events.jsonl, result.json, manifest.json, visualization frames and
+// MP4s, materialized inputs); the backend rejects keys outside the run's
+// prefix. `download` signs a Content-Disposition: attachment override so the
+// browser saves the file under a name derived from the key (the `download`
+// attribute alone is ignored cross-origin). URL expires in ~5 minutes, so
+// fetch fresh per download/read.
 export async function getRunArtifactUrl(
   runId: string,
   key: string,
+  opts: { download?: boolean } = {},
 ): Promise<{ url: string; expiresInSeconds: number }> {
   return xg().request("GET", `/workflow-runs/${runId}/artifact-url`, {
-    query: { key },
+    query: opts.download ? { key, download: "1" } : { key },
   })
 }

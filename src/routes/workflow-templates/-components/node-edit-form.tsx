@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { SquareFunctionIcon, Trash2Icon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { FUNCTION_NODE_RUNTIMES } from "@/lib/code-function-runtime"
 import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
@@ -21,7 +23,8 @@ import { useWorkflowEditor } from "@/store/workflow-editor"
 // GENERATED from the served catalog's per-node config JSON Schema (drafted from
 // the backend zod via zod-to-json-schema), so the form always matches what
 // publish validation will accept. Covers the shapes the M1 catalog emits:
-// number/integer, string, string enum, boolean, string array, enum array.
+// number/integer, string, string enum, boolean, string array, enum array,
+// and arrays of objects (a geofence polygon: one `lat, lng` vertex per line).
 
 // Loose structural view of a JSON Schema property (draft-07 subset).
 interface PropSchema {
@@ -32,7 +35,11 @@ interface PropSchema {
   minimum?: number
   maximum?: number
   exclusiveMinimum?: number
-  items?: { type?: string; enum?: unknown[] }
+  items?: {
+    type?: string
+    enum?: unknown[]
+    properties?: Record<string, PropSchema>
+  }
 }
 
 interface ObjectSchema {
@@ -68,7 +75,136 @@ function humanize(key: string): string {
 }
 
 function asStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : []
+}
+
+// --- Arrays of objects --------------------------------------------------------
+// The generic string-array input cannot hold these (it would render nothing
+// and, worse, overwrite the objects with strings on the first keystroke).
+// Every object array is edited as text, one item per line: a point-like item
+// (all-numeric properties such as { lat, lng }) as comma-separated numbers in
+// the schema's property order, anything else as one JSON object per line.
+// The draft is local; the config only changes once the whole text parses, so
+// a half-typed line never corrupts the definition.
+
+function pointKeys(schema: PropSchema): string[] | null {
+  const props = schema.items?.properties
+  if (!props) return null
+  const keys = Object.keys(props)
+  if (keys.length === 0) return null
+  return keys.every(
+    (k) => props[k].type === "number" || props[k].type === "integer"
+  )
+    ? keys
+    : null
+}
+
+function objectArrayToText(value: unknown, keys: string[] | null): string {
+  if (!Array.isArray(value)) return ""
+  return value
+    .map((item) => {
+      if (keys && item && typeof item === "object") {
+        return keys
+          .map((k) => String((item as Record<string, unknown>)[k] ?? ""))
+          .join(", ")
+      }
+      return JSON.stringify(item)
+    })
+    .join("\n")
+}
+
+function parseObjectArrayText(
+  text: string,
+  keys: string[] | null
+): { items: Record<string, unknown>[] } | { error: string } {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const items: Record<string, unknown>[] = []
+  for (const [i, line] of lines.entries()) {
+    if (keys) {
+      const parts = line.split(",").map((p) => p.trim())
+      if (
+        parts.length !== keys.length ||
+        parts.some((p) => p === "" || !Number.isFinite(Number(p)))
+      ) {
+        return { error: `Line ${i + 1}: expected ${keys.join(", ")}` }
+      }
+      items.push(Object.fromEntries(keys.map((k, j) => [k, Number(parts[j])])))
+    } else {
+      try {
+        const obj = JSON.parse(line) as unknown
+        if (!obj || typeof obj !== "object" || Array.isArray(obj))
+          throw new Error("not an object")
+        items.push(obj as Record<string, unknown>)
+      } catch {
+        return { error: `Line ${i + 1}: expected a JSON object` }
+      }
+    }
+  }
+  return { items }
+}
+
+function ObjectArrayField({
+  fieldId,
+  schema,
+  value,
+  setValue,
+}: {
+  fieldId: string
+  schema: PropSchema
+  value: unknown
+  setValue: (v: unknown) => void
+}) {
+  const keys = pointKeys(schema)
+  const canonical = objectArrayToText(value, keys)
+  const [draft, setDraft] = useState(canonical)
+  const [error, setError] = useState<string | null>(null)
+  // Resync when the stored value changes from elsewhere (paste, undo, another node).
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setDraft(canonical)
+    setError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [canonical])
+  const count = Array.isArray(value) ? value.length : 0
+  return (
+    <div className="flex flex-col gap-1">
+      <Textarea
+        id={fieldId}
+        rows={Math.min(8, Math.max(3, count + 1))}
+        className="font-mono text-xs"
+        placeholder={
+          keys ? `${keys.join(", ")} per line` : "one JSON object per line"
+        }
+        aria-invalid={error !== null}
+        value={draft}
+        onChange={(e) => {
+          const text = e.target.value
+          setDraft(text)
+          const parsed = parseObjectArrayText(text, keys)
+          if ("error" in parsed) {
+            setError(parsed.error)
+            return
+          }
+          setError(null)
+          setValue(parsed.items.length > 0 ? parsed.items : undefined)
+        }}
+      />
+      <span
+        className={cn(
+          "text-[11px]",
+          error ? "text-destructive" : "text-muted-foreground"
+        )}
+      >
+        {error ??
+          `${count} ${keys ? "vertices" : "items"}${keys ? ` (${keys.join(", ")} per line)` : ""}`}
+      </span>
+    </div>
+  )
 }
 
 function ConfigField({
@@ -127,7 +263,9 @@ function ConfigField({
         min={schema.minimum ?? schema.exclusiveMinimum}
         max={schema.maximum}
         step={schema.type === "integer" ? 1 : "any"}
-        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        placeholder={
+          schema.default !== undefined ? String(schema.default) : undefined
+        }
         value={value === undefined || value === null ? "" : String(value)}
         onChange={(e) =>
           setValue(e.target.value === "" ? undefined : Number(e.target.value))
@@ -139,7 +277,8 @@ function ConfigField({
     // enumFilter rejects are hidden but still-selected values are preserved.
     const selected = new Set(asStringArray(value ?? schema.default))
     const options = schema.items.enum.filter(
-      (opt) => !enumFilter || enumFilter(String(opt)) || selected.has(String(opt)),
+      (opt) =>
+        !enumFilter || enumFilter(String(opt)) || selected.has(String(opt))
     )
     control = (
       <div className="flex flex-wrap gap-1">
@@ -161,7 +300,7 @@ function ConfigField({
                 "rounded-md border px-2 py-1 text-[11px] transition-colors",
                 on
                   ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent",
+                  : "border-border text-muted-foreground hover:bg-accent"
               )}
             >
               {key}
@@ -169,6 +308,16 @@ function ConfigField({
           )
         })}
       </div>
+    )
+  } else if (schema.type === "array" && schema.items?.type === "object") {
+    // Object array (geofence polygon) -> one item per line.
+    control = (
+      <ObjectArrayField
+        fieldId={fieldId}
+        schema={schema}
+        value={value}
+        setValue={setValue}
+      />
     )
   } else if (schema.type === "array") {
     // String array (metrics, classes) -> comma-separated text input.
@@ -191,9 +340,13 @@ function ConfigField({
     control = (
       <Input
         id={fieldId}
-        placeholder={schema.default !== undefined ? String(schema.default) : undefined}
+        placeholder={
+          schema.default !== undefined ? String(schema.default) : undefined
+        }
         value={value === undefined || value === null ? "" : String(value)}
-        onChange={(e) => setValue(e.target.value === "" ? undefined : e.target.value)}
+        onChange={(e) =>
+          setValue(e.target.value === "" ? undefined : e.target.value)
+        }
       />
     )
   }
@@ -237,7 +390,9 @@ function CodeFunctionSummary({
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{runtime.runtimeLabel}</Badge>
         <Badge variant="secondary">
-          {fn.deployedVersion !== null ? `Live: v${fn.deployedVersion}` : "Not deployed"}
+          {fn.deployedVersion !== null
+            ? `Live: v${fn.deployedVersion}`
+            : "Not deployed"}
         </Badge>
       </div>
       <p className="text-[11px] text-muted-foreground">
@@ -263,7 +418,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const updateNodeLabel = useWorkflowEditor((s) => s.updateNodeLabel)
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
   const entry = useWorkflowCatalog((s) =>
-    node ? s.byType[node.data.catalogType] : undefined,
+    node ? s.byType[node.data.catalogType] : undefined
   )
 
   if (!node) return null
@@ -274,7 +429,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   // `deployedVersion` (the engine's full config), which the function editor
   // owns (Code / Versions tabs); the popover keeps the plain knobs only.
   const properties = Object.entries(objectSchema.properties ?? {}).filter(
-    ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key),
+    ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key)
   )
   const requiredKeys = new Set(objectSchema.required ?? [])
 
@@ -287,7 +442,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
     if (incoming.every((e) => typeof e.targetHandle === "string")) {
       const connected = new Set(incoming.map((e) => e.targetHandle as string))
       overlayFilter = (option) =>
-        (VISUALIZATION_OVERLAY_PORTS[option] ?? []).some((port) => connected.has(port))
+        (VISUALIZATION_OVERLAY_PORTS[option] ?? []).some((port) =>
+          connected.has(port)
+        )
     }
   }
 
@@ -313,7 +470,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
         </div>
 
         {entry?.description ? (
-          <p className="text-[11px] text-muted-foreground">{entry.description}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {entry.description}
+          </p>
         ) : (
           <p className="text-[11px] text-destructive">
             Unknown node type — not in the served catalog. It will fail publish
@@ -322,7 +481,10 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
         )}
 
         {entry?.ui.editor === "code" ? (
-          <CodeFunctionSummary nodeId={node.id} catalogType={node.data.catalogType} />
+          <CodeFunctionSummary
+            nodeId={node.id}
+            catalogType={node.data.catalogType}
+          />
         ) : entry?.ui.editor ? (
           <p className="rounded-md border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
             This node gets a rich {entry.ui.editor} editor in a later milestone;

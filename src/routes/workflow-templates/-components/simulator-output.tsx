@@ -14,7 +14,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
-import type { RunStepStatus, WorkflowRunDetail } from "@/lib/workflow-run-schemas"
+import type {
+  RunStepStatus,
+  WorkflowRunDetail,
+} from "@/lib/workflow-run-schemas"
 import {
   detectionsPayloadSchema,
   type DetectionsPayload,
@@ -27,10 +30,10 @@ import type { SimPhase } from "./simulator-panel"
 import { formatSeconds } from "./simulator-types"
 import { DataTab } from "./output/data-tab"
 import { EventsTab } from "./output/events-tab"
-import { RunHeader } from "./output/run-header"
+import { RunHeader, stepCounts } from "./output/run-header"
 import { TraceTab } from "./output/trace-tab"
 import { VideoTab } from "./output/video-tab"
-import { visualizationNodes } from "./output/run-artifacts"
+import { buildArtifactGroups, visualizationNodes } from "./output/run-artifacts"
 
 // The simulator "Output" area, backed by a REAL run: while in flight it shows
 // the live step trace / events / preview frames arriving over IoT WSS; once
@@ -163,8 +166,8 @@ function LiveWebcamView({
   if (webcam.status === "stopped") {
     return (
       <p className="text-[11px] text-muted-foreground">
-        Webcam stopped ({webcam.framesSent} frames sent); waiting for the run
-        to drain…
+        Webcam stopped ({webcam.framesSent} frames sent); waiting for the run to
+        drain…
       </p>
     )
   }
@@ -179,7 +182,7 @@ function LiveWebcamView({
           className="block aspect-video w-full object-cover"
         />
         {fresh && record ? <DetectionBoxes record={record} /> : null}
-        <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        <span className="absolute top-2 left-2 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
           <span className="size-1.5 animate-pulse rounded-full bg-red-500" />
           LIVE · {webcam.framesSent} frames
         </span>
@@ -225,7 +228,7 @@ function PreviewFrames({
             height={p.height}
             className="block h-auto w-full"
           />
-          <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <span className="absolute top-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
             {nodeLabels.get(p.nodeId) ?? p.nodeId} · frame {p.frameSeq}
           </span>
         </div>
@@ -307,7 +310,8 @@ export function SimulatorOutput({
           <p className="text-xs">
             {coldStarting ? (
               <>
-                Starting sandbox ({startedAt ? <ElapsedSince since={startedAt} /> : null})… the
+                Starting sandbox (
+                {startedAt ? <ElapsedSince since={startedAt} /> : null})… the
                 first media run can take a minute while the engine container
                 boots.
               </>
@@ -366,6 +370,15 @@ export function SimulatorOutput({
   const showVideoTab =
     hasVideo || visualizationNodes(ranDefinition ?? run.definition).length > 0
   const defaultTab = hasVideo && phase !== "failed" ? "video" : "trace"
+  const steps = stepCounts(run)
+  // Files the Data tab lists (materialized inputs are only known once the tab
+  // reads the manifest; they are rare and the badge catches up on open).
+  const dataCount = buildArtifactGroups({
+    run,
+    definition: ranDefinition,
+    nodeLabels,
+    manifestInputs: null,
+  }).reduce((n, g) => n + g.entries.length, 0)
 
   return (
     <div className="flex flex-col gap-2">
@@ -382,6 +395,9 @@ export function SimulatorOutput({
           <TabsTrigger value="trace">
             <ListIcon className="size-3.5" />
             Trace
+            <Badge variant="secondary" className="ml-1">
+              {steps.ok}/{steps.nodes}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="events">
             <ZapIcon className="size-3.5" />
@@ -395,12 +411,21 @@ export function SimulatorOutput({
           <TabsTrigger value="artifacts">
             <FolderIcon className="size-3.5" />
             Data
+            {dataCount > 0 ? (
+              <Badge variant="secondary" className="ml-1">
+                {dataCount}
+              </Badge>
+            ) : null}
           </TabsTrigger>
         </TabsList>
 
         {showVideoTab ? (
           <TabsContent value="video" className="flex flex-col gap-2">
-            <VideoTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
+            <VideoTab
+              run={run}
+              definition={ranDefinition}
+              nodeLabels={nodeLabels}
+            />
           </TabsContent>
         ) : null}
 
@@ -417,7 +442,11 @@ export function SimulatorOutput({
         </TabsContent>
 
         <TabsContent value="artifacts" className="flex flex-col gap-1.5">
-          <DataTab run={run} definition={ranDefinition} nodeLabels={nodeLabels} />
+          <DataTab
+            run={run}
+            definition={ranDefinition}
+            nodeLabels={nodeLabels}
+          />
         </TabsContent>
       </Tabs>
     </div>

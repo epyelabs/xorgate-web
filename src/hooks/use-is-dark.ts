@@ -8,8 +8,8 @@ import { useEffect, useState } from "react"
  * not the resolved light/dark that consumers actually need.
  *
  * For anything that can be styled in CSS, prefer Tailwind's `dark:` variant.
- * This is for the cases that cannot: canvas/WebGL scenes, Mapbox styles, and
- * other imperative APIs that need the value in JS.
+ * This is for the cases that cannot: canvas/WebGL scenes, map basemap styles,
+ * and other imperative APIs that need the value in JS.
  */
 export function useIsDark(): boolean {
   const [isDark, setIsDark] = useState(() =>

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react"
-import { LocateFixedIcon } from "lucide-react"
 import type { IoCapabilities } from "@xorgate/sdk"
 import type { ActiveStreamsViewType, ImuView } from "@/lib/xorgate"
 import type { LatestReading } from "@xorgate/sdk"
@@ -25,14 +24,13 @@ import {
 import { TelemetryPanel } from "@/components/telemetry-panel"
 import { ImuPanel } from "@/components/imu-panel"
 import { GpsStrip } from "@/components/gps-strip"
-import { Button } from "@/components/ui/button"
 
 export interface StreamsViewProps {
   viewType: ActiveStreamsViewType
   caps: IoCapabilities | null
   latest: Record<string, LatestReading>
   imuView: ImuView | null
-  // Map data, [lon, lat] (Mapbox order). The producer decides what "track"
+  // Map data, [lon, lat] (GeoJSON order). The producer decides what "track"
   // means: the live page feeds a trailing breadcrumb, replay a recorded trace.
   position: [number, number] | null
   track: [number, number][]
@@ -101,6 +99,7 @@ export function StreamsView({
             course={course}
             following={following}
             onInteract={() => onFollowingChange(false)}
+            onRecenter={() => onFollowingChange(true)}
             replayTrace={replayTrace}
           />
 
@@ -110,24 +109,9 @@ export function StreamsView({
             </div>
           ) : null}
 
-          {!following && position ? (
-            <div className="absolute top-3 right-3">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => onFollowingChange(true)}
-                title="Recenter map on device"
-                aria-label="Recenter map on device"
-                className="size-8 rounded-full border bg-background/85 text-muted-foreground shadow-sm backdrop-blur-sm hover:bg-background hover:text-foreground"
-              >
-                <LocateFixedIcon className="size-4" />
-              </Button>
-            </div>
-          ) : null}
-
           {/* GPS rides over the map rather than in the side column: it describes
               the position the map is already showing. Bottom-centred clears the
-              Mapbox wordmark in the corner. */}
+              map attribution in the corner. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-3">
             <div className="pointer-events-auto max-w-full">
               <GpsStrip caps={caps} latest={latest} />

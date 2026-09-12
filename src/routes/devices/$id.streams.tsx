@@ -60,7 +60,7 @@ function DeviceStreamsPage() {
   const videoCaps = caps?.media?.video ?? []
 
   // Live position + trailing breadcrumb for the Map View, derived from the same
-  // telemetry the card view reads. Coordinates are [lon, lat] (Mapbox order).
+  // telemetry the card view reads. Coordinates are [lon, lat] (GeoJSON order).
   const lat = latest["gps.lat"]?.value
   const lon = latest["gps.lon"]?.value
   const position: [number, number] | null =

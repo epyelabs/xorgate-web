@@ -19,4 +19,10 @@ export default defineConfig({
   define: {
     global: "globalThis",
   },
+  optimizeDeps: {
+    // maplibre-gl ships its tile-loading web worker as a separate entry that
+    // the dep optimizer drops, which leaves the map alive but silently unable
+    // to fetch a single tile. Excluding it keeps the worker resolvable.
+    exclude: ["maplibre-gl"],
+  },
 })

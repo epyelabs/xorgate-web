@@ -1,4 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router"
+import { useState } from "react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -72,15 +73,45 @@ export function NavMain({
             )
           }
           return (
+            <NestedItem key={item.title} item={item} pathname={pathname} />
+          )
+        })}
+      </SidebarMenu>
+    </SidebarGroup>
+  )
+}
+
+// A group with children (Models: Datasets, Training, Registry). Opens by
+// itself when the current page is under one of its children, so a deep link
+// or a reload never lands on a collapsed group hiding the active entry.
+function NestedItem({
+  item,
+  pathname,
+}: {
+  item: {
+    title: string
+    url: string
+    icon?: React.ReactNode
+    isActive?: boolean
+    items?: { title: string; url: string }[]
+  }
+  pathname: string
+}) {
+  const childActive = (url: string) =>
+    pathname === url || pathname.startsWith(url + "/")
+  const anyActive = item.items?.some((s) => childActive(s.url)) ?? false
+  const [open, setOpen] = useState(item.isActive || anyActive)
+  const isOpen = open || anyActive
+  return (
             <Collapsible
-              key={item.title}
               asChild
-              defaultOpen={item.isActive}
+              open={isOpen}
+              onOpenChange={setOpen}
               className="group/collapsible"
             >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title}>
+                  <SidebarMenuButton tooltip={item.title} isActive={anyActive}>
                     {item.icon}
                     <span>{item.title}</span>
                     <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
@@ -90,7 +121,10 @@ export function NavMain({
                   <SidebarMenuSub>
                     {item.items?.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={childActive(subItem.url)}
+                        >
                           <Link to={subItem.url}>
                             <span>{subItem.title}</span>
                           </Link>
@@ -101,9 +135,5 @@ export function NavMain({
                 </CollapsibleContent>
               </SidebarMenuItem>
             </Collapsible>
-          )
-        })}
-      </SidebarMenu>
-    </SidebarGroup>
   )
 }

@@ -10,6 +10,13 @@ interface BreadcrumbState {
   setTemplateName: (templateName: string | null) => void
   instanceName: string | null
   setInstanceName: (instanceName: string | null) => void
+  // Models section: the dataset, job and registry model names for the crumb.
+  datasetName: string | null
+  setDatasetName: (datasetName: string | null) => void
+  jobName: string | null
+  setJobName: (jobName: string | null) => void
+  modelName: string | null
+  setModelName: (modelName: string | null) => void
 }
 
 export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
@@ -19,4 +26,10 @@ export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
   setTemplateName: (templateName) => set({ templateName }),
   instanceName: null,
   setInstanceName: (instanceName) => set({ instanceName }),
+  datasetName: null,
+  setDatasetName: (datasetName) => set({ datasetName }),
+  jobName: null,
+  setJobName: (jobName) => set({ jobName }),
+  modelName: null,
+  setModelName: (modelName) => set({ modelName }),
 }))

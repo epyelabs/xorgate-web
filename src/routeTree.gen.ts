@@ -20,13 +20,19 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
 import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
+import { Route as TrainingJobsIndexRouteImport } from './routes/training-jobs/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as ModelsIndexRouteImport } from './routes/models/index'
 import { Route as MembersIndexRouteImport } from './routes/members/index'
 import { Route as DevicesIndexRouteImport } from './routes/devices/index'
+import { Route as DatasetsIndexRouteImport } from './routes/datasets/index'
 import { Route as ApiKeysIndexRouteImport } from './routes/api-keys/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
 import { Route as WorkflowInstancesIdRouteImport } from './routes/workflow-instances/$id'
+import { Route as TrainingJobsIdRouteImport } from './routes/training-jobs/$id'
+import { Route as ModelsIdRouteImport } from './routes/models/$id'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
+import { Route as DatasetsIdRouteImport } from './routes/datasets/$id'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as DevicesIdIndexRouteImport } from './routes/devices/$id.index'
 import { Route as DevicesIdWorkflowsRouteImport } from './routes/devices/$id.workflows'
@@ -37,6 +43,7 @@ import { Route as DevicesIdReplayRouteImport } from './routes/devices/$id.replay
 import { Route as DevicesIdOverviewRouteImport } from './routes/devices/$id.overview'
 import { Route as DevicesIdMediaRouteImport } from './routes/devices/$id.media'
 import { Route as DevicesIdBenchmarkRouteImport } from './routes/devices/$id.benchmark'
+import { Route as DatasetsIdAnnotateItemIdRouteImport } from './routes/datasets/$id_.annotate.$itemId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -93,9 +100,19 @@ const WorkflowInstancesIndexRoute = WorkflowInstancesIndexRouteImport.update({
   path: '/workflow-instances/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrainingJobsIndexRoute = TrainingJobsIndexRouteImport.update({
+  id: '/training-jobs/',
+  path: '/training-jobs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelsIndexRoute = ModelsIndexRouteImport.update({
+  id: '/models/',
+  path: '/models/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MembersIndexRoute = MembersIndexRouteImport.update({
@@ -106,6 +123,11 @@ const MembersIndexRoute = MembersIndexRouteImport.update({
 const DevicesIndexRoute = DevicesIndexRouteImport.update({
   id: '/devices/',
   path: '/devices/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatasetsIndexRoute = DatasetsIndexRouteImport.update({
+  id: '/datasets/',
+  path: '/datasets/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiKeysIndexRoute = ApiKeysIndexRouteImport.update({
@@ -123,9 +145,24 @@ const WorkflowInstancesIdRoute = WorkflowInstancesIdRouteImport.update({
   path: '/workflow-instances/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TrainingJobsIdRoute = TrainingJobsIdRouteImport.update({
+  id: '/training-jobs/$id',
+  path: '/training-jobs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelsIdRoute = ModelsIdRouteImport.update({
+  id: '/models/$id',
+  path: '/models/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevicesIdRoute = DevicesIdRouteImport.update({
   id: '/devices/$id',
   path: '/devices/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatasetsIdRoute = DatasetsIdRouteImport.update({
+  id: '/datasets/$id',
+  path: '/datasets/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -178,6 +215,12 @@ const DevicesIdBenchmarkRoute = DevicesIdBenchmarkRouteImport.update({
   path: '/benchmark',
   getParentRoute: () => DevicesIdRoute,
 } as any)
+const DatasetsIdAnnotateItemIdRoute =
+  DatasetsIdAnnotateItemIdRouteImport.update({
+    id: '/datasets/$id_/annotate/$itemId',
+    path: '/datasets/$id/annotate/$itemId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -190,13 +233,19 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/datasets/$id': typeof DatasetsIdRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
+  '/models/$id': typeof ModelsIdRoute
+  '/training-jobs/$id': typeof TrainingJobsIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/devices/': typeof DevicesIndexRoute
   '/members/': typeof MembersIndexRoute
+  '/models/': typeof ModelsIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/training-jobs/': typeof TrainingJobsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -208,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
   '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id/': typeof DevicesIdIndexRoute
+  '/datasets/$id/annotate/$itemId': typeof DatasetsIdAnnotateItemIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -220,12 +270,18 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/datasets/$id': typeof DatasetsIdRoute
+  '/models/$id': typeof ModelsIdRoute
+  '/training-jobs/$id': typeof TrainingJobsIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys': typeof ApiKeysIndexRoute
+  '/datasets': typeof DatasetsIndexRoute
   '/devices': typeof DevicesIndexRoute
   '/members': typeof MembersIndexRoute
+  '/models': typeof ModelsIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/training-jobs': typeof TrainingJobsIndexRoute
   '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -237,6 +293,7 @@ export interface FileRoutesByTo {
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
   '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id': typeof DevicesIdIndexRoute
+  '/datasets/$id/annotate/$itemId': typeof DatasetsIdAnnotateItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -250,13 +307,19 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/signup': typeof SignupRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/datasets/$id': typeof DatasetsIdRoute
   '/devices/$id': typeof DevicesIdRouteWithChildren
+  '/models/$id': typeof ModelsIdRoute
+  '/training-jobs/$id': typeof TrainingJobsIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
+  '/datasets/': typeof DatasetsIndexRoute
   '/devices/': typeof DevicesIndexRoute
   '/members/': typeof MembersIndexRoute
+  '/models/': typeof ModelsIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/training-jobs/': typeof TrainingJobsIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -268,6 +331,7 @@ export interface FileRoutesById {
   '/devices/$id/telemetry': typeof DevicesIdTelemetryRoute
   '/devices/$id/workflows': typeof DevicesIdWorkflowsRoute
   '/devices/$id/': typeof DevicesIdIndexRoute
+  '/datasets/$id_/annotate/$itemId': typeof DatasetsIdAnnotateItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -282,13 +346,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
+    | '/datasets/$id'
     | '/devices/$id'
+    | '/models/$id'
+    | '/training-jobs/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
+    | '/datasets/'
     | '/devices/'
     | '/members/'
+    | '/models/'
     | '/settings/'
+    | '/training-jobs/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -300,6 +370,7 @@ export interface FileRouteTypes {
     | '/devices/$id/telemetry'
     | '/devices/$id/workflows'
     | '/devices/$id/'
+    | '/datasets/$id/annotate/$itemId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -312,12 +383,18 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
+    | '/datasets/$id'
+    | '/models/$id'
+    | '/training-jobs/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys'
+    | '/datasets'
     | '/devices'
     | '/members'
+    | '/models'
     | '/settings'
+    | '/training-jobs'
     | '/workflow-instances'
     | '/workflow-templates'
     | '/devices/$id/benchmark'
@@ -329,6 +406,7 @@ export interface FileRouteTypes {
     | '/devices/$id/telemetry'
     | '/devices/$id/workflows'
     | '/devices/$id'
+    | '/datasets/$id/annotate/$itemId'
   id:
     | '__root__'
     | '/'
@@ -341,13 +419,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/signup'
     | '/auth/callback'
+    | '/datasets/$id'
     | '/devices/$id'
+    | '/models/$id'
+    | '/training-jobs/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
+    | '/datasets/'
     | '/devices/'
     | '/members/'
+    | '/models/'
     | '/settings/'
+    | '/training-jobs/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -359,6 +443,7 @@ export interface FileRouteTypes {
     | '/devices/$id/telemetry'
     | '/devices/$id/workflows'
     | '/devices/$id/'
+    | '/datasets/$id_/annotate/$itemId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -372,15 +457,22 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   SignupRoute: typeof SignupRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  DatasetsIdRoute: typeof DatasetsIdRoute
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
+  ModelsIdRoute: typeof ModelsIdRoute
+  TrainingJobsIdRoute: typeof TrainingJobsIdRoute
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
   ApiKeysIndexRoute: typeof ApiKeysIndexRoute
+  DatasetsIndexRoute: typeof DatasetsIndexRoute
   DevicesIndexRoute: typeof DevicesIndexRoute
   MembersIndexRoute: typeof MembersIndexRoute
+  ModelsIndexRoute: typeof ModelsIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
+  TrainingJobsIndexRoute: typeof TrainingJobsIndexRoute
   WorkflowInstancesIndexRoute: typeof WorkflowInstancesIndexRoute
   WorkflowTemplatesIndexRoute: typeof WorkflowTemplatesIndexRoute
+  DatasetsIdAnnotateItemIdRoute: typeof DatasetsIdAnnotateItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -462,11 +554,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkflowInstancesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/training-jobs/': {
+      id: '/training-jobs/'
+      path: '/training-jobs'
+      fullPath: '/training-jobs/'
+      preLoaderRoute: typeof TrainingJobsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/': {
       id: '/settings/'
       path: '/settings'
       fullPath: '/settings/'
       preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/models/': {
+      id: '/models/'
+      path: '/models'
+      fullPath: '/models/'
+      preLoaderRoute: typeof ModelsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/members/': {
@@ -481,6 +587,13 @@ declare module '@tanstack/react-router' {
       path: '/devices'
       fullPath: '/devices/'
       preLoaderRoute: typeof DevicesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/datasets/': {
+      id: '/datasets/'
+      path: '/datasets'
+      fullPath: '/datasets/'
+      preLoaderRoute: typeof DatasetsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api-keys/': {
@@ -504,11 +617,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkflowInstancesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/training-jobs/$id': {
+      id: '/training-jobs/$id'
+      path: '/training-jobs/$id'
+      fullPath: '/training-jobs/$id'
+      preLoaderRoute: typeof TrainingJobsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/models/$id': {
+      id: '/models/$id'
+      path: '/models/$id'
+      fullPath: '/models/$id'
+      preLoaderRoute: typeof ModelsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/devices/$id': {
       id: '/devices/$id'
       path: '/devices/$id'
       fullPath: '/devices/$id'
       preLoaderRoute: typeof DevicesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/datasets/$id': {
+      id: '/datasets/$id'
+      path: '/datasets/$id'
+      fullPath: '/datasets/$id'
+      preLoaderRoute: typeof DatasetsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -581,6 +715,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevicesIdBenchmarkRouteImport
       parentRoute: typeof DevicesIdRoute
     }
+    '/datasets/$id_/annotate/$itemId': {
+      id: '/datasets/$id_/annotate/$itemId'
+      path: '/datasets/$id/annotate/$itemId'
+      fullPath: '/datasets/$id/annotate/$itemId'
+      preLoaderRoute: typeof DatasetsIdAnnotateItemIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -623,15 +764,22 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   SignupRoute: SignupRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  DatasetsIdRoute: DatasetsIdRoute,
   DevicesIdRoute: DevicesIdRouteWithChildren,
+  ModelsIdRoute: ModelsIdRoute,
+  TrainingJobsIdRoute: TrainingJobsIdRoute,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,
   ApiKeysIndexRoute: ApiKeysIndexRoute,
+  DatasetsIndexRoute: DatasetsIndexRoute,
   DevicesIndexRoute: DevicesIndexRoute,
   MembersIndexRoute: MembersIndexRoute,
+  ModelsIndexRoute: ModelsIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
+  TrainingJobsIndexRoute: TrainingJobsIndexRoute,
   WorkflowInstancesIndexRoute: WorkflowInstancesIndexRoute,
   WorkflowTemplatesIndexRoute: WorkflowTemplatesIndexRoute,
+  DatasetsIdAnnotateItemIdRoute: DatasetsIdAnnotateItemIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

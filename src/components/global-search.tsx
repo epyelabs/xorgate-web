@@ -39,6 +39,12 @@ function navigateToResult(
     case "workflow-instance":
       navigate({ to: "/workflow-instances/$id", params: { id: result.id } })
       break
+    case "dataset":
+      navigate({ to: "/datasets/$id", params: { id: result.id } })
+      break
+    case "model":
+      navigate({ to: "/models/$id", params: { id: result.id } })
+      break
   }
 }
 
@@ -177,7 +183,7 @@ export function GlobalSearch() {
         <CommandInput
           value={query}
           onValueChange={setQuery}
-          placeholder="Search devices, workflows…"
+          placeholder="Search devices, workflows, datasets, models…"
         />
         <CommandList className="max-h-[400px]">
           {loading ? (

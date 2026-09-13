@@ -83,4 +83,31 @@ export const qk = {
     [...qk.ws(orgId, wsId), "workflow-instances", params] as const,
   workflowInstance: (orgId: Id, wsId: Id, instanceId: string) =>
     [...qk.ws(orgId, wsId), "workflow-instance", instanceId] as const,
+
+  // --- Models section (xorgate-models M4). Org-owned: a dataset, a job and a
+  // registry entry have no workspace, so nothing here hangs off qk.ws.
+  datasets: (orgId: Id) => [...qk.org(orgId), "datasets"] as const,
+  dataset: (orgId: Id, datasetId: string) =>
+    [...qk.org(orgId), "dataset", datasetId] as const,
+  // Everything about one dataset EXTENDS its key, so invalidating
+  // qk.dataset(...) refreshes its items, versions and imports in one call.
+  datasetItems: (orgId: Id, datasetId: string, params: Record<string, unknown>) =>
+    [...qk.dataset(orgId, datasetId), "items", params] as const,
+  datasetItemAnnotations: (orgId: Id, datasetId: string, itemId: string) =>
+    [...qk.dataset(orgId, datasetId), "annotations", itemId] as const,
+  datasetVersions: (orgId: Id, datasetId: string) =>
+    [...qk.dataset(orgId, datasetId), "versions"] as const,
+  datasetVersion: (orgId: Id, datasetId: string, version: number) =>
+    [...qk.dataset(orgId, datasetId), "version", version] as const,
+  datasetImports: (orgId: Id, datasetId: string) =>
+    [...qk.dataset(orgId, datasetId), "imports"] as const,
+  trainingJobs: (orgId: Id, params: Record<string, unknown>) =>
+    [...qk.org(orgId), "training-jobs", params] as const,
+  trainingJob: (orgId: Id, jobId: string) =>
+    [...qk.org(orgId), "training-job", jobId] as const,
+  // Trained networks (the registry), NOT hardware SKUs (qk.deviceModels).
+  registryModels: (orgId: Id, params: Record<string, unknown>) =>
+    [...qk.org(orgId), "registry-models", params] as const,
+  registryModel: (orgId: Id, modelId: string) =>
+    [...qk.org(orgId), "registry-model", modelId] as const,
 } as const

@@ -1,5 +1,7 @@
 import {
+  BoxesIcon,
   HardDriveIcon,
+  ImagesIcon,
   PlayIcon,
   WorkflowIcon,
   type LucideIcon,
@@ -24,4 +26,6 @@ export const SEARCH_RESOURCES: SearchResourceMeta[] = [
   { type: "device", label: "Devices", icon: HardDriveIcon },
   { type: "workflow-template", label: "Workflow Templates", icon: WorkflowIcon },
   { type: "workflow-instance", label: "Workflow Instances", icon: PlayIcon },
+  { type: "dataset", label: "Datasets", icon: ImagesIcon },
+  { type: "model", label: "Models", icon: BoxesIcon },
 ]

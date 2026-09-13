@@ -18,6 +18,7 @@ import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
+import { ModelRefField } from "./model-ref-field"
 
 // The node editor body, rendered inside the per-node popover. Fields are
 // GENERATED from the served catalog's per-node config JSON Schema (drafted from
@@ -551,6 +552,7 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
   const node = useWorkflowEditor((s) => s.nodes.find((n) => n.id === nodeId))
   const edges = useWorkflowEditor((s) => s.edges)
   const updateNodeLabel = useWorkflowEditor((s) => s.updateNodeLabel)
+  const updateNodeConfig = useWorkflowEditor((s) => s.updateNodeConfig)
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
   const entry = useWorkflowCatalog((s) =>
     node ? s.byType[node.data.catalogType] : undefined
@@ -567,6 +569,9 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
     ([key]) => entry?.ui.editor !== "code" || !CODE_EDITOR_KEYS.has(key)
   )
   const requiredKeys = new Set(objectSchema.required ?? [])
+  // A node whose runtime declares a model reference gets the registry picker
+  // on its `model` field (xorgate-models M4); no engine or catalog change.
+  const modelFamily = entry?.runtime.modelRef?.family ?? null
 
   // Visualization overlays: only offer layers whose tagged input is connected.
   // New edges always carry explicit port-id handles; a legacy null handle
@@ -627,17 +632,29 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
           </p>
         ) : null}
 
-        {properties.map(([key, schema]) => (
-          <ConfigField
-            key={key}
-            nodeId={node.id}
-            fieldKey={key}
-            schema={schema}
-            required={requiredKeys.has(key)}
-            value={config[key]}
-            enumFilter={key === "overlays" ? overlayFilter : undefined}
-          />
-        ))}
+        {properties.map(([key, schema]) =>
+          modelFamily && key === "model" ? (
+            <ModelRefField
+              key={key}
+              fieldId={`cfg-${key}`}
+              family={modelFamily}
+              value={config[key]}
+              required={requiredKeys.has(key)}
+              description={schema.description}
+              setValue={(v) => updateNodeConfig(node.id, key, v)}
+            />
+          ) : (
+            <ConfigField
+              key={key}
+              nodeId={node.id}
+              fieldKey={key}
+              schema={schema}
+              required={requiredKeys.has(key)}
+              value={config[key]}
+              enumFilter={key === "overlays" ? overlayFilter : undefined}
+            />
+          ),
+        )}
       </div>
 
       <div className="border-t border-border pt-3">

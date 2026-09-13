@@ -14,6 +14,12 @@ export type Permission =
   | "api-keys:manage"
   | "billing:manage"
   | "workspace:manage"
+  // Models section (xorgate-models Q5): members annotate, import and build
+  // versions; admins and owners start training and assist jobs (they cost
+  // money) and archive or delete registry models; viewers read.
+  | "models:annotate"
+  | "models:train"
+  | "models:manage"
 
 const ALL_PERMISSIONS: Permission[] = [
   "members:read",
@@ -21,12 +27,23 @@ const ALL_PERMISSIONS: Permission[] = [
   "api-keys:manage",
   "billing:manage",
   "workspace:manage",
+  "models:annotate",
+  "models:train",
+  "models:manage",
 ]
 
 const ROLE_PERMISSIONS: Record<MembershipRole, Permission[]> = {
   owner: ALL_PERMISSIONS,
-  admin: ["members:read", "members:manage", "api-keys:manage", "workspace:manage"],
-  member: ["members:read"],
+  admin: [
+    "members:read",
+    "members:manage",
+    "api-keys:manage",
+    "workspace:manage",
+    "models:annotate",
+    "models:train",
+    "models:manage",
+  ],
+  member: ["members:read", "models:annotate"],
   viewer: [],
 }
 

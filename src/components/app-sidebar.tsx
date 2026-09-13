@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   Box,
+  Boxes,
   KeyRound,
   LayoutDashboard,
   Settings,
@@ -43,6 +44,18 @@ const organizationNav = [
     title: "Workflow Templates",
     url: "/workflow-templates",
     icon: <LayoutDashboard />,
+  },
+  // Trained networks, not hardware SKUs: datasets to label, the jobs that
+  // train on them, and the registry the template editor picks from.
+  {
+    title: "Models",
+    url: "/datasets",
+    icon: <Boxes />,
+    items: [
+      { title: "Datasets", url: "/datasets" },
+      { title: "Training", url: "/training-jobs" },
+      { title: "Registry", url: "/models" },
+    ],
   },
   { title: "API Keys", url: "/api-keys", icon: <KeyRound /> },
   { title: "Members", url: "/members", icon: <Users /> },

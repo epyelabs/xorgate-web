@@ -47,12 +47,61 @@ const DEVICE_TAB_LABELS: Record<string, string> = {
   settings: "Settings",
 }
 
+interface ModelsCrumbNames {
+  datasetName: string | null
+  jobName: string | null
+  modelName: string | null
+}
+
+// The Models section (xorgate-models M4): three org-wide lists under one nav
+// group. The annotator sits under its dataset so the crumb reads
+// "Datasets > <dataset> > Annotate".
+function resolveModelsCrumbs(
+  pathname: string,
+  names: ModelsCrumbNames
+): Crumb[] | null {
+  if (pathname === "/datasets") return [{ label: "Datasets" }]
+  if (pathname.startsWith("/datasets/")) {
+    const rest = pathname.slice("/datasets/".length)
+    const [datasetId, section] = rest.split("/")
+    const crumbs: Crumb[] = [{ label: "Datasets", href: "/datasets" }]
+    if (section === "annotate") {
+      crumbs.push({
+        label: names.datasetName ?? "Dataset",
+        href: `/datasets/${datasetId}`,
+      })
+      crumbs.push({ label: "Annotate" })
+    } else {
+      crumbs.push({ label: names.datasetName ?? "Dataset" })
+    }
+    return crumbs
+  }
+  if (pathname === "/training-jobs") return [{ label: "Training" }]
+  if (pathname.startsWith("/training-jobs/")) {
+    return [
+      { label: "Training", href: "/training-jobs" },
+      { label: names.jobName ?? "Job" },
+    ]
+  }
+  if (pathname === "/models") return [{ label: "Registry" }]
+  if (pathname.startsWith("/models/")) {
+    return [
+      { label: "Registry", href: "/models" },
+      { label: names.modelName ?? "Model" },
+    ]
+  }
+  return null
+}
+
 function resolveCrumbs(
   pathname: string,
   deviceName: string | null,
   templateName: string | null,
-  instanceName: string | null
+  instanceName: string | null,
+  modelsNames: ModelsCrumbNames
 ): Crumb[] {
+  const models = resolveModelsCrumbs(pathname, modelsNames)
+  if (models) return models
   if (pathname === "/workflow-templates")
     return [{ label: "Workflow Templates" }]
   if (pathname.startsWith("/workflow-templates/")) {
@@ -124,6 +173,9 @@ function RootLayout() {
   const deviceName = useBreadcrumbStore((s) => s.deviceName)
   const templateName = useBreadcrumbStore((s) => s.templateName)
   const instanceName = useBreadcrumbStore((s) => s.instanceName)
+  const datasetName = useBreadcrumbStore((s) => s.datasetName)
+  const jobName = useBreadcrumbStore((s) => s.jobName)
+  const modelName = useBreadcrumbStore((s) => s.modelName)
   const location = useLocation()
 
   // The initial route load blocks in beforeLoad on /me, and /me's arrival
@@ -180,7 +232,8 @@ function RootLayout() {
     location.pathname,
     deviceName,
     templateName,
-    instanceName
+    instanceName,
+    { datasetName, jobName, modelName }
   )
 
   return (

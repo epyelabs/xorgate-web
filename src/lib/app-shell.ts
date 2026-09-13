@@ -18,3 +18,19 @@ export function markAppShellMounted(): void {
 export function hasAppShellMounted(): boolean {
   return shellMounted
 }
+
+// One-way boot latch for the root layout: flips once the router has gone idle
+// with no workspace fetch in flight, and never flips back, so later
+// navigations and org switches never blank the whole app again. Lives here
+// beside the shell-mounted flag because the root layout is a singleton and the
+// react-hooks rules refuse both a ref read and a module-variable write during
+// render; a function call is the sanctioned shape.
+let bootSettled = false
+
+export function markBootSettled(): void {
+  bootSettled = true
+}
+
+export function hasBootSettled(): boolean {
+  return bootSettled
+}

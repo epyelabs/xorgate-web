@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from "react"
+import { Fragment, useEffect } from "react"
 import {
   createRootRoute,
   Link,
@@ -11,7 +11,7 @@ import { useWorkspaceStore } from "@/store/workspace"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 import { ensureAuthInitialized } from "@/lib/auth-guard"
 import { useWorkspaceRouteGuard } from "@/lib/use-workspace-route-guard"
-import { markAppShellMounted } from "@/lib/app-shell"
+import { hasBootSettled, markAppShellMounted, markBootSettled } from "@/lib/app-shell"
 import { AppErrorScreen, NotFoundScreen } from "@/components/error-screens"
 import { AppLoadingScreen } from "@/components/app-loading-screen"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -189,11 +189,14 @@ function RootLayout() {
   // screen behind an infinite loading hold. The latch is one-way so later
   // navigations and org switches (which re-run the workspace fetch) never
   // blank the whole app again.
+  //
+  // The latch itself lives in lib/app-shell.ts (a ref read during render is
+  // what the react-hooks rules refuse; the root layout is a singleton, so a
+  // module flag behind two functions carries the same one-way semantics).
   const routerStatus = useRouterState({ select: (s) => s.status })
   const isLoadingWorkspaces = useWorkspaceStore((s) => s.isLoadingWorkspaces)
-  const bootSettledRef = useRef(false)
   if (routerStatus === "idle" && !isLoadingWorkspaces) {
-    bootSettledRef.current = true
+    markBootSettled()
   }
 
   useEffect(() => {
@@ -219,7 +222,7 @@ function RootLayout() {
     return <Outlet />
   }
 
-  if (!bootSettledRef.current) {
+  if (!hasBootSettled()) {
     return <AppLoadingScreen />
   }
 

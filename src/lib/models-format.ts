@@ -75,11 +75,15 @@ export function formatSeconds(s: number | null | undefined): string {
   return sec === 0 ? `${min}m` : `${min}m ${sec}s`
 }
 
-/** Wall time of a job from its own timestamps, in seconds (null until it ended). */
-export function jobWallSeconds(job: Pick<TrainingJob, "startedAt" | "endedAt" | "createdAt">): number | null {
-  const start = job.startedAt ?? job.createdAt
+/**
+ * Wall time of a job as the user experienced it: from the POST that created
+ * the row to the terminal state, in seconds (null until it ended). It
+ * includes provisioning, the image pull and the finalizer lag, which is why
+ * it sits well above the billable seconds (M3 measured 170 s against 109 s).
+ */
+export function jobWallSeconds(job: Pick<TrainingJob, "endedAt" | "createdAt">): number | null {
   if (!job.endedAt) return null
-  return (new Date(job.endedAt).getTime() - new Date(start).getTime()) / 1000
+  return (new Date(job.endedAt).getTime() - new Date(job.createdAt).getTime()) / 1000
 }
 
 /** "Train fixture-vehicles v5" or "Assist (yolov8n@1)". */

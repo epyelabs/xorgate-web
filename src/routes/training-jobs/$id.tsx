@@ -359,13 +359,26 @@ function TrainingJobDetailPage() {
 
       {job.task === "train" && metrics ? (
         <Section title="Metrics" testId="job-metrics">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
             <Fact label="mAP50" value={formatMetric(metrics.mAP50)} mono />
             <Fact label="mAP50-95" value={formatMetric(metrics.mAP50_95)} mono />
             <Fact label="Precision" value={formatMetric(metrics.precision)} mono />
             <Fact label="Recall" value={formatMetric(metrics.recall)} mono />
+            <Fact
+              label="Operating confidence"
+              value={<span data-testid="job-operating-confidence">{formatMetric(metrics.confidence, 2)}</span>}
+              mono
+            />
             <Fact label="Epochs" value={metrics.epochsCompleted ?? "—"} mono />
           </div>
+          {typeof metrics.confidence === "number" ? (
+            <p className="text-[11px] text-muted-foreground">
+              Precision and recall are measured at the operating confidence, the threshold that maximizes F1 on the
+              validation split. Run the model at it: the template picker sets the detection node's min confidence to{" "}
+              {formatMetric(metrics.confidence, 2)} when you pick this model, and the gate downstream has its own threshold to
+              match.
+            </p>
+          ) : null}
           {metrics.mAP50 === 0 ? (
             <p className="text-[11px] text-muted-foreground">
               A zero here is a real measurement, not an error: a few epochs on a small set find nothing at any confidence.

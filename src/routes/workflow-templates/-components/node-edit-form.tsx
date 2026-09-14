@@ -642,6 +642,19 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
               required={requiredKeys.has(key)}
               description={schema.description}
               setValue={(v) => updateNodeConfig(node.id, key, v)}
+              threshold={
+                objectSchema.properties?.minConfidence
+                  ? {
+                      value: config.minConfidence,
+                      defaultValue:
+                        typeof objectSchema.properties.minConfidence.default ===
+                        "number"
+                          ? objectSchema.properties.minConfidence.default
+                          : undefined,
+                      set: (v) => updateNodeConfig(node.id, "minConfidence", v),
+                    }
+                  : undefined
+              }
             />
           ) : (
             <ConfigField

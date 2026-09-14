@@ -241,12 +241,25 @@ function RegistryModelPage() {
             />
           </div>
           {metrics ? (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="model-metrics">
-              <Fact label="mAP50" value={formatMetric(metrics.mAP50)} mono />
-              <Fact label="mAP50-95" value={formatMetric(metrics.mAP50_95)} mono />
-              <Fact label="Precision" value={formatMetric(metrics.precision)} mono />
-              <Fact label="Recall" value={formatMetric(metrics.recall)} mono />
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="model-metrics">
+                <Fact label="mAP50" value={formatMetric(metrics.mAP50)} mono />
+                <Fact label="mAP50-95" value={formatMetric(metrics.mAP50_95)} mono />
+                <Fact label="Precision" value={formatMetric(metrics.precision)} mono />
+                <Fact label="Recall" value={formatMetric(metrics.recall)} mono />
+                <Fact
+                  label="Operating confidence"
+                  value={<span data-testid="model-operating-confidence">{formatMetric(metrics.confidence, 2)}</span>}
+                  mono
+                />
+              </div>
+              {typeof metrics.confidence === "number" ? (
+                <p className="text-[11px] text-muted-foreground">
+                  The threshold precision and recall were measured at. Picking this model in a template sets the
+                  detection node's min confidence to it.
+                </p>
+              ) : null}
+            </>
           ) : null}
         </Section>
       ) : null}

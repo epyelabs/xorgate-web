@@ -62,9 +62,14 @@ const decoder = new TextDecoder()
  * so early messages (a sub-second Lambda run's entire lifecycle) can be
  * missed; callers must poll the run row for terminal status and treat these
  * topics purely as the live view.
+ *
+ * `reconnectKey` (M6): bumping it tears the client down and subscribes again
+ * on a fresh presigned URL for the SAME prefix, keeping what was already
+ * received (the panel bumps it when the tab becomes visible again).
  */
-export function useSimProgress(topicPrefix: string | null): SimProgress {
+export function useSimProgress(topicPrefix: string | null, reconnectKey = 0): SimProgress {
   const [state, setState] = useState<SimProgress>(EMPTY)
+  const prevPrefixRef = useRef<string | null>(null)
 
   // Credentials come from the provider's shared resolver (same cache the live
   // telemetry/video hooks use), so this hook mints nothing of its own. A
@@ -78,10 +83,13 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
   const dirtyRef = useRef(false)
 
   useEffect(() => {
-    bufRef.current = {
-      ...EMPTY,
-      connection: topicPrefix ? "connecting" : "idle",
-    }
+    // A new prefix starts from nothing; a reconnect on the same prefix keeps
+    // the steps, events, previews and records already in the buffer.
+    const samePrefix = topicPrefix !== null && prevPrefixRef.current === topicPrefix
+    prevPrefixRef.current = topicPrefix
+    bufRef.current = samePrefix
+      ? { ...bufRef.current, connection: "connecting", connectionError: null }
+      : { ...EMPTY, connection: topicPrefix ? "connecting" : "idle" }
     setState(bufRef.current)
     if (!topicPrefix) return
 
@@ -237,7 +245,7 @@ export function useSimProgress(topicPrefix: string | null): SimProgress {
       if (reconnectTimer) clearTimeout(reconnectTimer)
       client?.end(true)
     }
-  }, [topicPrefix, credentials, refresh])
+  }, [topicPrefix, credentials, refresh, reconnectKey])
 
   return state
 }

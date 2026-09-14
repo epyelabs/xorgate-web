@@ -416,6 +416,10 @@ export const jobMetricsSchema = z.looseObject({
   mAP50_95: z.number().nullable().optional(),
   precision: z.number().nullable().optional(),
   recall: z.number().nullable().optional(),
+  // The operating confidence (forge 0.2.0): the F1-maximizing threshold at
+  // which precision and recall are reported, and the minConfidence a
+  // detection node should run the model at. Null on a job that ran on 0.1.0.
+  confidence: z.number().nullable().optional(),
   epochsCompleted: z.number().nullable().optional(),
   perClass: z.array(perClassMetricSchema).optional(),
   hyperparameters: z.record(z.string(), z.unknown()).optional(),
@@ -694,6 +698,16 @@ export const modelEntrySchema = z.object({
   updatedAt: z.string().nullable().optional(),
 })
 export type ModelEntry = z.infer<typeof modelEntrySchema>
+
+/**
+ * The operating confidence a trained model was evaluated at (its
+ * `provenance.metrics.confidence`, forge 0.2.0), or null for a platform
+ * model, a hand-placed one, or a job that ran on forge 0.1.0.
+ */
+export function operatingConfidence(model: Pick<ModelEntry, "provenance"> | null | undefined): number | null {
+  const v = model?.provenance?.metrics?.confidence
+  return typeof v === "number" && Number.isFinite(v) ? v : null
+}
 
 export const modelUsageSchema = z.object({
   templateId: z.string(),

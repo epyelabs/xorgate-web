@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { xgMessage } from "@/lib/xorgate"
-import { modelRef, parseModelRef, type ModelEntry } from "@/lib/models-schemas"
+import { modelRef, operatingConfidence, parseModelRef, type ModelEntry } from "@/lib/models-schemas"
 import { useRegistryModels } from "@/queries/models"
 
 // The `model` field of a node whose catalog entry declares
@@ -24,6 +24,29 @@ import { useRegistryModels } from "@/queries/models"
 // to the free-text input the schema-driven form used to render, for a model
 // the registry does not list yet. The picked model's classes show under the
 // field so a downstream gate's class chips can be typed correctly.
+//
+// The operating confidence (xorgate-models M6): a trained model carries the
+// threshold its precision and recall were measured at (forge 0.2.0,
+// `provenance.metrics.confidence`). A small fine-tune can rank its classes
+// well while every score sits under a generic threshold (the catalog's
+// default is 0.4; the shared templates carry 0.1), so a pick sets the sibling
+// `minConfidence` to the model's operating point whenever the field is unset,
+// at its schema default, or above that point. A pick never raises the
+// threshold. A one-line hint with a one-click fix names the mismatch when the
+// node's threshold is later edited above the picked model's operating point.
+export interface ThresholdField {
+  /** The node's current `minConfidence` config value (undefined = the default applies). */
+  value: unknown
+  /** The catalog schema's default for the field, when it declares one. */
+  defaultValue: number | undefined
+  set: (v: number) => void
+}
+
+/** The threshold a node runs at: its own value, else the schema default. */
+function effectiveThreshold(t: ThresholdField): number | null {
+  return typeof t.value === "number" ? t.value : (t.defaultValue ?? null)
+}
+
 export function ModelRefField({
   fieldId,
   family,
@@ -31,6 +54,7 @@ export function ModelRefField({
   required,
   description,
   setValue,
+  threshold,
 }: {
   fieldId: string
   family: string
@@ -38,6 +62,7 @@ export function ModelRefField({
   required: boolean
   description?: string
   setValue: (v: unknown) => void
+  threshold?: ThresholdField
 }) {
   const modelsQuery = useRegistryModels({ family })
   const models = useMemo(() => (modelsQuery.data?.models ?? []).filter((m) => m.status === "ready"), [modelsQuery.data])
@@ -63,7 +88,19 @@ export function ModelRefField({
     const m = models.find((x) => x.id === id)
     if (!m) return
     setValue(modelRef(m.name, pin ? m.version : null))
+    // Set the node's threshold to the model's operating point unless the node
+    // already runs at or below it: unset, at the schema default, or above.
+    const op = operatingConfidence(m)
+    if (op !== null && threshold) {
+      const current = effectiveThreshold(threshold)
+      if (current === null || threshold.value === threshold.defaultValue || current > op + 1e-9) threshold.set(op)
+    }
   }
+
+  const pickedOperating = operatingConfidence(picked)
+  const currentThreshold = threshold === undefined ? null : effectiveThreshold(threshold)
+  const thresholdAbove =
+    pickedOperating !== null && currentThreshold !== null && currentThreshold > pickedOperating + 1e-9
 
   return (
     <div className="flex flex-col gap-1.5" data-testid="model-ref-field">
@@ -152,6 +189,14 @@ export function ModelRefField({
           <span className="text-[10px] text-muted-foreground">
             {picked.scope === "organization" ? "Organization model" : "Platform model"} · {picked.classNames.length} classes
             {!pin ? " · latest version at run time" : ""}
+            {pickedOperating !== null ? (
+              <>
+                {" · operating confidence "}
+                <span className="font-mono" data-testid="model-ref-operating-confidence">
+                  {pickedOperating.toFixed(2)}
+                </span>
+              </>
+            ) : null}
           </span>
           <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto">
             {picked.classNames.map((c) => (
@@ -163,6 +208,24 @@ export function ModelRefField({
         </div>
       ) : text && !modelsQuery.isPending ? (
         <span className="text-[11px] text-muted-foreground">Not in the registry; publish will warn if no root resolves it.</span>
+      ) : null}
+      {thresholdAbove && threshold && pickedOperating !== null ? (
+        <p
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-900 dark:text-amber-200"
+          data-testid="model-ref-threshold-hint"
+        >
+          This model was evaluated at confidence {pickedOperating.toFixed(2)}; the node's min confidence is{" "}
+          {currentThreshold?.toFixed(2)}, so most of what it finds is dropped.{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => threshold.set(pickedOperating)}
+            data-testid="model-ref-threshold-apply"
+          >
+            Use {pickedOperating.toFixed(2)}
+          </button>
+          , and match the gate's own threshold downstream.
+        </p>
       ) : null}
       {description ? <p className="text-[11px] leading-snug text-muted-foreground">{description}</p> : null}
     </div>

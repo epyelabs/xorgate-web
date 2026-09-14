@@ -53,6 +53,16 @@ const POLL_MS = 2500
 // Once the IoT status topic says terminal, finalize (S3 event -> Lambda -> DB)
 // usually lands within a couple seconds; poll faster for the artifacts row.
 const POLL_FAST_MS = 1000
+// M6: a second, independent re-read of the run row keyed on the run ID
+// alone (not on the response object or the effect that owns the main poll),
+// so a re-render that drops the main poll cannot leave the badge at Running.
+// Faster once the IoT status says the engine is done.
+const FALLBACK_POLL_MS = 10_000
+const FALLBACK_POLL_TERMINAL_MS = 1500
+// No successful read of the run row for this long while running = the poll
+// stalled (a stopped timer, an expired session, a dropped network); the panel
+// says so and offers a manual check instead of spinning silently.
+const POLL_STALL_MS = 60_000
 
 // The run's state beside the "Output" label: Running while in flight, then
 // "Succeeded in 2.8s" (green) or "Failed after 2.8s" (red); nothing before
@@ -177,9 +187,20 @@ export function SimulatorPanel({
     "output",
   ])
 
+  // Poll health (M6): when the run row last answered, how many reads failed
+  // in a row, and whether the panel should say it has lost touch.
+  const lastPollOkRef = useRef<number>(Date.now())
+  const pollFailuresRef = useRef(0)
+  const [pollStalled, setPollStalled] = useState(false)
+  const [pollFailures, setPollFailures] = useState(0)
+  // Bumped when the tab becomes visible again: the IoT hook re-subscribes on
+  // a fresh presigned URL for the same run without dropping what it has.
+  const [reconnectKey, setReconnectKey] = useState(0)
+
   // Live progress over IoT WSS; subscribed while a run is in flight.
   const progress = useSimProgress(
-    phase === "running" ? (activeRun?.progress.topicPrefix ?? null) : null
+    phase === "running" ? (activeRun?.progress.topicPrefix ?? null) : null,
+    reconnectKey
   )
 
   // Webcam capture publisher (M5): while a run with a webcam binding is live,
@@ -257,31 +278,85 @@ export function SimulatorPanel({
     setPhase(detail.status === "succeeded" ? "succeeded" : "failed")
   }, [])
 
+  // One read of the run row: finishes the run when the row is terminal, and
+  // keeps the poll-health counters either way. Shared by the main poll, the
+  // fallback timer, the visibility handler and the manual "Check now".
+  const activeRunId = activeRun?.run.id ?? null
+  const readRunRow = useCallback(async (): Promise<boolean> => {
+    if (!activeRunId) return false
+    try {
+      const raw = await getWorkflowInstance(activeRunId)
+      const parsed = getWorkflowRunResponseSchema.safeParse(raw)
+      if (!parsed.success) throw new Error("unexpected run detail shape")
+      lastPollOkRef.current = Date.now()
+      pollFailuresRef.current = 0
+      setPollFailures(0)
+      setPollStalled(false)
+      if (parsed.data.run.status !== "running") {
+        finishRun(parsed.data.run)
+        return true
+      }
+      return false
+    } catch {
+      // Transient fetch/auth hiccups: keep polling, but count them so a
+      // run that has gone quiet for a minute is reported instead of spun on.
+      pollFailuresRef.current += 1
+      setPollFailures(pollFailuresRef.current)
+      return false
+    }
+  }, [activeRunId, finishRun])
+
   // Poll the run row while in flight. The IoT status topic can beat finalize
   // (or be missed entirely on a fast Lambda run), so the DB row decides.
   const iotSaysTerminal =
     progress.status !== null && progress.status.status !== "running"
   useEffect(() => {
-    if (phase !== "running" || !activeRun) return
+    if (phase !== "running" || !activeRunId) return
     let cancelled = false
-    const runId = activeRun.run.id
-    const tick = async () => {
-      try {
-        const raw = await getWorkflowInstance(runId)
-        const parsed = getWorkflowRunResponseSchema.safeParse(raw)
-        if (!parsed.success || cancelled) return
-        if (parsed.data.run.status !== "running") finishRun(parsed.data.run)
-      } catch {
-        // Transient fetch/auth hiccups: keep polling.
-      }
+    const tick = () => {
+      if (!cancelled) void readRunRow()
     }
     const interval = setInterval(tick, iotSaysTerminal ? POLL_FAST_MS : POLL_MS)
-    void tick()
+    tick()
     return () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [phase, activeRun, iotSaysTerminal, finishRun])
+  }, [phase, activeRunId, iotSaysTerminal, readRunRow])
+
+  // Fallback re-read (M6): keyed on the run ID string only, so it survives
+  // whatever re-render might drop the main poll; quick once the IoT status
+  // topic says the engine finished and the row is about to land.
+  useEffect(() => {
+    if (phase !== "running" || !activeRunId) return
+    const interval = setInterval(
+      () => void readRunRow(),
+      iotSaysTerminal ? FALLBACK_POLL_TERMINAL_MS : FALLBACK_POLL_MS
+    )
+    return () => clearInterval(interval)
+  }, [phase, activeRunId, iotSaysTerminal, readRunRow])
+
+  // Stall detection (M6): no successful read for POLL_STALL_MS while running.
+  useEffect(() => {
+    if (phase !== "running") return
+    const interval = setInterval(() => {
+      setPollStalled(Date.now() - lastPollOkRef.current > POLL_STALL_MS)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [phase])
+
+  // Back from a hidden tab (M6): read the row now and re-subscribe the live
+  // topics; browsers throttle timers and drop sockets while a tab is hidden.
+  useEffect(() => {
+    if (phase !== "running") return
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return
+      void readRunRow()
+      setReconnectKey((k) => k + 1)
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => document.removeEventListener("visibilitychange", onVisibility)
+  }, [phase, readRunRow])
 
   // --- Run ----------------------------------------------------------------------
 
@@ -292,6 +367,10 @@ export function SimulatorPanel({
     setGeneralIssues([])
     setRunDetail(null)
     setActiveRun(null)
+    lastPollOkRef.current = Date.now()
+    pollFailuresRef.current = 0
+    setPollFailures(0)
+    setPollStalled(false)
     useWorkflowEditor.getState().setPublishIssues([])
     try {
       // Uploads + window resolution first (per-row failures land on the rows).
@@ -469,6 +548,29 @@ export function SimulatorPanel({
                 ranDefinition={ranDefinition}
                 webcam={webcamEntry ? webcamIngest : null}
               />
+              {phase === "running" && pollStalled ? (
+                <p
+                  className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900 dark:text-amber-200"
+                  data-testid="run-poll-stalled"
+                >
+                  Still running? This page has had no answer about the run for
+                  over a minute
+                  {pollFailures > 0
+                    ? ` (${pollFailures} failed ${pollFailures === 1 ? "check" : "checks"})`
+                    : ""}
+                  .{" "}
+                  <button
+                    type="button"
+                    className="underline underline-offset-2"
+                    onClick={() => void readRunRow()}
+                    data-testid="run-poll-check-now"
+                  >
+                    Check now
+                  </button>
+                  , or reload: the run keeps going on the platform and is listed
+                  under Workflow Instances.
+                </p>
+              ) : null}
             </div>
           </AccordionContent>
         </AccordionItem>

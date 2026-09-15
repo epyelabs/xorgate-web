@@ -435,7 +435,7 @@ function DatasetDetailPage() {
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="gap-0 overflow-hidden p-0 data-[side=right]:w-[min(100vw-1rem,96rem)] data-[side=right]:sm:max-w-none"
+          className="gap-0 overflow-hidden p-0 data-[side=right]:w-[min(100vw-1rem,64rem)] data-[side=right]:sm:max-w-none"
           onEscapeKeyDown={(e) => e.preventDefault()}
           aria-describedby={undefined}
           data-testid="annotator-sheet"

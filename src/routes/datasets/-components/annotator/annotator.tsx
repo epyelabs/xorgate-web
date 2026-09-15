@@ -502,9 +502,9 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 gap-3">
+      <div className={cn("flex min-h-0 flex-1 gap-3", variant === "sheet" ? "flex-col" : "")}>
         <AnnotatorStage
-          className="min-w-0 flex-1"
+          className={cn("min-w-0 flex-1", variant === "sheet" ? "min-h-0" : "")}
           imageUrl={item.url}
           width={item.width}
           height={item.height}
@@ -526,7 +526,19 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
           onRejectBox={(key) => mutate((prev) => prev.filter((b) => b.key !== key))}
         />
 
-        <aside className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto" data-testid="annotator-panel">
+        {/* The panel sits beside the stage on the page and under it in the
+            sheet, where it spreads into two columns: classes on the left,
+            pre-labels and boxes on the right. The wrappers are `contents` on
+            the page so the vertical flow there is unchanged. */}
+        <aside
+          className={cn(
+            variant === "sheet"
+              ? "grid max-h-[40%] shrink-0 grid-cols-2 gap-x-4 gap-y-3 overflow-y-auto border-t border-border pt-3"
+              : "flex w-64 shrink-0 flex-col gap-3 overflow-y-auto",
+          )}
+          data-testid="annotator-panel"
+        >
+          <div className={variant === "sheet" ? "flex min-w-0 flex-col gap-3" : "contents"}>
           <section className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">Classes</p>
@@ -569,7 +581,9 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
               </button>
             ))}
           </section>
+          </div>
 
+          <div className={variant === "sheet" ? "flex min-w-0 flex-col gap-3" : "contents"}>
           {pending.length > 0 ? (
             <section className="flex flex-col gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/5 p-2" data-testid="annotator-prelabels">
               <p className="text-xs">
@@ -650,6 +664,7 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
           </section>
 
           {!canAnnotate ? <p className="text-[11px] text-muted-foreground">Viewers can look but not label.</p> : null}
+          </div>
         </aside>
       </div>
       {nextUrl ? <img src={nextUrl} alt="" aria-hidden className="hidden" /> : null}

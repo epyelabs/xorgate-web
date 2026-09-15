@@ -5,14 +5,10 @@ import { toast } from "sonner"
 import {
   BoxesIcon,
   CheckCircle2Icon,
-  DatabaseIcon,
   DownloadIcon,
   FlaskConicalIcon,
   ImagesIcon,
-  LayersIcon,
-  SparklesIcon,
   SquareIcon,
-  TagsIcon,
   XCircleIcon,
 } from "lucide-react"
 import { isXorgateError } from "@xorgate/sdk"
@@ -28,7 +24,6 @@ import { StickyHeader } from "@/components/sticky-header"
 import { formatBytes } from "@/components/data-table"
 import { CopyButton } from "@/components/models/copy-button"
 import { Fact, FactGrid } from "@/components/models/facts"
-import { LifecycleRail, type LifecycleStage } from "@/components/models/lifecycle-rail"
 import { MetricTile } from "@/components/models/metric-tile"
 import { SectionCard } from "@/components/models/section-card"
 import { StatusBadge } from "@/components/models/status-badge"
@@ -302,69 +297,6 @@ function TrainingJobDetailPage() {
   const version = (versionsQuery.data ?? []).find((v) => v.id === job.datasetVersionId) ?? null
   const hasResults = Boolean((isTrain && metrics) || (!isTrain && metrics?.labels) || confusion || samples.length > 0 || curve.length > 1)
 
-  const trainingState: LifecycleStage["state"] = active
-    ? "active"
-    : job.status === "succeeded"
-      ? "done"
-      : job.status === "failed"
-        ? "failed"
-        : "current"
-  const stages: LifecycleStage[] = [
-    {
-      key: "dataset",
-      label: "Dataset",
-      icon: DatabaseIcon,
-      state: job.datasetId ? "done" : "pending",
-      summary: dataset ? dataset.name : job.datasetId ? "Open dataset" : "Deleted",
-      link: job.datasetId ? { to: "/datasets/$id", params: { id: job.datasetId }, search: {} } : undefined,
-    },
-    ...(isTrain
-      ? [
-          {
-            key: "version",
-            label: "Version",
-            icon: LayersIcon,
-            state: job.datasetVersionId ? "done" : "pending",
-            summary: version ? `v${version.version}${version.message ? ` · ${version.message}` : ""}` : "Frozen split",
-            link: job.datasetId ? { to: "/datasets/$id", params: { id: job.datasetId }, search: { tab: "versions" } } : undefined,
-          } satisfies LifecycleStage,
-        ]
-      : []),
-    {
-      key: "training",
-      label: isTrain ? "Training" : "Assist",
-      icon: isTrain ? FlaskConicalIcon : SparklesIcon,
-      state: trainingState,
-      summary: `${JOB_STATUS_LABEL[job.status]}${wall !== null ? ` · ${formatSeconds(wall)}` : ""}`,
-    },
-    isTrain
-      ? {
-          key: "model",
-          label: "Model",
-          icon: BoxesIcon,
-          state: job.outputModel ? "done" : job.status === "succeeded" ? "active" : "pending",
-          summary: job.outputModel
-            ? `${job.outputModel.name} v${job.outputModel.version}`
-            : active
-              ? "Publishes on success"
-              : job.status === "succeeded"
-                ? "Publishing…"
-                : "Not published",
-          link: job.outputModel ? { to: "/models/$id", params: { id: job.outputModel.id } } : undefined,
-        }
-      : {
-          key: "prelabels",
-          label: "Pre-labels",
-          icon: TagsIcon,
-          state: job.status === "succeeded" ? "done" : "pending",
-          summary:
-            job.status === "succeeded"
-              ? `${formatCount(metrics?.applied?.itemsLabeled ?? metrics?.labels?.images ?? 0)} items to review`
-              : "Written on success",
-          link: job.datasetId ? { to: "/datasets/$id", params: { id: job.datasetId }, search: {} } : undefined,
-        },
-  ]
-
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0" data-testid="job-detail" data-status={job.status}>
       <StickyHeader className="border-b border-border pb-3">
@@ -389,6 +321,23 @@ function TrainingJobDetailPage() {
                   </span>
                 ) : null}
               </p>
+              {job.datasetId ? (
+                <p className="text-xs text-muted-foreground" data-testid="job-lineage">
+                  {isTrain ? "Trained on" : "Pre-labels"}{" "}
+                  <Link to="/datasets/$id" params={{ id: job.datasetId }} search={{}} className="font-medium text-foreground underline-offset-2 hover:underline">
+                    {dataset?.name ?? "the dataset"}
+                  </Link>
+                  {isTrain && version ? (
+                    <>
+                      {" "}
+                      <Link to="/datasets/$id" params={{ id: job.datasetId }} search={{ tab: "versions" }} className="font-medium text-foreground underline-offset-2 hover:underline">
+                        v{version.version}
+                      </Link>
+                      {version.stats ? ` (${version.stats.images.train} train / ${version.stats.images.val} val)` : ""}
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {job.outputModel ? (
@@ -421,7 +370,6 @@ function TrainingJobDetailPage() {
               ) : null}
             </div>
           </div>
-          <LifecycleRail stages={stages} />
         </header>
       </StickyHeader>
 

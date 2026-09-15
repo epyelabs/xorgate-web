@@ -3,18 +3,15 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
 import {
-  BoxesIcon,
   ChevronDownIcon,
   FilmIcon,
   FlaskConicalIcon,
-  ImagesIcon,
   LayersIcon,
   MoreHorizontalIcon,
   PencilLineIcon,
   PlayIcon,
   PlusIcon,
   SparklesIcon,
-  TagsIcon,
   Trash2Icon,
   UploadIcon,
   WorkflowIcon,
@@ -29,19 +26,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StickyHeader } from "@/components/sticky-header"
 import { CopyButton } from "@/components/models/copy-button"
 import { LabelProgress } from "@/components/models/label-progress"
-import { LifecycleRail, type LifecycleStage } from "@/components/models/lifecycle-rail"
 import { xgMessage } from "@/lib/xorgate"
 import { useHasPermission } from "@/lib/permissions"
-import { formatCount, formatPercent, JOB_STATUS_LABEL } from "@/lib/models-format"
+import { formatCount } from "@/lib/models-format"
 import { isActiveTrainingStatus, type DatasetVersion, type ItemStatus } from "@/lib/models-schemas"
 import {
   useDataset,
   useDatasetItems,
   useDatasetVersions,
+  useInvalidateModels,
   useRegistryModels,
   useTrainingJobs,
 } from "@/queries/models"
@@ -51,7 +49,8 @@ import { AssistDialog } from "./-components/assist-dialog"
 import { ClassesTab } from "./-components/classes-tab"
 import { DeleteDatasetDialog } from "./-components/delete-dataset-dialog"
 import { ImportRecordingDialog } from "./-components/import-recording-dialog"
-import { ItemsTab } from "./-components/items-tab"
+import { Annotator } from "./-components/annotator/annotator"
+import { ItemsTab, type ItemFilter } from "./-components/items-tab"
 import { NewVersionDialog } from "./-components/new-version-dialog"
 import { TrainingTab } from "./-components/training-tab"
 import { VersionsTab } from "./-components/versions-tab"
@@ -61,8 +60,11 @@ type Tab = (typeof TABS)[number]
 
 export const Route = createFileRoute("/datasets/$id")({
   beforeLoad: requireAuth,
-  validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab; item?: string } => ({
     tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : undefined,
+    // The item open in the annotator sheet; in the URL so a refresh or the
+    // browser's back button behave.
+    item: typeof search.item === "string" && search.item !== "" ? search.item : undefined,
   }),
   component: DatasetDetailPage,
 })
@@ -78,24 +80,13 @@ type NextStep =
   | { kind: "train"; version: DatasetVersion }
   | { kind: "use"; modelId: string }
 
-// The first stage that is not done is where the user is. Stages already
-// marked active or failed keep their word; the rest fall through as pending.
-function markCurrent(stages: LifecycleStage[]): LifecycleStage[] {
-  let marked = false
-  return stages.map((s) => {
-    if (marked || s.state === "done") return s
-    marked = true
-    return s.state === "pending" ? { ...s, state: "current" } : s
-  })
-}
-
 // The dataset page: Items (the grid and the ways frames get in), Classes (the
 // ordered list the hotkeys follow), Versions (the frozen snapshots a job
 // trains on) and Training (the jobs and models that came out of this
 // dataset). The tab rides in the URL so a link lands on the right one.
 function DatasetDetailPage() {
   const { id } = Route.useParams()
-  const { tab } = Route.useSearch()
+  const { tab, item: openItemId } = Route.useSearch()
   const navigate = useNavigate()
   const activeTab: Tab = tab ?? "items"
   const canAnnotate = useHasPermission("models:annotate")
@@ -108,6 +99,7 @@ function DatasetDetailPage() {
   const [versionOpen, setVersionOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [trainVersion, setTrainVersion] = useState<DatasetVersion | null>(null)
+  const [itemFilter, setItemFilter] = useState<ItemFilter>({})
 
   const datasetQuery = useDataset(id)
   const dataset = datasetQuery.data ?? null
@@ -150,6 +142,13 @@ function DatasetDetailPage() {
       replace: true,
     })
   }
+  const invalidate = useInvalidateModels()
+  const showItem = (itemId: string, replace = false) =>
+    navigate({ to: "/datasets/$id", params: { id }, search: { item: itemId }, replace })
+  const closeAnnotator = () => {
+    navigate({ to: "/datasets/$id", params: { id }, search: {} })
+    invalidate.dataset(id)
+  }
 
   if (notFound) {
     return (
@@ -178,18 +177,13 @@ function DatasetDetailPage() {
 
   const versions = versionsQuery.data ?? []
   const latestReady = versions.filter((v) => v.status === "ready").sort((a, b) => b.version - a.version)[0] ?? null
-  const building = versions.some((v) => v.status === "building")
   const jobs = jobsQuery.data?.jobs ?? []
-  const latestJob = jobs[0] ?? null
   const activeJob = jobs.find((j) => isActiveTrainingStatus(j.status)) ?? null
   const models = (modelsQuery.data?.models ?? [])
     .filter((m) => m.provenance?.datasetId === id)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
   const latestModel = models[0] ?? null
 
-  const excluded = counts.excluded ?? 0
-  const trainable = Math.max(0, dataset.itemCount - excluded)
-  const labeled = counts.labeled ?? 0
   const pending = (counts.unlabeled ?? 0) + (counts.ai_labeled ?? 0)
   const firstItemId = firstQuery.data?.items[0]?.id ?? null
 
@@ -205,70 +199,6 @@ function DatasetDetailPage() {
             : latestModel && latestModel.provenance?.datasetVersionId === latestReady.id
               ? { kind: "use", modelId: latestModel.id }
               : { kind: "train", version: latestReady }
-
-  const stages = markCurrent([
-    {
-      key: "frames",
-      label: "Frames",
-      icon: ImagesIcon,
-      state: dataset.itemCount > 0 ? "done" : "pending",
-      summary: dataset.itemCount > 0 ? `${formatCount(dataset.itemCount)} items` : "Upload or import",
-      link: { to: "/datasets/$id", params: { id }, search: {} },
-    },
-    {
-      key: "labels",
-      label: "Labels",
-      icon: TagsIcon,
-      state: trainable > 0 && labeled === trainable ? "done" : "pending",
-      summary:
-        trainable === 0
-          ? "Nothing to label yet"
-          : `${formatCount(labeled)} of ${formatCount(trainable)} labeled`,
-      link: { to: "/datasets/$id", params: { id }, search: {} },
-    },
-    {
-      key: "version",
-      label: "Version",
-      icon: LayersIcon,
-      state: latestReady ? "done" : building ? "active" : "pending",
-      summary: latestReady ? `v${latestReady.version} ready` : building ? "Building…" : "Freeze a split",
-      link: { to: "/datasets/$id", params: { id }, search: { tab: "versions" } },
-    },
-    {
-      key: "training",
-      label: "Training",
-      icon: FlaskConicalIcon,
-      state: !latestJob
-        ? "pending"
-        : isActiveTrainingStatus(latestJob.status)
-          ? "active"
-          : latestJob.status === "succeeded"
-            ? "done"
-            : latestJob.status === "failed"
-              ? "failed"
-              : "pending",
-      summary: latestJob
-        ? `${JOB_STATUS_LABEL[latestJob.status]}${
-            latestJob.task === "train" && typeof latestJob.metrics?.mAP50 === "number"
-              ? ` · mAP50 ${formatPercent(latestJob.metrics.mAP50, 0)}`
-              : ""
-          }`
-        : "Not started",
-      link: latestJob
-        ? { to: "/training-jobs/$id", params: { id: latestJob.id } }
-        : { to: "/datasets/$id", params: { id }, search: { tab: "training" } },
-    },
-    {
-      key: "model",
-      label: "Model",
-      icon: BoxesIcon,
-      state: latestModel ? "done" : "pending",
-      summary: latestModel ? `${latestModel.name} v${latestModel.version}` : "Published by training",
-      link: latestModel
-        ? { to: "/models/$id", params: { id: latestModel.id } }
-        : { to: "/datasets/$id", params: { id }, search: { tab: "training" } },
-    },
-  ])
 
   const nextButton = (() => {
     switch (next.kind) {
@@ -292,7 +222,7 @@ function DatasetDetailPage() {
         return canAnnotate ? (
           <Button variant="brand" size="lg" asChild data-testid="next-step" data-next="label">
             {next.itemId ? (
-              <Link to="/datasets/$id/annotate/$itemId" params={{ id, itemId: next.itemId }} search={{ status: next.status }}>
+              <Link to="/datasets/$id" params={{ id }} search={{ item: next.itemId }} onClick={() => setItemFilter({ status: next.status })}>
                 <PencilLineIcon />
                 {next.status === "ai_labeled" ? "Review" : "Label"} {formatCount(next.count)} item{next.count === 1 ? "" : "s"}
               </Link>
@@ -427,7 +357,6 @@ function DatasetDetailPage() {
             </div>
           </div>
 
-          <LifecycleRail stages={stages} />
 
           <Tabs value={activeTab} onValueChange={setTab}>
             <TabsList variant="line">
@@ -469,6 +398,8 @@ function DatasetDetailPage() {
           canAnnotate={canAnnotate}
           onUpload={() => setUploadOpen((n) => n + 1)}
           onImport={() => setImportOpen(true)}
+          filter={itemFilter}
+          onFilterChange={setItemFilter}
         />
       ) : activeTab === "classes" ? (
         <ClassesTab dataset={dataset} canEdit={canAnnotate} />
@@ -491,6 +422,37 @@ function DatasetDetailPage() {
           onTrain={setTrainVersion}
         />
       )}
+
+      {/* The annotator rides in a sheet over the grid: label, close, and the
+          grid is where you left it. Escape stays the annotator's (deselect,
+          cancel a draw); the toolbar's close button and the overlay leave. */}
+      <Sheet
+        open={openItemId !== undefined}
+        onOpenChange={(open) => {
+          if (!open) closeAnnotator()
+        }}
+      >
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="gap-0 overflow-hidden p-0 data-[side=right]:w-[min(100vw-1rem,96rem)] data-[side=right]:sm:max-w-none"
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          aria-describedby={undefined}
+          data-testid="annotator-sheet"
+        >
+          <SheetTitle className="sr-only">Annotate</SheetTitle>
+          {openItemId ? (
+            <Annotator
+              datasetId={id}
+              itemId={openItemId}
+              filter={itemFilter}
+              variant="sheet"
+              onNavigate={(next) => void showItem(next, true)}
+              onExit={closeAnnotator}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <ImportRecordingDialog dataset={dataset} open={importOpen} onOpenChange={setImportOpen} />
       <AssistDialog dataset={dataset} open={assistOpen} onOpenChange={setAssistOpen} />

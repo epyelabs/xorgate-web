@@ -75,7 +75,6 @@ export interface ItemFilter {
 function ItemThumb({
   datasetId,
   item,
-  filter,
   selecting,
   selected,
   onToggle,
@@ -83,7 +82,6 @@ function ItemThumb({
 }: {
   datasetId: string
   item: DatasetItem
-  filter: ItemFilter
   selecting: boolean
   selected: boolean
   onToggle: () => void
@@ -137,9 +135,9 @@ function ItemThumb({
   }
   return (
     <Link
-      to="/datasets/$id/annotate/$itemId"
-      params={{ id: datasetId, itemId: item.id }}
-      search={filter}
+      to="/datasets/$id"
+      params={{ id: datasetId }}
+      search={{ item: item.id }}
       className={className}
       title={`${item.width}x${item.height}, ${item.status}`}
       data-testid="item-thumb"
@@ -157,14 +155,18 @@ export function ItemsTab({
   canAnnotate,
   onUpload,
   onImport,
+  filter,
+  onFilterChange,
 }: {
   dataset: DatasetDetail
   openUploadSignal: number
   canAnnotate: boolean
   onUpload: () => void
   onImport: () => void
+  /** Lifted to the page so the annotator sheet walks the same set. */
+  filter: ItemFilter
+  onFilterChange: (filter: ItemFilter) => void
 }) {
-  const [filter, setFilter] = useState<ItemFilter>({})
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(PAGE_SIZES[0])
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
@@ -199,7 +201,7 @@ export function ItemsTab({
   const width = ZOOM_STEPS[zoom]
 
   const changeFilter = (next: ItemFilter) => {
-    setFilter(next)
+    onFilterChange(next)
     setPage(1)
     setSelected(new Set())
   }
@@ -413,7 +415,6 @@ export function ItemsTab({
                 key={item.id}
                 datasetId={dataset.id}
                 item={item}
-                filter={filter}
                 selecting={selecting}
                 selected={selected.has(item.id)}
                 onToggle={() => toggle(item.id)}

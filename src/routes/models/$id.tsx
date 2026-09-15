@@ -5,13 +5,9 @@ import { toast } from "sonner"
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
-  BoxesIcon,
   ChevronDownIcon,
-  DatabaseIcon,
   DownloadIcon,
-  FlaskConicalIcon,
   InfoIcon,
-  LayersIcon,
   Trash2Icon,
   WorkflowIcon,
 } from "lucide-react"
@@ -34,7 +30,6 @@ import { JsonTree } from "@/components/json-tree"
 import { StickyHeader } from "@/components/sticky-header"
 import { CopyButton } from "@/components/models/copy-button"
 import { Fact, FactGrid } from "@/components/models/facts"
-import { LifecycleRail, type LifecycleStage } from "@/components/models/lifecycle-rail"
 import { MetricTile } from "@/components/models/metric-tile"
 import { SectionCard } from "@/components/models/section-card"
 import { cn } from "@/lib/utils"
@@ -165,51 +160,6 @@ function RegistryModelPage() {
   const ref = modelRef(model.name, model.version)
   const confidence = operatingConfidence(model)
   const jobId = model.lineage?.jobId ?? prov?.jobId ?? null
-  const usageTemplates = new Set(model.usage.map((u) => u.templateId)).size
-
-  const stages: LifecycleStage[] = [
-    {
-      key: "dataset",
-      label: "Dataset",
-      icon: DatabaseIcon,
-      state: model.lineage ? "done" : "pending",
-      summary: model.lineage ? model.lineage.datasetName : prov?.datasetId ? "Deleted dataset" : "Placed by hand",
-      link: model.lineage ? { to: "/datasets/$id", params: { id: model.lineage.datasetId }, search: {} } : undefined,
-    },
-    {
-      key: "version",
-      label: "Version",
-      icon: LayersIcon,
-      state: model.lineage ? "done" : "pending",
-      summary: model.lineage ? `v${model.lineage.datasetVersion}` : "—",
-      link: model.lineage ? { to: "/datasets/$id", params: { id: model.lineage.datasetId }, search: { tab: "versions" } } : undefined,
-    },
-    {
-      key: "training",
-      label: "Training",
-      icon: FlaskConicalIcon,
-      state: jobId ? "done" : "pending",
-      summary: jobId ? `job ${shortId(jobId)}${prov?.epochsCompleted ? ` · ${prov.epochsCompleted} epochs` : ""}` : "No job",
-      link: jobId ? { to: "/training-jobs/$id", params: { id: jobId } } : undefined,
-    },
-    {
-      key: "model",
-      label: "Model",
-      icon: BoxesIcon,
-      state: "current",
-      summary: `${ref}${model.status === "archived" ? " · archived" : ""}`,
-    },
-    {
-      key: "workflows",
-      label: "Workflows",
-      icon: WorkflowIcon,
-      state: inUse ? "done" : "pending",
-      summary: inUse
-        ? `${usageTemplates} template${usageTemplates === 1 ? "" : "s"}, ${model.usage.length} version${model.usage.length === 1 ? "" : "s"}`
-        : "Not named yet",
-      link: { to: "/workflow-templates" },
-    },
-  ]
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0" data-testid="model-detail" data-scope={model.scope}>
@@ -232,6 +182,14 @@ function RegistryModelPage() {
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{ref}</code>
                   <CopyButton value={ref} label="Copy model reference" />
                 </span>
+                {model.lineage ? (
+                  <span className="text-xs">
+                    · trained on{" "}
+                    <Link to="/datasets/$id" params={{ id: model.lineage.datasetId }} search={{ tab: "versions" }} className="font-medium text-foreground underline-offset-2 hover:underline">
+                      {model.lineage.datasetName} v{model.lineage.datasetVersion}
+                    </Link>
+                  </span>
+                ) : null}
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -284,7 +242,6 @@ function RegistryModelPage() {
               ) : null}
             </div>
           </div>
-          {isOrg ? <LifecycleRail stages={stages} /> : null}
         </header>
       </StickyHeader>
 

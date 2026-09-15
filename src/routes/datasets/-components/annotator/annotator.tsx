@@ -51,11 +51,11 @@ export interface AnnotatorProps {
   datasetId: string
   itemId: string
   filter: AnnotateFilter
-  /** "page" fills the route's viewport; "sheet" fills whatever panel holds it. */
-  variant: "page" | "sheet"
+  /** "page" fills the route's viewport; "pane" fills the items tab's left half. */
+  variant: "page" | "pane"
   /** Prev, next and "labeled, next" ask the host to show another item. */
   onNavigate: (itemId: string) => void
-  /** The back / close control, and the way out of a missing item. */
+  /** The page's back control, and the way out of a missing item. */
   onExit: () => void
 }
 
@@ -90,7 +90,7 @@ function toInput(b: StageBox, sourceRef: string | null): AnnotationInput {
 
 // The annotator proper. It owns the working copy, autosave, the keyboard
 // map and the stage; it knows nothing about routes, so the same component
-// runs as a full page (deep link) and inside the dataset page's side sheet.
+// runs as a full page (deep link) and as the left pane of the Items tab.
 export function Annotator({ datasetId, itemId, filter: search, variant, onNavigate, onExit }: AnnotatorProps) {
   const canAnnotate = useHasPermission("models:annotate")
   const invalidate = useInvalidateModels()
@@ -405,25 +405,27 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
         "flex min-h-0 min-w-0 flex-col gap-2",
         variant === "page"
           ? "h-[calc(100svh-4rem)] p-4 pt-0 group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]"
-          : "h-full p-3",
+          : "h-full",
       )}
       data-testid="annotator"
       data-variant={variant}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void flush()
-            onExit()
-          }}
-          title={variant === "sheet" ? "Close the annotator" : "Back to the dataset"}
-          data-testid="annotator-exit"
-        >
-          {variant === "sheet" ? <XIcon /> : <ArrowLeftIcon />}
-          {dataset.name}
-        </Button>
+        {variant === "page" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void flush()
+              onExit()
+            }}
+            title="Back to the dataset"
+            data-testid="annotator-exit"
+          >
+            <ArrowLeftIcon />
+            {dataset.name}
+          </Button>
+        ) : null}
         <span className="font-mono text-[11px] text-muted-foreground" data-testid="annotator-position">
           {index >= 0 ? `${index + 1} of ${ids.length}` : seqQuery.isPending ? "…" : "not in the filtered set"}
           {search.status || search.class || search.source ? " (filtered)" : ""}
@@ -502,9 +504,9 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
         </div>
       ) : null}
 
-      <div className={cn("flex min-h-0 flex-1 gap-3", variant === "sheet" ? "flex-col" : "")}>
+      <div className={cn("flex min-h-0 flex-1 gap-3", variant === "pane" ? "flex-col" : "")}>
         <AnnotatorStage
-          className={cn("min-w-0 flex-1", variant === "sheet" ? "min-h-0" : "")}
+          className={cn("min-w-0 flex-1", variant === "pane" ? "min-h-0" : "")}
           imageUrl={item.url}
           width={item.width}
           height={item.height}
@@ -527,18 +529,18 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
         />
 
         {/* The panel sits beside the stage on the page and under it in the
-            sheet, where it spreads into two columns: classes on the left,
+            pane, where it spreads into two columns: classes on the left,
             pre-labels and boxes on the right. The wrappers are `contents` on
             the page so the vertical flow there is unchanged. */}
         <aside
           className={cn(
-            variant === "sheet"
+            variant === "pane"
               ? "grid max-h-[40%] shrink-0 grid-cols-2 gap-x-4 gap-y-3 overflow-y-auto border-t border-border pt-3"
               : "flex w-64 shrink-0 flex-col gap-3 overflow-y-auto",
           )}
           data-testid="annotator-panel"
         >
-          <div className={variant === "sheet" ? "flex min-w-0 flex-col gap-3" : "contents"}>
+          <div className={variant === "pane" ? "flex min-w-0 flex-col gap-3" : "contents"}>
           <section className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">Classes</p>
@@ -583,7 +585,7 @@ export function Annotator({ datasetId, itemId, filter: search, variant, onNaviga
           </section>
           </div>
 
-          <div className={variant === "sheet" ? "flex min-w-0 flex-col gap-3" : "contents"}>
+          <div className={variant === "pane" ? "flex min-w-0 flex-col gap-3" : "contents"}>
           {pending.length > 0 ? (
             <section className="flex flex-col gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/5 p-2" data-testid="annotator-prelabels">
               <p className="text-xs">

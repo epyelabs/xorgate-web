@@ -59,12 +59,15 @@ export function UploadDropzone({
   openSignal,
   onDone,
   className,
+  compact = false,
 }: {
   datasetId: string
   /** Bumped by the page's Upload button to open the file picker. */
   openSignal: number
   onDone: () => void
   className?: string
+  /** One short line, for a narrow pane. */
+  compact?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -188,13 +191,13 @@ export function UploadDropzone({
           {progress.registered ? ` · ${progress.registered} registered` : ""}
         </span>
       ) : (
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex flex-wrap items-center justify-center gap-1.5" title="JPEG or PNG, 20 MiB each; duplicates are skipped">
           <UploadIcon className="size-3.5" />
-          Drop JPEG or PNG frames here, or
+          {compact ? "Drop frames here, or" : "Drop JPEG or PNG frames here, or"}
           <Button type="button" variant="link" size="xs" className="h-auto p-0" onClick={() => inputRef.current?.click()}>
             browse
           </Button>
-          <span className="text-muted-foreground/70">(20 MiB each, duplicates skipped)</span>
+          {compact ? null : <span className="text-muted-foreground/70">(20 MiB each, duplicates skipped)</span>}
         </span>
       )}
       {dragging ? (

@@ -26,7 +26,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StickyHeader } from "@/components/sticky-header"
 import { CopyButton } from "@/components/models/copy-button"
@@ -39,7 +38,6 @@ import {
   useDataset,
   useDatasetItems,
   useDatasetVersions,
-  useInvalidateModels,
   useRegistryModels,
   useTrainingJobs,
 } from "@/queries/models"
@@ -49,7 +47,6 @@ import { AssistDialog } from "./-components/assist-dialog"
 import { ClassesTab } from "./-components/classes-tab"
 import { DeleteDatasetDialog } from "./-components/delete-dataset-dialog"
 import { ImportRecordingDialog } from "./-components/import-recording-dialog"
-import { Annotator } from "./-components/annotator/annotator"
 import { ItemsTab, type ItemFilter } from "./-components/items-tab"
 import { NewVersionDialog } from "./-components/new-version-dialog"
 import { TrainingTab } from "./-components/training-tab"
@@ -62,7 +59,7 @@ export const Route = createFileRoute("/datasets/$id")({
   beforeLoad: requireAuth,
   validateSearch: (search: Record<string, unknown>): { tab?: Tab; item?: string } => ({
     tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : undefined,
-    // The item open in the annotator sheet; in the URL so a refresh or the
+    // The item open in the annotator pane; in the URL so a refresh or the
     // browser's back button behave.
     item: typeof search.item === "string" && search.item !== "" ? search.item : undefined,
   }),
@@ -142,13 +139,8 @@ function DatasetDetailPage() {
       replace: true,
     })
   }
-  const invalidate = useInvalidateModels()
   const showItem = (itemId: string, replace = false) =>
     navigate({ to: "/datasets/$id", params: { id }, search: { item: itemId }, replace })
-  const closeAnnotator = () => {
-    navigate({ to: "/datasets/$id", params: { id }, search: {} })
-    invalidate.dataset(id)
-  }
 
   if (notFound) {
     return (
@@ -400,6 +392,8 @@ function DatasetDetailPage() {
           onImport={() => setImportOpen(true)}
           filter={itemFilter}
           onFilterChange={setItemFilter}
+          selectedItemId={openItemId ?? null}
+          onSelectItem={(itemId, replace) => void showItem(itemId, replace)}
         />
       ) : activeTab === "classes" ? (
         <ClassesTab dataset={dataset} canEdit={canAnnotate} />
@@ -422,37 +416,6 @@ function DatasetDetailPage() {
           onTrain={setTrainVersion}
         />
       )}
-
-      {/* The annotator rides in a sheet over the grid: label, close, and the
-          grid is where you left it. Escape stays the annotator's (deselect,
-          cancel a draw); the toolbar's close button and the overlay leave. */}
-      <Sheet
-        open={openItemId !== undefined}
-        onOpenChange={(open) => {
-          if (!open) closeAnnotator()
-        }}
-      >
-        <SheetContent
-          side="right"
-          showCloseButton={false}
-          className="gap-0 overflow-hidden p-0 data-[side=right]:w-[min(100vw-1rem,64rem)] data-[side=right]:sm:max-w-none"
-          onEscapeKeyDown={(e) => e.preventDefault()}
-          aria-describedby={undefined}
-          data-testid="annotator-sheet"
-        >
-          <SheetTitle className="sr-only">Annotate</SheetTitle>
-          {openItemId ? (
-            <Annotator
-              datasetId={id}
-              itemId={openItemId}
-              filter={itemFilter}
-              variant="sheet"
-              onNavigate={(next) => void showItem(next, true)}
-              onExit={closeAnnotator}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
 
       <ImportRecordingDialog dataset={dataset} open={importOpen} onOpenChange={setImportOpen} />
       <AssistDialog dataset={dataset} open={assistOpen} onOpenChange={setAssistOpen} />

@@ -54,13 +54,18 @@ import {
   useDatasetItems,
   useInvalidateModels,
 } from "@/queries/models"
+import { Annotator } from "./annotator/annotator"
 import { UploadDropzone } from "./upload-dropzone"
 
-// The items grid, modelled on the simulator's Frames dialog: zoom steps set
-// the minimum column width, thumbnails are the browser-scaled originals
-// (Q14, no server thumbnails), each shows its status and box count, and a
-// click opens the annotator on that item with the same filter so prev / next
-// walk the same set. Multi-select exists for one action: exclude.
+// The Items tab is a master-detail split: the annotator on the left for the
+// selected frame, the grid on the right (dropzone, imports, filters, thumbs,
+// pagination). The grid is modelled on the simulator's Frames dialog: zoom
+// steps set the minimum column width, thumbnails are the browser-scaled
+// originals (Q14, no server thumbnails), each shows its status and box
+// count, and a click selects it; prev / next in the annotator walk the same
+// filtered set. With nothing selected the first frame on the page is shown,
+// so the left pane is never blank. Multi-select exists for one action:
+// exclude.
 
 const ZOOM_STEPS = [120, 160, 200, 280, 400]
 const DEFAULT_ZOOM = 1
@@ -77,6 +82,7 @@ function ItemThumb({
   item,
   selecting,
   selected,
+  current,
   onToggle,
   classColor,
 }: {
@@ -84,6 +90,8 @@ function ItemThumb({
   item: DatasetItem
   selecting: boolean
   selected: boolean
+  /** The frame open in the annotator pane. */
+  current: boolean
   onToggle: () => void
   classColor: (id: string) => string
 }) {
@@ -124,7 +132,7 @@ function ItemThumb({
   )
   const className = cn(
     "relative block aspect-video w-full overflow-hidden rounded border bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-    selected ? "border-primary ring-2 ring-primary/40" : "border-border",
+    selected ? "border-primary ring-2 ring-primary/40" : current ? "border-brand-strong ring-2 ring-brand-strong/50" : "border-border",
   )
   if (selecting) {
     return (
@@ -143,6 +151,8 @@ function ItemThumb({
       data-testid="item-thumb"
       data-item-id={item.id}
       data-status={item.status}
+      data-current={current ? "true" : undefined}
+      aria-current={current ? "true" : undefined}
     >
       {inner}
     </Link>
@@ -157,6 +167,8 @@ export function ItemsTab({
   onImport,
   filter,
   onFilterChange,
+  selectedItemId,
+  onSelectItem,
 }: {
   dataset: DatasetDetail
   openUploadSignal: number
@@ -166,6 +178,9 @@ export function ItemsTab({
   /** Lifted to the page so the annotator sheet walks the same set. */
   filter: ItemFilter
   onFilterChange: (filter: ItemFilter) => void
+  /** The frame in the URL (`?item=`), or null for the first on the page. */
+  selectedItemId: string | null
+  onSelectItem: (itemId: string, replace?: boolean) => void
 }) {
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(PAGE_SIZES[0])
@@ -241,14 +256,17 @@ export function ItemsTab({
   }
 
   const recentImports = (importsQuery.data ?? []).slice(0, 3)
+  const currentId = selectedItemId ?? items[0]?.id ?? null
+  const split = currentId !== null
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+  const gridPane = (
+    <div className={cn("flex min-h-0 min-w-0 flex-col gap-2", split ? "w-full shrink-0 lg:w-[26rem]" : "flex-1")}>
       {canAnnotate ? (
         <UploadDropzone
           datasetId={dataset.id}
           openSignal={openUploadSignal}
           onDone={() => invalidate.dataset(dataset.id)}
+          compact={split}
         />
       ) : null}
 
@@ -417,6 +435,7 @@ export function ItemsTab({
                 item={item}
                 selecting={selecting}
                 selected={selected.has(item.id)}
+                current={item.id === currentId}
                 onToggle={() => toggle(item.id)}
                 classColor={classColor}
               />
@@ -469,6 +488,25 @@ export function ItemsTab({
           setPage(1)
         }}
       />
+    </div>
+  )
+
+  if (!split) return <div className="flex min-h-0 flex-1 flex-col">{gridPane}</div>
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row" data-testid="items-split">
+      <div className="flex min-h-[32rem] min-w-0 flex-1 flex-col lg:min-h-0" data-testid="annotator-pane">
+        <Annotator
+          key={dataset.id}
+          datasetId={dataset.id}
+          itemId={currentId}
+          filter={filter}
+          variant="pane"
+          onNavigate={(next) => onSelectItem(next, true)}
+          onExit={() => {}}
+        />
+      </div>
+      {gridPane}
     </div>
   )
 }

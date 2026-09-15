@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SectionCard } from "@/components/models/section-card"
 import { cn } from "@/lib/utils"
 import { xgMessage } from "@/lib/xorgate"
 import { updateDataset } from "@/lib/models-api"
@@ -50,6 +51,7 @@ export function ClassesTab({ dataset, canEdit }: { dataset: DatasetDetail; canEd
     return null
   })
   const valid = rows.length > 0 && rows.length <= MAX_CLASSES && errors.every((e) => e === null)
+  const totalBoxes = Object.values(dataset.classUsage).reduce((a, b) => a + b, 0)
 
   const update = (i: number, patch: Partial<Draft>) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)))
@@ -82,89 +84,115 @@ export function ClassesTab({ dataset, canEdit }: { dataset: DatasetDetail; canEd
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" data-testid="classes-tab">
-      <p className="text-xs text-muted-foreground">
-        The order here is the order the annotator's keys 1 to 9 use. A class with
-        annotations can be renamed or recoloured but not removed.
-      </p>
-      <div className="flex max-w-2xl flex-col gap-1.5">
-        {rows.map((row, i) => {
-          const used = row.id ? (dataset.classUsage[row.id] ?? 0) : 0
-          return (
-            <div
-              key={row.id ?? `new-${i}`}
-              className="grid items-center gap-2"
-              style={{ gridTemplateColumns: "1.5rem 2.25rem minmax(0,1fr) 6rem auto" }}
-              data-testid="class-row"
-            >
-              <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{i < 9 ? i + 1 : ""}</span>
-              <input
-                type="color"
-                value={row.color}
-                disabled={!canEdit}
-                aria-label={`${row.name || "class"} colour`}
-                className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
-                onChange={(e) => update(i, { color: e.target.value })}
-              />
-              <div className="flex flex-col">
-                <Input
-                  value={row.name}
+      <SectionCard
+        className="max-w-3xl"
+        title="Classes"
+        description="The things the model learns to find. The order here is the order the annotator's keys 1 to 9 use, and the order a version's categories take. A class with boxes can be renamed or recoloured but not removed."
+        action={
+          canEdit ? (
+            <span className="flex items-center gap-1.5">
+              {dirty ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setRows(JSON.parse(canonical) as Draft[])}>
+                  Discard
+                </Button>
+              ) : null}
+              <Button type="button" size="sm" disabled={!dirty || !valid || saving} onClick={() => void save()} data-testid="classes-save">
+                {saving ? "Saving…" : "Save classes"}
+              </Button>
+            </span>
+          ) : undefined
+        }
+      >
+        <div className="flex flex-col gap-1.5">
+          {rows.map((row, i) => {
+            const used = row.id ? (dataset.classUsage[row.id] ?? 0) : 0
+            const share = totalBoxes > 0 ? Math.round((used / totalBoxes) * 100) : 0
+            return (
+              <div
+                key={row.id ?? `new-${i}`}
+                className="grid items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
+                style={{ gridTemplateColumns: "1.5rem 2.25rem minmax(0,1fr) 9rem auto" }}
+                data-testid="class-row"
+              >
+                <kbd
+                  className={cn(
+                    "inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-muted font-mono text-[10px] text-muted-foreground",
+                    i >= 9 ? "invisible" : "",
+                  )}
+                  title={i < 9 ? `Press ${i + 1} in the annotator` : undefined}
+                >
+                  {i < 9 ? i + 1 : ""}
+                </kbd>
+                <input
+                  type="color"
+                  value={row.color}
                   disabled={!canEdit}
-                  placeholder="class name"
-                  aria-invalid={errors[i] !== null}
-                  className="h-7 text-xs"
-                  onChange={(e) => update(i, { name: e.target.value })}
+                  aria-label={`${row.name || "class"} colour`}
+                  className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5 disabled:cursor-default"
+                  onChange={(e) => update(i, { color: e.target.value })}
                 />
-                {errors[i] ? <span className="text-[10px] text-destructive">{errors[i]}</span> : null}
+                <div className="flex flex-col">
+                  <Input
+                    value={row.name}
+                    disabled={!canEdit}
+                    placeholder="class name"
+                    aria-invalid={errors[i] !== null}
+                    className="h-7 text-xs"
+                    onChange={(e) => update(i, { name: e.target.value })}
+                  />
+                  {errors[i] ? <span className="text-[10px] text-destructive">{errors[i]}</span> : null}
+                </div>
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {used} box{used === 1 ? "" : "es"}
+                    {totalBoxes > 0 ? ` · ${share}%` : ""}
+                  </span>
+                  <span className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                    <span className="block h-full rounded-full" style={{ width: `${share}%`, backgroundColor: row.color }} />
+                  </span>
+                </span>
+                <span className="flex items-center gap-0.5">
+                  <Button type="button" variant="ghost" size="icon-sm" disabled={!canEdit || i === 0} onClick={() => move(i, -1)} aria-label="Move up">
+                    <ArrowUpIcon className="size-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={!canEdit || i === rows.length - 1}
+                    onClick={() => move(i, 1)}
+                    aria-label="Move down"
+                  >
+                    <ArrowDownIcon className="size-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={!canEdit || used > 0 || rows.length === 1}
+                    title={used > 0 ? "Delete the annotations first" : "Remove"}
+                    onClick={() => remove(i)}
+                    aria-label="Remove class"
+                  >
+                    <XIcon className={cn("size-3", used > 0 ? "opacity-40" : "")} />
+                  </Button>
+                </span>
               </div>
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {used} box{used === 1 ? "" : "es"}
-              </span>
-              <span className="flex items-center gap-0.5">
-                <Button type="button" variant="ghost" size="icon-sm" disabled={!canEdit || i === 0} onClick={() => move(i, -1)} aria-label="Move up">
-                  <ArrowUpIcon className="size-3" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!canEdit || i === rows.length - 1}
-                  onClick={() => move(i, 1)}
-                  aria-label="Move down"
-                >
-                  <ArrowDownIcon className="size-3" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!canEdit || used > 0 || rows.length === 1}
-                  title={used > 0 ? "Delete the annotations first" : "Remove"}
-                  onClick={() => remove(i)}
-                  aria-label="Remove class"
-                >
-                  <XIcon className={cn("size-3", used > 0 ? "opacity-40" : "")} />
-                </Button>
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      {canEdit ? (
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={add} disabled={rows.length >= MAX_CLASSES}>
-            <PlusIcon />
-            Add class
-          </Button>
-          <Button type="button" size="sm" disabled={!dirty || !valid || saving} onClick={() => void save()} data-testid="classes-save">
-            {saving ? "Saving…" : "Save classes"}
-          </Button>
-          {dirty ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => setRows(JSON.parse(canonical) as Draft[])}>
-              Discard
-            </Button>
-          ) : null}
+            )
+          })}
         </div>
-      ) : null}
+        {canEdit ? (
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={add} disabled={rows.length >= MAX_CLASSES}>
+              <PlusIcon />
+              Add class
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              {rows.length} of {MAX_CLASSES}
+            </span>
+          </div>
+        ) : null}
+      </SectionCard>
     </div>
   )
 }

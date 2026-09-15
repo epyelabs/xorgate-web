@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { DownloadIcon, PlayIcon, TriangleAlertIcon } from "lucide-react"
+import { DownloadIcon, LayersIcon, PlayIcon, TriangleAlertIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,16 +10,26 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { DataTable, StatusDot, type DataTableColumn } from "@/components/data-table"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { DataTable, type DataTableColumn } from "@/components/data-table"
+import { StatusBadge } from "@/components/models/status-badge"
 import { xgMessage } from "@/lib/xorgate"
 import { getVersion, triggerDownload } from "@/lib/models-api"
-import { formatDateTime, VERSION_STATUS_COLOR } from "@/lib/models-format"
+import { formatDateTime, VERSION_STATUS_COLOR, VERSION_STATUS_LABEL } from "@/lib/models-format"
 import type { DatasetDetail, DatasetVersion } from "@/lib/models-schemas"
 import { useDatasetVersions } from "@/queries/models"
-import { TrainDialog } from "@/routes/training-jobs/-components/train-dialog"
 
 // Every version of the dataset with its split stats, the health warnings the
-// builder recorded, the three files once ready, and Train.
+// builder recorded, the three files once ready, and Train. The newest ready
+// version is the one Train defaults to everywhere else on the page.
 function splitLine(v: DatasetVersion): string {
   const s = v.stats
   if (!s) return "—"
@@ -29,19 +39,25 @@ function splitLine(v: DatasetVersion): string {
 export function VersionsTab({
   dataset,
   canTrain,
+  canAnnotate,
   onNewVersion,
+  onTrain,
 }: {
   dataset: DatasetDetail
   canTrain: boolean
+  canAnnotate: boolean
   onNewVersion: () => void
+  onTrain: (version: DatasetVersion) => void
 }) {
   const versionsQuery = useDatasetVersions(dataset.id)
-  const [trainVersion, setTrainVersion] = useState<DatasetVersion | null>(null)
   const [files, setFiles] = useState<Record<number, Record<string, string>>>({})
 
   useEffect(() => {
     if (versionsQuery.error) toast.error(xgMessage(versionsQuery.error))
   }, [versionsQuery.error])
+
+  const versions = versionsQuery.data ?? []
+  const latestReady = versions.filter((v) => v.status === "ready").sort((a, b) => b.version - a.version)[0] ?? null
 
   const loadFiles = async (v: DatasetVersion) => {
     if (files[v.version]) return
@@ -59,7 +75,14 @@ export function VersionsTab({
       header: "Version",
       cell: (v) => (
         <span className="flex flex-col leading-tight">
-          <span className="text-sm font-medium">v{v.version}</span>
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+            v{v.version}
+            {latestReady && v.id === latestReady.id ? (
+              <Badge variant="secondary" className="h-4 px-1.5">
+                latest
+              </Badge>
+            ) : null}
+          </span>
           {v.message ? <span className="max-w-xs truncate text-xs text-muted-foreground">{v.message}</span> : null}
         </span>
       ),
@@ -69,7 +92,11 @@ export function VersionsTab({
       header: "Status",
       cell: (v) => (
         <span className="flex flex-col gap-0.5">
-          <StatusDot color={VERSION_STATUS_COLOR[v.status] ?? "bg-zinc-400"} label={v.status} pulse={v.status === "building"} />
+          <StatusBadge
+            color={VERSION_STATUS_COLOR[v.status] ?? "bg-zinc-400"}
+            label={VERSION_STATUS_LABEL[v.status] ?? v.status}
+            pulse={v.status === "building"}
+          />
           {v.status === "failed" && v.error ? (
             <span className="max-w-xs truncate text-[11px] text-destructive" title={v.error}>
               {v.error}
@@ -116,20 +143,27 @@ export function VersionsTab({
           v.health.warnings.length === 0 && v.health.errors.length === 0 ? (
             <span className="text-xs text-muted-foreground">ok</span>
           ) : (
-            <span className="flex flex-wrap gap-1" title={[...v.health.errors, ...v.health.warnings].map((w) => w.message).join("\n")}>
-              {v.health.errors.map((e, i) => (
-                <Badge key={`e${i}`} variant="destructive">
-                  {e.code}
-                </Badge>
-              ))}
-              {v.health.warnings.map((w, i) => (
-                <Badge key={`w${i}`} variant="outline" className="gap-1">
-                  <TriangleAlertIcon className="size-3 text-amber-500" />
-                  {w.code}
-                  {w.className ? `: ${w.className}` : ""}
-                </Badge>
-              ))}
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex flex-wrap gap-1">
+                  {v.health.errors.map((e, i) => (
+                    <Badge key={`e${i}`} variant="destructive">
+                      {e.code}
+                    </Badge>
+                  ))}
+                  {v.health.warnings.map((w, i) => (
+                    <Badge key={`w${i}`} variant="outline" className="gap-1">
+                      <TriangleAlertIcon className="size-3 text-amber-500" />
+                      {w.code}
+                      {w.className ? `: ${w.className}` : ""}
+                    </Badge>
+                  ))}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm whitespace-pre-line">
+                {[...v.health.errors, ...v.health.warnings].map((w) => w.message).join("\n")}
+              </TooltipContent>
+            </Tooltip>
           )
         ) : (
           "—"
@@ -172,7 +206,12 @@ export function VersionsTab({
             </DropdownMenu>
           ) : null}
           {canTrain && v.status === "ready" ? (
-            <Button variant="brand" size="sm" onClick={() => setTrainVersion(v)} data-testid={`train-v${v.version}`}>
+            <Button
+              variant={latestReady && v.id === latestReady.id ? "brand" : "outline"}
+              size="sm"
+              onClick={() => onTrain(v)}
+              data-testid={`train-v${v.version}`}
+            >
               <PlayIcon />
               Train
             </Button>
@@ -188,28 +227,34 @@ export function VersionsTab({
         fillHeight
         className="min-h-0 flex-1"
         columns={columns}
-        rows={versionsQuery.data ?? []}
+        rows={versions}
         getRowKey={(v) => v.id}
         loading={versionsQuery.isPending}
         empty={
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <p className="text-sm font-medium">No versions yet</p>
-            <p className="text-xs text-muted-foreground">
-              A version freezes the labeled items into a train / val split a job can train on.
-            </p>
-            <button type="button" onClick={onNewVersion} className="text-xs text-primary underline-offset-2 hover:underline">
-              New version
-            </button>
-          </div>
+          <Empty className="py-12">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <LayersIcon />
+              </EmptyMedia>
+              <EmptyTitle>No versions yet</EmptyTitle>
+              <EmptyDescription>
+                A version freezes the labeled items and their boxes into a train / val / test split. Training
+                always reads a version, never the live dataset, so a result can be reproduced later.
+              </EmptyDescription>
+            </EmptyHeader>
+            {canAnnotate ? (
+              <EmptyContent>
+                <Button variant="brand" size="sm" onClick={onNewVersion} disabled={(dataset.itemsByStatus.labeled ?? 0) === 0}>
+                  <LayersIcon />
+                  New version
+                </Button>
+                {(dataset.itemsByStatus.labeled ?? 0) === 0 ? (
+                  <span className="text-[11px] text-muted-foreground">Label at least one item first.</span>
+                ) : null}
+              </EmptyContent>
+            ) : null}
+          </Empty>
         }
-      />
-      <TrainDialog
-        datasetName={dataset.name}
-        version={trainVersion}
-        open={trainVersion !== null}
-        onOpenChange={(open) => {
-          if (!open) setTrainVersion(null)
-        }}
       />
     </div>
   )

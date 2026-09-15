@@ -244,6 +244,7 @@ export const KEYBOARD_MAP: readonly KeyBinding[] = [
   { keys: "Scroll", action: "Zoom under the cursor" },
   { keys: "Space + drag, or middle drag", action: "Pan" },
   { keys: "F", action: "Fit the image to the stage" },
+  { keys: "N", action: "Add a class without leaving the annotator" },
   { keys: "?", action: "Show this help" },
 ]
 

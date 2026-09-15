@@ -4,14 +4,25 @@ import { toast } from "sonner"
 import {
   CheckIcon,
   ChevronDownIcon,
+  FilmIcon,
   FilterIcon,
+  ImagesIcon,
   Loader2Icon,
   SquareDashedIcon,
+  UploadIcon,
   XIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +36,7 @@ import { xgMessage } from "@/lib/xorgate"
 import { deleteItem } from "@/lib/models-api"
 import {
   IMPORT_STATUS_COLOR,
+  IMPORT_STATUS_LABEL,
   ITEM_STATUS_COLOR,
   ITEM_STATUS_LABEL,
 } from "@/lib/models-format"
@@ -143,10 +155,14 @@ export function ItemsTab({
   dataset,
   openUploadSignal,
   canAnnotate,
+  onUpload,
+  onImport,
 }: {
   dataset: DatasetDetail
   openUploadSignal: number
   canAnnotate: boolean
+  onUpload: () => void
+  onImport: () => void
 }) {
   const [filter, setFilter] = useState<ItemFilter>({})
   const [page, setPage] = useState(1)
@@ -241,7 +257,7 @@ export function ItemsTab({
             const p = (imp.progress ?? {}) as { framesSeen?: number; cursor?: number; segments?: number }
             return (
               <span key={imp.id} className="inline-flex items-center gap-1.5 rounded border border-border px-1.5 py-0.5" data-status={imp.status}>
-                <StatusDot color={IMPORT_STATUS_COLOR[imp.status]} label={imp.status} />
+                <StatusDot color={IMPORT_STATUS_COLOR[imp.status]} label={IMPORT_STATUS_LABEL[imp.status] ?? imp.status} pulse={imp.status === "running"} />
                 {imp.status === "running" && p.segments ? (
                   <span>
                     segment {p.cursor ?? 0}/{p.segments}
@@ -405,16 +421,38 @@ export function ItemsTab({
               />
             ))}
         {!itemsQuery.isPending && items.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center gap-1 py-16 text-center">
-            <p className="text-sm font-medium">
-              {dataset.itemCount === 0 ? "No frames yet" : "No items match the filter"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {dataset.itemCount === 0
-                ? "Drop images above, or add frames from a device recording."
-                : "Clear the filters to see everything."}
-            </p>
-          </div>
+          <Empty className="col-span-full py-16">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ImagesIcon />
+              </EmptyMedia>
+              <EmptyTitle>{dataset.itemCount === 0 ? "No frames yet" : "No items match the filter"}</EmptyTitle>
+              <EmptyDescription>
+                {dataset.itemCount === 0
+                  ? "A dataset starts with frames: drop JPEG or PNG files, or pull frames out of a device recording. Then label them, freeze a version and train."
+                  : "Clear the filters to see everything."}
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              {dataset.itemCount === 0 && canAnnotate ? (
+                <span className="flex flex-wrap justify-center gap-2">
+                  <Button variant="brand" size="sm" onClick={onUpload}>
+                    <UploadIcon />
+                    Upload images
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={onImport}>
+                    <FilmIcon />
+                    From a recording
+                  </Button>
+                </span>
+              ) : dataset.itemCount > 0 ? (
+                <Button variant="outline" size="sm" onClick={() => changeFilter({})}>
+                  <XIcon />
+                  Clear filters
+                </Button>
+              ) : null}
+            </EmptyContent>
+          </Empty>
         ) : null}
       </div>
 

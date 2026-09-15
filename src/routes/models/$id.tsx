@@ -2,45 +2,60 @@ import { useEffect, useState } from "react"
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { requireAuth } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import { ArchiveIcon, ArchiveRestoreIcon, DownloadIcon, Trash2Icon } from "lucide-react"
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  BoxesIcon,
+  ChevronDownIcon,
+  DatabaseIcon,
+  DownloadIcon,
+  FlaskConicalIcon,
+  InfoIcon,
+  LayersIcon,
+  Trash2Icon,
+  WorkflowIcon,
+} from "lucide-react"
 import { isXorgateError } from "@xorgate/sdk"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { DestroyDialog } from "@/components/destroy-dialog"
 import { JsonTree } from "@/components/json-tree"
 import { StickyHeader } from "@/components/sticky-header"
+import { CopyButton } from "@/components/models/copy-button"
+import { Fact, FactGrid } from "@/components/models/facts"
+import { LifecycleRail, type LifecycleStage } from "@/components/models/lifecycle-rail"
+import { MetricTile } from "@/components/models/metric-tile"
+import { SectionCard } from "@/components/models/section-card"
 import { cn } from "@/lib/utils"
 import { xgMessage } from "@/lib/xorgate"
 import { useHasPermission } from "@/lib/permissions"
 import { deleteModel, getModelDownload, patchModel, triggerDownload } from "@/lib/models-api"
-import { formatDateTime, formatMetric } from "@/lib/models-format"
-import { modelRef, type ModelDetail } from "@/lib/models-schemas"
+import { formatDateTime, formatMetric, shortId } from "@/lib/models-format"
+import { modelRef, operatingConfidence, type ModelDetail } from "@/lib/models-schemas"
 import { useInvalidateModels, useRegistryModel } from "@/queries/models"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
+const TABS = ["overview", "manifest"] as const
+type Tab = (typeof TABS)[number]
+
 export const Route = createFileRoute("/models/$id")({
   beforeLoad: requireAuth,
+  validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
+    tab: TABS.includes(search.tab as Tab) ? (search.tab as Tab) : undefined,
+  }),
   component: RegistryModelPage,
 })
-
-function Section({ title, children, testId }: { title: string; children: React.ReactNode; testId?: string }) {
-  return (
-    <section className="flex flex-col gap-2" data-testid={testId}>
-      <h2 className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">{title}</h2>
-      {children}
-    </section>
-  )
-}
-
-function Fact({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] tracking-wider text-muted-foreground uppercase">{label}</span>
-      <span className={cn("text-sm", mono ? "font-mono text-xs" : "")}>{value}</span>
-    </div>
-  )
-}
 
 // One registry entry: scope, the manifest as published (byte for byte, with
 // the forge's provenance), lineage back to the dataset version and job,
@@ -49,7 +64,9 @@ function Fact({ label, value, mono }: { label: string; value: React.ReactNode; m
 // usage list here is the same query, so the button says so first.
 function RegistryModelPage() {
   const { id } = Route.useParams()
+  const { tab } = Route.useSearch()
   const navigate = useNavigate()
+  const activeTab: Tab = tab ?? "overview"
   const canManage = useHasPermission("models:manage")
   const canDownload = useHasPermission("models:annotate")
   const invalidate = useInvalidateModels()
@@ -72,6 +89,15 @@ function RegistryModelPage() {
       useBreadcrumbStore.getState().setModelName(null)
     }
   }, [id])
+
+  const setTab = (next: string) => {
+    navigate({
+      to: "/models/$id",
+      params: { id },
+      search: next === "overview" ? {} : { tab: next as Tab },
+      replace: true,
+    })
+  }
 
   const download = async (file: "manifest.json" | "model.onnx") => {
     if (!model) return
@@ -125,7 +151,7 @@ function RegistryModelPage() {
     return (
       <div className="flex flex-1 flex-col gap-3 p-4 pt-0">
         <Skeleton className="h-12 w-full max-w-2xl" />
-        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-14 w-full" />
         <Skeleton className="h-80 w-full" />
       </div>
     )
@@ -134,182 +160,353 @@ function RegistryModelPage() {
   const isOrg = model.scope === "organization"
   const prov = model.provenance
   const metrics = prov?.metrics ?? null
-  const inUse = model.usage.length > 0
   const input = model.manifest.input
+  const inUse = model.usage.length > 0
+  const ref = modelRef(model.name, model.version)
+  const confidence = operatingConfidence(model)
+  const jobId = model.lineage?.jobId ?? prov?.jobId ?? null
+  const usageTemplates = new Set(model.usage.map((u) => u.templateId)).size
+
+  const stages: LifecycleStage[] = [
+    {
+      key: "dataset",
+      label: "Dataset",
+      icon: DatabaseIcon,
+      state: model.lineage ? "done" : "pending",
+      summary: model.lineage ? model.lineage.datasetName : prov?.datasetId ? "Deleted dataset" : "Placed by hand",
+      link: model.lineage ? { to: "/datasets/$id", params: { id: model.lineage.datasetId }, search: {} } : undefined,
+    },
+    {
+      key: "version",
+      label: "Version",
+      icon: LayersIcon,
+      state: model.lineage ? "done" : "pending",
+      summary: model.lineage ? `v${model.lineage.datasetVersion}` : "—",
+      link: model.lineage ? { to: "/datasets/$id", params: { id: model.lineage.datasetId }, search: { tab: "versions" } } : undefined,
+    },
+    {
+      key: "training",
+      label: "Training",
+      icon: FlaskConicalIcon,
+      state: jobId ? "done" : "pending",
+      summary: jobId ? `job ${shortId(jobId)}${prov?.epochsCompleted ? ` · ${prov.epochsCompleted} epochs` : ""}` : "No job",
+      link: jobId ? { to: "/training-jobs/$id", params: { id: jobId } } : undefined,
+    },
+    {
+      key: "model",
+      label: "Model",
+      icon: BoxesIcon,
+      state: "current",
+      summary: `${ref}${model.status === "archived" ? " · archived" : ""}`,
+    },
+    {
+      key: "workflows",
+      label: "Workflows",
+      icon: WorkflowIcon,
+      state: inUse ? "done" : "pending",
+      summary: inUse
+        ? `${usageTemplates} template${usageTemplates === 1 ? "" : "s"}, ${model.usage.length} version${model.usage.length === 1 ? "" : "s"}`
+        : "Not named yet",
+      link: { to: "/workflow-templates" },
+    },
+  ]
 
   return (
-    <div className="flex flex-1 flex-col gap-5 p-4 pt-0" data-testid="model-detail" data-scope={model.scope}>
-      <StickyHeader className="border-b border-border pb-4">
-        <header className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {model.name}
-              <span className="ml-2 font-mono text-base text-muted-foreground">v{model.version}</span>
-            </h1>
-            <Badge variant={isOrg ? "default" : "secondary"}>{model.scope}</Badge>
-            <Badge variant="outline">{model.family}</Badge>
-            {model.status === "archived" ? <Badge variant="destructive">archived</Badge> : null}
-            <span className="ml-auto flex items-center gap-2">
+    <div className="flex flex-1 flex-col gap-4 p-4 pt-0" data-testid="model-detail" data-scope={model.scope}>
+      <StickyHeader className="border-b border-border pb-3">
+        <header className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="flex min-w-0 flex-1 basis-80 flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-2xl font-semibold tracking-tight">
+                  {model.name} <span className="font-mono text-lg text-muted-foreground">v{model.version}</span>
+                </h1>
+                <Badge variant={isOrg ? "default" : "outline"}>{isOrg ? "Your organization" : "Platform"}</Badge>
+                <Badge variant="outline">{model.family}</Badge>
+                {model.status === "archived" ? <Badge variant="destructive">archived</Badge> : null}
+              </div>
+              <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+                {model.label && model.label !== model.name ? <span>{model.label}</span> : null}
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="text-xs">Named in a workflow as</span>
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">{ref}</code>
+                  <CopyButton value={ref} label="Copy model reference" />
+                </span>
+              </p>
+            </div>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               {canDownload ? (
-                <>
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void download("manifest.json")} data-testid="download-manifest">
-                    <DownloadIcon />
-                    manifest.json
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void download("model.onnx")} data-testid="download-onnx">
-                    <DownloadIcon />
-                    model.onnx
-                  </Button>
-                </>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="lg" disabled={busy} data-testid="download-model">
+                      <DownloadIcon />
+                      Download
+                      <ChevronDownIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      The two files an engine loads
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => void download("manifest.json")} data-testid="download-manifest">
+                      manifest.json
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void download("model.onnx")} data-testid="download-onnx">
+                      model.onnx
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : null}
               {canManage && isOrg ? (
                 <>
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void toggleArchive()} data-testid="archive-model">
+                  <Button variant="outline" size="lg" disabled={busy} onClick={() => void toggleArchive()} data-testid="archive-model">
                     {model.status === "archived" ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
                     {model.status === "archived" ? "Restore" : "Archive"}
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={busy || inUse}
-                    title={inUse ? "Named by a published workflow; archive it instead" : undefined}
-                    onClick={() => setDeleteOpen(true)}
-                    data-testid="delete-model"
-                  >
-                    <Trash2Icon />
-                    Delete
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={inUse ? 0 : -1}>
+                        <Button
+                          variant="destructive"
+                          size="lg"
+                          disabled={busy || inUse}
+                          onClick={() => setDeleteOpen(true)}
+                          data-testid="delete-model"
+                        >
+                          <Trash2Icon />
+                          Delete
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {inUse ? <TooltipContent>Named by a published workflow; archive it instead.</TooltipContent> : null}
+                  </Tooltip>
                 </>
               ) : null}
-            </span>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {model.label && model.label !== model.name ? model.label : "Named in a workflow as "}
-            <span className="font-mono text-xs">{model.label && model.label !== model.name ? ` · ${modelRef(model.name, model.version)}` : modelRef(model.name, model.version)}</span>
-          </p>
+          {isOrg ? <LifecycleRail stages={stages} /> : null}
         </header>
       </StickyHeader>
 
-      <Section title="Model" testId="model-facts">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-          <Fact label="Backend" value={model.manifest.backend ?? "—"} mono />
-          <Fact label="Input" value={input?.width && input?.height ? `${input.width}x${input.height} ${input.layout ?? ""} ${input.colorSpace ?? ""}` : "—"} mono />
-          <Fact label="Quantization" value={model.manifest.quantization ?? "—"} mono />
-          <Fact label="Classes" value={model.classNames.length} />
-          <Fact label="Trained" value={isOrg ? formatDateTime(prov?.trainedAt ?? model.createdAt) : "platform"} />
-          <Fact label="Prefix" value={model.s3Prefix} mono />
-        </div>
-        <div className="flex flex-wrap gap-1" data-testid="model-classes">
-          {model.classNames.map((c) => (
-            <span key={c} className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
-              {c}
-            </span>
-          ))}
-        </div>
-      </Section>
+      {!isOrg ? (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>A platform model</AlertTitle>
+          <AlertDescription>
+            Shipped with the engine and served to every organization. Your own models resolve first, so training one
+            under this name is refused; pick a new name and the picker lists both.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-      {isOrg ? (
-        <Section title="Lineage" testId="model-lineage">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Fact label="Recipe" value={`${prov?.recipe ?? "—"}${prov?.base?.ref ? ` from ${prov.base.ref}` : ""}`} mono />
-            <Fact label="Epochs" value={prov?.epochsCompleted ?? "—"} mono />
-            <Fact
-              label="Dataset"
-              value={
-                model.lineage ? (
-                  <Link to="/datasets/$id" params={{ id: model.lineage.datasetId }} search={{ tab: "versions" }} className="text-primary underline-offset-2 hover:underline">
-                    {model.lineage.datasetName} v{model.lineage.datasetVersion}
-                  </Link>
-                ) : prov?.datasetId ? (
-                  <span className="text-muted-foreground">deleted dataset</span>
-                ) : (
-                  "—"
-                )
-              }
-            />
-            <Fact
-              label="Job"
-              value={
-                model.lineage?.jobId ?? prov?.jobId ? (
-                  <Link to="/training-jobs/$id" params={{ id: (model.lineage?.jobId ?? prov?.jobId) as string }} className="font-mono text-xs text-primary underline-offset-2 hover:underline">
-                    {(model.lineage?.jobId ?? prov?.jobId ?? "").slice(0, 8)}
-                  </Link>
-                ) : (
-                  <span className="text-muted-foreground">placed by hand</span>
-                )
-              }
-            />
-          </div>
-          {metrics ? (
-            <>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="model-metrics">
-                <Fact label="mAP50" value={formatMetric(metrics.mAP50)} mono />
-                <Fact label="mAP50-95" value={formatMetric(metrics.mAP50_95)} mono />
-                <Fact label="Precision" value={formatMetric(metrics.precision)} mono />
-                <Fact label="Recall" value={formatMetric(metrics.recall)} mono />
-                <Fact
-                  label="Operating confidence"
-                  value={<span data-testid="model-operating-confidence">{formatMetric(metrics.confidence, 2)}</span>}
-                  mono
-                />
-              </div>
-              {typeof metrics.confidence === "number" ? (
-                <p className="text-[11px] text-muted-foreground">
-                  The threshold precision and recall were measured at. Picking this model in a template sets the
-                  detection node's min confidence to it.
-                </p>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Tabs value={activeTab} onValueChange={setTab}>
+            <TabsList variant="line">
+              <TabsTrigger value="overview" data-testid="tab-overview">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="manifest" data-testid="tab-manifest">
+                Manifest
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {activeTab === "overview" ? (
+            <div className="flex flex-col gap-4">
+              {metrics ? (
+                <SectionCard
+                  title="Evaluation"
+                  description="Measured by the training job on its validation split, at the operating confidence."
+                  testId="model-metrics"
+                >
+                  <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr))]">
+                    <MetricTile label="mAP50" value={metrics.mAP50} />
+                    <MetricTile label="mAP50-95" value={metrics.mAP50_95} />
+                    <MetricTile label="Precision" value={metrics.precision} />
+                    <MetricTile label="Recall" value={metrics.recall} />
+                    <MetricTile
+                      label="Operating confidence"
+                      value={metrics.confidence}
+                      format="raw"
+                      digits={2}
+                      valueTestId="model-operating-confidence"
+                      hint={typeof metrics.confidence === "number" ? "F1-max threshold" : "Not measured by this job"}
+                    />
+                  </div>
+                  {typeof confidence === "number" ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      The threshold precision and recall were measured at. Picking this model in a template sets the
+                      detection node's min confidence to {formatMetric(confidence, 2)}.
+                    </p>
+                  ) : null}
+                </SectionCard>
               ) : null}
-            </>
-          ) : null}
-        </Section>
-      ) : null}
 
-      {model.versions && model.versions.length > 1 ? (
-        <Section title="Versions of this name" testId="model-versions">
-          <div className="flex flex-wrap gap-1">
-            {model.versions.map((v) => (
-              <Link
-                key={v.id}
-                to="/models/$id"
-                params={{ id: v.id }}
-                className={cn(
-                  "rounded border px-2 py-0.5 font-mono text-[11px] hover:bg-muted/50",
-                  v.id === model.id ? "border-primary bg-primary/10" : "border-border",
-                  v.status === "archived" ? "line-through opacity-60" : "",
-                )}
+              <SectionCard
+                title="Classes"
+                description="In index order, as the model emits them. A gate downstream matches on these names."
+                testId="model-classes"
               >
-                v{v.version}
-              </Link>
-            ))}
-          </div>
-        </Section>
-      ) : null}
+                {model.classNames.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">This family emits no class list.</p>
+                ) : null}
+                <div className="flex flex-wrap gap-1">
+                  {model.classNames.map((c, i) => (
+                    <span key={c} className="inline-flex items-center gap-1.5 rounded border border-border px-1.5 py-0.5 font-mono text-[11px]">
+                      <span className="text-muted-foreground tabular-nums">{i}</span>
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </SectionCard>
 
-      <Section title="Used by" testId="model-usage">
-        {inUse ? (
-          <ul className="flex flex-col gap-0.5 text-xs">
-            {model.usage.map((u) => (
-              <li key={`${u.templateId}:${u.version}:${u.nodeId}`}>
-                <Link to="/workflow-templates/$id" params={{ id: u.templateId }} className="text-primary underline-offset-2 hover:underline">
-                  {u.templateName}
-                </Link>
-                <span className="text-muted-foreground">
-                  {" "}
-                  v{u.version}, node <span className="font-mono">{u.nodeId}</span>
+              {isOrg ? (
+                <SectionCard title="Lineage" description="Where this version came from, so a result can be traced back and reproduced." testId="model-lineage">
+                  <FactGrid>
+                    <Fact label="Recipe" value={prov?.recipe ?? "—"} mono />
+                    <Fact label="Base weights" value={prov?.base?.ref ?? "—"} mono />
+                    <Fact label="Epochs" value={prov?.epochsCompleted ?? "—"} mono />
+                    <Fact
+                      label="Dataset"
+                      value={
+                        model.lineage ? (
+                          <Link to="/datasets/$id" params={{ id: model.lineage.datasetId }} search={{ tab: "versions" }} className="text-primary underline-offset-2 hover:underline">
+                            {model.lineage.datasetName} v{model.lineage.datasetVersion}
+                          </Link>
+                        ) : prov?.datasetId ? (
+                          <span className="text-muted-foreground">deleted dataset</span>
+                        ) : (
+                          "—"
+                        )
+                      }
+                    />
+                    <Fact
+                      label="Job"
+                      value={
+                        jobId ? (
+                          <Link to="/training-jobs/$id" params={{ id: jobId }} className="font-mono text-xs text-primary underline-offset-2 hover:underline">
+                            {shortId(jobId)}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">placed by hand</span>
+                        )
+                      }
+                    />
+                  </FactGrid>
+                </SectionCard>
+              ) : null}
+
+              {model.versions && model.versions.length > 1 ? (
+                <SectionCard
+                  title="Versions of this name"
+                  description="A workflow that names the model without a version gets the newest ready one; pin a version to hold it."
+                  testId="model-versions"
+                >
+                  <div className="flex flex-wrap gap-1">
+                    {[...model.versions]
+                      .sort((a, b) => b.version - a.version)
+                      .map((v) => (
+                        <Link
+                          key={v.id}
+                          to="/models/$id"
+                          params={{ id: v.id }}
+                          className={cn(
+                            "rounded-md border px-2 py-1 font-mono text-[11px] transition-colors hover:bg-muted/50",
+                            v.id === model.id ? "border-primary bg-primary/10" : "border-border",
+                            v.status === "archived" ? "line-through opacity-60" : "",
+                          )}
+                          aria-current={v.id === model.id ? "page" : undefined}
+                        >
+                          v{v.version}
+                        </Link>
+                      ))}
+                  </div>
+                </SectionCard>
+              ) : null}
+
+              <SectionCard
+                title="Used by"
+                description="Published workflow versions that name this model. A model in use can be archived but not deleted."
+                testId="model-usage"
+              >
+                {inUse ? (
+                  <ul className="flex flex-col gap-1 text-xs">
+                    {model.usage.map((u) => (
+                      <li key={`${u.templateId}:${u.version}:${u.nodeId}`} className="flex items-center gap-2">
+                        <WorkflowIcon className="size-3.5 text-muted-foreground" />
+                        <Link to="/workflow-templates/$id" params={{ id: u.templateId }} className="font-medium text-primary underline-offset-2 hover:underline">
+                          {u.templateName}
+                        </Link>
+                        <span className="text-muted-foreground">
+                          v{u.version}, node <span className="font-mono">{u.nodeId}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No published workflow version names this model yet.</p>
+                )}
+              </SectionCard>
+            </div>
+          ) : (
+            <SectionCard
+              title="Manifest"
+              description="manifest.json as published, byte for byte: what the engine reads to load the model."
+              testId="model-manifest"
+            >
+              <div className="rounded-md border border-border bg-muted/30 p-2">
+                <JsonTree value={model.manifest} />
+              </div>
+            </SectionCard>
+          )}
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-4">
+          <SectionCard title="Use in a workflow">
+            <ol className="flex flex-col gap-2 text-xs">
+              <li className="flex gap-2">
+                <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">1</span>
+                <span>
+                  Open a workflow template and add a <span className="font-medium">{model.family}</span> node.
                 </span>
               </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">No published workflow version names this model.</p>
-        )}
-      </Section>
-
-      <Section title="Manifest" testId="model-manifest">
-        <div className="rounded-md border border-border bg-muted/30 p-2">
-          <JsonTree value={model.manifest} />
-        </div>
-      </Section>
+              <li className="flex gap-2">
+                <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">2</span>
+                <span className="min-w-0">
+                  Pick <code className="rounded bg-muted px-1 font-mono text-[11px]">{ref}</code> in its model field.
+                  {typeof confidence === "number" ? ` Min confidence prefills to ${formatMetric(confidence, 2)}.` : ""}
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">3</span>
+                <span>Publish the version; devices running it fetch the model on the next start.</span>
+              </li>
+            </ol>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/workflow-templates">
+                <WorkflowIcon />
+                Workflow templates
+              </Link>
+            </Button>
+          </SectionCard>
+          <SectionCard title="Model" testId="model-facts">
+            <FactGrid columns={2}>
+              <Fact label="Backend" value={model.manifest.backend ?? "—"} mono />
+              <Fact label="Quantization" value={model.manifest.quantization ?? "—"} mono />
+              <Fact
+                label="Input"
+                value={input?.width && input?.height ? `${input.width}×${input.height} ${input.layout ?? ""} ${input.colorSpace ?? ""}`.trim() : "—"}
+                mono
+                span
+              />
+              <Fact label="Classes" value={model.classNames.length} />
+              <Fact label={isOrg ? "Trained" : "Added"} value={isOrg ? formatDateTime(prov?.trainedAt ?? model.createdAt) : "platform"} />
+              <Fact label="Prefix" value={<span className="break-all">{model.s3Prefix}</span>} mono span />
+            </FactGrid>
+          </SectionCard>
+        </aside>
+      </div>
 
       <DestroyDialog
         open={deleteOpen}
@@ -317,8 +514,7 @@ function RegistryModelPage() {
         title="Delete this model?"
         description={
           <>
-            <span className="font-mono">{modelRef(model.name, model.version)}</span> and its files under the organization
-            registry are removed.
+            <span className="font-mono">{ref}</span> and its files under the organization registry are removed.
           </>
         }
         warning="A workflow that names this version by number will fail to resolve it. Version numbers are never reused."

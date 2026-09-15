@@ -10,6 +10,7 @@ import {
   CircleHelpIcon,
   ExpandIcon,
   Loader2Icon,
+  PlusIcon,
   RefreshCwIcon,
   Trash2Icon,
   XIcon,
@@ -41,6 +42,7 @@ import {
   useItemAnnotations,
 } from "@/queries/models"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { AddClassPopover } from "./-components/annotator/add-class-popover"
 import { AnnotatorStage, type StageBox } from "./-components/annotator/annotator-stage"
 
 interface AnnotateSearch {
@@ -115,6 +117,7 @@ function AnnotatorPage() {
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [fitSignal, setFitSignal] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [addClassOpen, setAddClassOpen] = useState(false)
   const [sourceRef, setSourceRef] = useState<string | null>(null)
   const saveTimer = useRef<number | null>(null)
   // Mirrors of the working copy for the debounced save and the unmount
@@ -334,6 +337,13 @@ function AnnotatorPage() {
         case "F":
           setFitSignal((n) => n + 1)
           break
+        case "n":
+        case "N":
+          // The popover focuses its input on open; without this the same
+          // keystroke would land in the field as a typed "n".
+          e.preventDefault()
+          if (canAnnotate) setAddClassOpen(true)
+          break
         case "?":
           setHelpOpen((o) => !o)
           break
@@ -348,7 +358,7 @@ function AnnotatorPage() {
       window.removeEventListener("keydown", onKeyDown)
       window.removeEventListener("keyup", onKeyUp)
     }
-  }, [classes, selectedKey, mutate, acceptAll, rejectAll, markLabeledAndAdvance, goTo, prevId, nextId])
+  }, [canAnnotate, classes, selectedKey, mutate, acceptAll, rejectAll, markLabeledAndAdvance, goTo, prevId, nextId])
 
   // Flush an unsaved edit when the page unmounts (a click on a breadcrumb).
   useEffect(() => {
@@ -511,7 +521,25 @@ function AnnotatorPage() {
 
         <aside className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto" data-testid="annotator-panel">
           <section className="flex flex-col gap-1">
-            <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">Classes</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">Classes</p>
+              {canAnnotate ? (
+                <AddClassPopover
+                  datasetId={datasetId}
+                  classes={classes}
+                  open={addClassOpen}
+                  onOpenChange={setAddClassOpen}
+                  onAdded={(i) => setActiveClassIdx(i)}
+                >
+                  <Button variant="ghost" size="icon-xs" aria-label="Add a class" title="Add a class (N)" data-testid="annotator-add-class">
+                    <PlusIcon />
+                  </Button>
+                </AddClassPopover>
+              ) : null}
+            </div>
+            {classes.length === 0 ? (
+              <p className="px-2 text-[11px] text-muted-foreground">No classes yet. Add one to start drawing boxes.</p>
+            ) : null}
             {classes.map((c, i) => (
               <button
                 key={c.id}

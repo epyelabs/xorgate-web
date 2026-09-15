@@ -106,3 +106,32 @@ export function jobPhase(job: Pick<TrainingJob, "progress" | "status">): string 
   if (phase && phase !== job.status) return phase
   return null
 }
+
+/** Status words as the pages print them; the raw enum stays in data attributes. */
+export const JOB_STATUS_LABEL: Record<TrainingStatus, string> = {
+  queued: "Queued",
+  dispatched: "Provisioning",
+  running: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  cancelled: "Cancelled",
+}
+
+export const VERSION_STATUS_LABEL: Record<string, string> = {
+  building: "Building",
+  ready: "Ready",
+  failed: "Failed",
+}
+
+export const IMPORT_STATUS_LABEL: Record<string, string> = {
+  queued: "Queued",
+  running: "Importing",
+  succeeded: "Imported",
+  failed: "Failed",
+}
+
+/** Localized integer with thousands separators. */
+export function formatCount(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—"
+  return new Intl.NumberFormat().format(n)
+}

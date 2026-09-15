@@ -57,12 +57,12 @@ export function useDatasets(params: DatasetsListParams) {
   })
 }
 
-export function useDataset(datasetId: string) {
+export function useDataset(datasetId: string, enabled = true) {
   const { orgId, ready } = useOrg()
   return useQuery({
     queryKey: qk.dataset(orgId, datasetId),
     queryFn: () => getDataset(datasetId),
-    enabled: ready,
+    enabled: ready && enabled && datasetId !== "",
   })
 }
 
@@ -96,12 +96,12 @@ export function useItemAnnotations(datasetId: string, itemId: string) {
   })
 }
 
-export function useDatasetVersions(datasetId: string) {
+export function useDatasetVersions(datasetId: string, enabled = true) {
   const { orgId, ready } = useOrg()
   return useQuery({
     queryKey: qk.datasetVersions(orgId, datasetId),
     queryFn: () => listVersions(datasetId),
-    enabled: ready,
+    enabled: ready && enabled && datasetId !== "",
     refetchInterval: ({ state }) =>
       state.data?.some((v) => v.status === "building") ? BUILD_POLL_MS : false,
   })

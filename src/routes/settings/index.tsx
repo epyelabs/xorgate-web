@@ -40,6 +40,7 @@ import { useWorkspaceStore } from "@/store/workspace"
 import { EditWorkspaceDialog } from "./-components/edit-workspace-dialog"
 import { DeleteWorkspaceDialog } from "./-components/delete-workspace-dialog"
 import { CredentialsCard } from "./-components/credentials-card"
+import { TransfersCard } from "./-components/transfers-card"
 
 export const Route = createFileRoute("/settings/")({
   beforeLoad: requireAuth,
@@ -173,6 +174,7 @@ function OrganizationSettingsPage() {
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="credentials">Credentials</TabsTrigger>
             <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
+            <TabsTrigger value="transfers">Transfers</TabsTrigger>
           </TabsList>
         </div>
 
@@ -237,6 +239,13 @@ function OrganizationSettingsPage() {
 
         <TabsContent value="credentials">
           <CredentialsCard />
+        </TabsContent>
+
+        {/* Device transfers are an ORGANIZATION-level event — a device being
+            handed to you is not yours yet, so it has no workspace of yours to
+            live under. */}
+        <TabsContent value="transfers">
+          <TransfersCard />
         </TabsContent>
 
         <TabsContent value="workspaces">

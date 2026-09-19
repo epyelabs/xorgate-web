@@ -14,6 +14,10 @@ export type Permission =
   | "api-keys:manage"
   | "billing:manage"
   | "workspace:manage"
+  // Giving a device away — owner/admin, matching every other destructive
+  // device operation and the backend's own check. A member may edit a device
+  // but must not hand it to another workspace or another organization.
+  | "devices:transfer"
   // Models section (xorgate-models Q5): members annotate, import and build
   // versions; admins and owners start training and assist jobs (they cost
   // money) and archive or delete registry models; viewers read.
@@ -27,6 +31,7 @@ const ALL_PERMISSIONS: Permission[] = [
   "api-keys:manage",
   "billing:manage",
   "workspace:manage",
+  "devices:transfer",
   "models:annotate",
   "models:train",
   "models:manage",
@@ -39,6 +44,7 @@ const ROLE_PERMISSIONS: Record<MembershipRole, Permission[]> = {
     "members:manage",
     "api-keys:manage",
     "workspace:manage",
+    "devices:transfer",
     "models:annotate",
     "models:train",
     "models:manage",

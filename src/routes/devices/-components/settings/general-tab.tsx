@@ -33,8 +33,10 @@ import {
   type ReportedAgentBuild,
 } from "@/lib/device-config-status"
 import { updateDeviceSchema } from "@/lib/schemas"
+import { useHasPermission } from "@/lib/permissions"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
+import { OwnershipCard } from "./ownership-card"
 import { UpdateDeviceDialog } from "../update-device-dialog"
 import { formatTimestamp } from "./shared"
 
@@ -76,6 +78,7 @@ export function GeneralTab({
   const navigate = useNavigate()
   const invalidateDevices = useInvalidateDevices()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const canTransfer = useHasPermission("devices:transfer")
   const [updateOpen, setUpdateOpen] = useState(false)
   const agentMode = reportedAgentMode(device)
 
@@ -386,6 +389,10 @@ export function GeneralTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Above the Danger zone, not inside it: a same-organization transfer is
+          reversible in one click, which is not the company Delete keeps. */}
+      {canTransfer ? <OwnershipCard device={device} /> : null}
 
       {/* Action in the header rather than a content row of its own: one button
           under a two-line header leaves a card of mostly padding. */}

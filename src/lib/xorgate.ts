@@ -79,6 +79,35 @@ export function xg(): XorgateClient {
 }
 
 /**
+ * A client pinned to a DIFFERENT organization than the active one.
+ *
+ * Exists for exactly one flow: the both-membership fast path of a cross-org
+ * transfer. The caller has to see the destination organization's workspaces
+ * before it can name one, and `xg()` speaks only for the organization the
+ * switcher currently shows. Everything tenancy-scoped is chosen by the
+ * `X-Organization-Id` header, so a second client with a different id is the
+ * whole mechanism — the backend still refuses anything the user is not a
+ * member of.
+ *
+ * Deliberately workspace-less: the destination workspace is what we are here
+ * to pick, and sending a stale one from another organization would be a header
+ * the API is right to reject.
+ */
+const byOrg = new Map<string, XorgateClient>()
+
+export function xgForOrg(organizationId: string): XorgateClient {
+  const existing = byOrg.get(organizationId)
+  if (existing) return existing
+  const client = createClient({
+    baseUrl: BASE_URL,
+    auth: AUTH,
+    organizationId,
+  })
+  byOrg.set(organizationId, client)
+  return client
+}
+
+/**
  * Human message for a toast. XorgateError.message is prefixed with
  * "CODE METHOD url: " for logs; strip that back off for the operator — the
  * replacement for the old apiErrorMessage's envelope unwrapping.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
-import { ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
+import { ArrowRightLeftIcon, ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -27,11 +27,13 @@ import type { Device, DeviceStatus } from "@xorgate/sdk"
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { useDeviceModels, useFleet, useInvalidateDevices } from "@/queries/devices"
+import { useHasPermission } from "@/lib/permissions"
 import { presenceDeviceIds, useLiveDeviceStatuses } from "@/store/presence"
 import { DevicePresence } from "@/components/device-presence"
 import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
+import { BulkTransferDialog } from "./-components/bulk-transfer-dialog"
 
 export const Route = createFileRoute("/devices/")({
   beforeLoad: requireWorkspace,
@@ -222,6 +224,16 @@ function DevicesListPage() {
       return next
     })
   }
+
+  // Q5: same-organization bulk transfer, driven off the selection the table
+  // already keeps. Cross-organization stays one device at a time — it needs a
+  // handshake, and a handshake per device in a batch is not a batch.
+  const canTransfer = useHasPermission("devices:transfer")
+  const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
+  const selectedDevices = useMemo(
+    () => fleet.filter((d) => selected.has(d.id)),
+    [fleet, selected]
+  )
 
   const handleProvision = () => setProvisionOpen(true)
   // Stable so it doesn't churn the dialog's polling effect. Refreshes the
@@ -420,7 +432,20 @@ function DevicesListPage() {
               }}
               searchAlign="right"
               filters={statusFilterMenu}
-            />
+            >
+              {/* Only while rows are selected: an always-on bulk control is a
+                  button that spends most of its life disabled. */}
+              {canTransfer && selectedDevices.length > 0 ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkTransferOpen(true)}
+                >
+                  <ArrowRightLeftIcon />
+                  Transfer {selectedDevices.length} to workspace
+                </Button>
+              ) : null}
+            </DataTableToolbar>
           }
           pagination={{
             page: safePage,
@@ -469,6 +494,13 @@ function DevicesListPage() {
         open={provisionOpen}
         onOpenChange={setProvisionOpen}
         onClaimed={handleClaimed}
+      />
+
+      <BulkTransferDialog
+        open={bulkTransferOpen}
+        onOpenChange={setBulkTransferOpen}
+        devices={selectedDevices}
+        onDone={() => setSelected(new Set())}
       />
     </div>
   )

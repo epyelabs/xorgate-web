@@ -30,6 +30,15 @@ export const qk = {
   deviceModel: (orgId: Id, modelId: string) =>
     [...qk.org(orgId), "device-model", modelId] as const,
 
+  // Offers are an ORGANIZATION-level event — a device you are being given is
+  // not yours yet, and has no workspace of yours to hang off.
+  transferOffers: (orgId: Id, params: Record<string, unknown>) =>
+    [...qk.org(orgId), "transfer-offers", params] as const,
+  // Keyed by org because the same code previewed from two organizations is two
+  // different answers (yours reads; a stranger's 404s).
+  transferOfferPreview: (orgId: Id, code: string) =>
+    [...qk.org(orgId), "transfer-offer-preview", code] as const,
+
   ws: (orgId: Id, wsId: Id) => [...qk.org(orgId), "ws", wsId] as const,
   fleet: (orgId: Id, wsId: Id) => [...qk.ws(orgId, wsId), "devices"] as const,
 
@@ -64,6 +73,23 @@ export const qk = {
     [...qk.device(orgId, wsId, deviceId), "segments", sessionId] as const,
   deviceAttachments: (orgId: Id, wsId: Id, deviceId: string) =>
     [...qk.device(orgId, wsId, deviceId), "workflow-attachments"] as const,
+  // Both extend the device key, so the invalidation a transfer already does
+  // (qk.device) clears the dry run and the handover history with it.
+  deviceTransferPreview: (
+    orgId: Id,
+    wsId: Id,
+    deviceId: string,
+    toWorkspaceId: string,
+    toOrganizationId: string | null
+  ) =>
+    [
+      ...qk.device(orgId, wsId, deviceId),
+      "transfer-preview",
+      toWorkspaceId,
+      toOrganizationId,
+    ] as const,
+  deviceTransferOffers: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "transfer-offers"] as const,
   deviceWorkflowRuns: (
     orgId: Id,
     wsId: Id,

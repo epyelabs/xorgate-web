@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import { EllipsisVerticalIcon, PowerIcon, ZapIcon } from "lucide-react"
+import { EllipsisVerticalIcon, PowerIcon, SearchXIcon, ZapIcon } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusDot } from "@/components/data-table/status-dot"
+import { StatusScreen } from "@/components/error-screens"
 import { DeviceBacklogBadge } from "@/components/device-backlog-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { xg, xgMessage } from "@/lib/xorgate"
@@ -215,11 +216,26 @@ function DeviceLayout() {
     }
   }, [id])
 
+  // Never a dead end. The realistic way to land here is a TRANSFER: the device
+  // was handed to another organization while this page was open, and the API
+  // answers 404 rather than 403 on purpose — confirming another tenant's
+  // resource exists is itself a leak, so this screen must not say "you don't
+  // have permission" either. A same-organization move does NOT come here:
+  // GET /devices/{id} is organization-wide, so the page keeps working and the
+  // Ownership card simply re-renders with the new workspace.
   if (notFound) {
     return (
-      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-        <p className="text-sm text-muted-foreground">Device not found.</p>
-      </div>
+      <StatusScreen
+        icon={<SearchXIcon />}
+        code="404"
+        title="This device is no longer here"
+        description="It has been transferred to another organization, or deleted. Either way it is not in this organization any more, and its recordings and telemetry went with it."
+        actions={
+          <Button asChild>
+            <Link to="/devices">Back to devices</Link>
+          </Button>
+        }
+      />
     )
   }
 

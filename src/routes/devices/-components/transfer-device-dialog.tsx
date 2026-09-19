@@ -195,8 +195,12 @@ function SameOrgTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="transfer-workspace">Destination workspace</Label>
+        {/* `?? ""` rather than `?? undefined`: undefined makes Radix treat the
+            Select as uncontrolled until the first pick, then warns when it
+            flips. An empty string is a controlled "nothing chosen" and still
+            shows the placeholder. */}
         <Select
-          value={target ?? undefined}
+          value={target ?? ""}
           onValueChange={setTarget}
           disabled={busy}
         >
@@ -395,7 +399,7 @@ function FastPathSection({
         <div className="flex flex-col gap-2">
           <Label htmlFor="transfer-dest-org">Destination organization</Label>
           <Select
-            value={orgId ?? undefined}
+            value={orgId ?? ""}
             onValueChange={(value) => {
               setOrgId(value)
               setWsId(null)
@@ -418,7 +422,7 @@ function FastPathSection({
         <div className="flex flex-col gap-2">
           <Label htmlFor="transfer-dest-ws">Destination workspace</Label>
           <Select
-            value={wsId ?? undefined}
+            value={wsId ?? ""}
             onValueChange={setWsId}
             disabled={busy || orgId === null || destWorkspaces.isPending}
           >

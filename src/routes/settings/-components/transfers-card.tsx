@@ -254,7 +254,7 @@ function ClaimCodeCard() {
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="claim-workspace">Destination workspace</Label>
                   <Select
-                    value={wsId ?? undefined}
+                    value={wsId ?? ""}
                     onValueChange={setWsId}
                     disabled={busy}
                   >

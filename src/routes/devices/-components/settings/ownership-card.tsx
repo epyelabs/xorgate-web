@@ -18,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { deviceAdoption } from "@/lib/device-tenancy"
+import { useDevice } from "@/queries/devices"
 import { xg, xgMessage } from "@/lib/xorgate"
 import {
   useDeviceTransferOffers,
@@ -42,8 +43,16 @@ import {
  * it — so it gets its own card, in the same header-action idiom, directly above
  * the destructive one.
  */
-export function OwnershipCard({ device }: { device: Device }) {
+export function OwnershipCard({ device: seed }: { device: Device }) {
   const navigate = useNavigate()
+  // The Settings page holds its own local copy of the device — it has to, for
+  // the optimistic save queue — and that copy is fetched once on mount, so a
+  // transfer would leave this card naming the workspace the device just left.
+  // Read the shared query instead, which the layout route already polls (so
+  // this costs no extra request) and which `useTransferAftermath` invalidates.
+  // The prop stays the seed, so the card paints in the first frame.
+  const live = useDevice(seed.id).data
+  const device = live ?? seed
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const organizations = useAuthStore((s) => s.organizations)
   const currentOrganizationId = useWorkspaceStore(

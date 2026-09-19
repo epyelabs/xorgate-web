@@ -360,6 +360,24 @@ export async function copyToClipboard(
   }
 }
 
+/**
+ * The human half of a `BulkTransferItem.error`.
+ *
+ * `xgMessage()` cannot help here: the bulk loop reports a plain
+ * `{ code, message, status }` rather than a thrown `XorgateError`, so
+ * `isXorgateError` is false and the "CODE METHOD url: " prefix the SDK adds for
+ * logs survives into the UI. Strip the same prefix by shape.
+ */
+export function bulkErrorMessage(
+  error: { code: string; message: string } | undefined
+): string {
+  if (!error) return "transfer failed"
+  const prefix = new RegExp(
+    `^${error.code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+[A-Z]+\\s+\\S+:\\s+`
+  )
+  return error.message.replace(prefix, "")
+}
+
 export function pendingOffer(
   offers: TransferOffer[] | undefined
 ): TransferOffer | null {

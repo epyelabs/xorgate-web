@@ -23,7 +23,12 @@ import {
 import { xg, xgMessage } from "@/lib/xorgate"
 import { useTransferAftermath } from "@/queries/transfers"
 import { useWorkspaceStore } from "@/store/workspace"
-import { Note, plural, transferOutcomeNotes } from "./transfer-parts"
+import {
+  bulkErrorMessage,
+  Note,
+  plural,
+  transferOutcomeNotes,
+} from "./transfer-parts"
 
 /**
  * Q5's bulk transfer: N devices, one destination workspace, same organization.
@@ -61,6 +66,13 @@ export function BulkTransferDialog({
   const [target, setTarget] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState<BulkTransferItem[] | null>(null)
+  // Snapshotted when the run starts, because `onDone()` clears the selection
+  // the `devices` prop is derived from: without this the summary loses the
+  // names it is reporting on and the heading counts down to zero.
+  const [ran, setRan] = useState<{ names: Map<string, string>; count: number }>({
+    names: new Map(),
+    count: 0,
+  })
 
   // Adjust-state-during-render rather than an effect (the idiom in
   // settings/index.tsx): reopening must start clean, and doing it in an effect
@@ -74,7 +86,6 @@ export function BulkTransferDialog({
     }
   }
 
-  const names = new Map(devices.map((d) => [d.id, d.name ?? d.serial]))
   // Devices already in the destination would each come back SAME_WORKSPACE.
   // Counted, not silently dropped: an operator who selected 12 rows should be
   // told 3 of them are already there rather than watch 3 fail.
@@ -84,6 +95,10 @@ export function BulkTransferDialog({
   async function run() {
     if (target === null || movable.length === 0) return
     setBusy(true)
+    setRan({
+      names: new Map(movable.map((d) => [d.id, d.name ?? d.serial])),
+      count: movable.length,
+    })
     try {
       const items = await xg().devices.transferMany(
         movable.map((d) => d.id),
@@ -127,7 +142,9 @@ export function BulkTransferDialog({
     <Dialog open={open} onOpenChange={busy ? undefined : onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Transfer {plural(devices.length, "device")}</DialogTitle>
+          <DialogTitle>
+            Transfer {plural(results === null ? devices.length : ran.count, "device")}
+          </DialogTitle>
           <DialogDescription>
             Move the selected devices to another workspace in this
             organization. Each one carries its telemetry history and recorded
@@ -142,7 +159,7 @@ export function BulkTransferDialog({
                 Destination workspace
               </Label>
               <Select
-                value={target ?? undefined}
+                value={target ?? ""}
                 onValueChange={setTarget}
                 disabled={busy}
               >
@@ -194,7 +211,7 @@ export function BulkTransferDialog({
                 )}
                 <div className="min-w-0">
                   <span className="font-medium">
-                    {names.get(item.deviceId) ?? item.deviceId}
+                    {ran.names.get(item.deviceId) ?? item.deviceId}
                   </span>
                   {item.ok ? (
                     <span className="text-muted-foreground">
@@ -210,7 +227,7 @@ export function BulkTransferDialog({
                   ) : (
                     <span className="text-destructive">
                       {" "}
-                      — {item.error?.message ?? "transfer failed"}
+                      — {bulkErrorMessage(item.error)}
                     </span>
                   )}
                 </div>

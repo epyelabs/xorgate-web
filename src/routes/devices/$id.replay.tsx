@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils"
 import { StreamsView } from "@/components/streams-view/streams-view"
 import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
+import { TelemetryTrendsSheet } from "@/components/replay/telemetry-trends-sheet"
 
 interface ReplaySearch {
   session?: string
@@ -241,19 +242,34 @@ function DeviceReplayPage() {
             </Badge>
           ) : null}
         </div>
-        {/* Local (non-persisted) view toggle; the initial value follows the
-            device's saved Active Streams view. */}
-        <div className="ml-auto flex items-center gap-1">
-          {(["card", "map"] as const).map((v) => (
-            <Button
-              key={v}
-              size="sm"
-              variant={viewType === v ? "secondary" : "ghost"}
-              onClick={() => setViewType(v)}
-            >
-              {v === "card" ? "Card" : "Map"}
-            </Button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          {/* The same telemetry the readouts print one instant of, over the
+              whole window. The playhead rides into it and a click rides back
+              out, so a spike found on a chart seeks the footage that explains
+              it. */}
+          <TelemetryTrendsSheet
+            deviceId={id}
+            window={{ from: timeline.from, to: timeline.to }}
+            metrics={metrics ?? []}
+            // Whole seconds: the marker still tracks playback, without
+            // re-rendering every panel on each animation frame.
+            playheadTs={Math.round(player.playheadTs / 1000) * 1000}
+            onSeek={player.seek}
+          />
+          {/* Local (non-persisted) view toggle; the initial value follows the
+              device's saved Active Streams view. */}
+          <div className="flex items-center gap-1">
+            {(["card", "map"] as const).map((v) => (
+              <Button
+                key={v}
+                size="sm"
+                variant={viewType === v ? "secondary" : "ghost"}
+                onClick={() => setViewType(v)}
+              >
+                {v === "card" ? "Card" : "Map"}
+              </Button>
+            ))}
+          </div>
         </div>
       </header>
 

@@ -63,6 +63,24 @@ export const qk = {
       metricsKey,
       limit,
     ] as const,
+  // Bucket-averaged history over one window: the replay's telemetry trends.
+  // `metricsKey` is the sorted metric list, so two callers asking for the same
+  // set in a different order share one entry.
+  telemetryHistory: (
+    orgId: Id,
+    wsId: Id,
+    deviceId: string,
+    window: string,
+    metricsKey: string,
+    interval: number
+  ) =>
+    [
+      ...qk.device(orgId, wsId, deviceId),
+      "telemetry-history",
+      window,
+      metricsKey,
+      interval,
+    ] as const,
   sessionRuns: (
     orgId: Id,
     wsId: Id,

@@ -25,6 +25,7 @@ import type { Device } from "@xorgate/sdk"
 import type { ActiveStreamsViewType } from "@/lib/xorgate"
 import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import { DEFAULT_IMU_VIEW } from "@/lib/device-config-defaults"
+import { readRawOverride, writeRawOverride } from "@/lib/prototype-raw-view"
 import { SettingsCallout } from "./callout"
 import { parseAngle } from "./shared"
 
@@ -34,6 +35,8 @@ const IMU_VIEW_KEY = "device-imu-view"
 const VIEW_TYPE_OPTIONS: { value: ActiveStreamsViewType; label: string }[] = [
   { value: "card", label: "Card view (default)" },
   { value: "map", label: "Map view" },
+  // PROTOTYPE: not a real contract value yet — see lib/prototype-raw-view.ts.
+  { value: "raw", label: "Raw view" },
 ]
 
 export function InterfaceTab({
@@ -45,6 +48,15 @@ export function InterfaceTab({
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
 }) {
+  // PROTOTYPE: the Select is locally controlled because "raw" never reaches
+  // the server. `commit` is optimistic and fire-and-forget, so for card/map the
+  // stored value and this state move together anyway.
+  const [viewType, setViewType] = useState<ActiveStreamsViewType>(() =>
+    readRawOverride(device.id)
+      ? "raw"
+      : (device.uiPrefs.activeStreamsViewType ?? "card")
+  )
+
   const view = device.uiPrefs.imuView ?? DEFAULT_IMU_VIEW
   // Angle inputs are strings so partial numeric input ("-", "1.") never fights
   // the user; parsed on blur, re-seeded from the device (which is also how a
@@ -98,13 +110,19 @@ export function InterfaceTab({
                   Default stream view
                 </FieldLabel>
                 <Select
-                  value={device.uiPrefs.activeStreamsViewType ?? "card"}
+                  value={viewType}
                   disabled={isPending(VIEW_TYPE_KEY)}
-                  onValueChange={(v) =>
-                    commit(VIEW_TYPE_KEY, {
-                      activeStreamsViewType: v as ActiveStreamsViewType,
-                    })
-                  }
+                  onValueChange={(v) => {
+                    // PROTOTYPE: "raw" is not in the backend's view-type enum,
+                    // so PATCHing it would 400 and roll back. Keep it local and
+                    // leave card/map on the normal save path, clearing the
+                    // override so the stored pref takes over again.
+                    const next = v as ActiveStreamsViewType
+                    writeRawOverride(device.id, next === "raw")
+                    setViewType(next)
+                    if (next === "raw") return
+                    commit(VIEW_TYPE_KEY, { activeStreamsViewType: next })
+                  }}
                 >
                   <SelectTrigger id={VIEW_TYPE_KEY}>
                     <SelectValue />

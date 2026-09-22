@@ -1,14 +1,16 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
 import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
-import { xgMessage } from "@/lib/xorgate"
+import { xgMessage, type ActiveStreamsViewType } from "@/lib/xorgate"
 import { useDevice, useDeviceModel } from "@/queries/devices"
 import {
   StreamsSkeleton,
   StreamsView,
 } from "@/components/streams-view/streams-view"
 import { LiveVideoGrid } from "@/components/live-video-grid"
+import { RawTelemetryPanel } from "@/components/raw-telemetry-panel"
+import { readRawOverride } from "@/lib/prototype-raw-view"
 
 export const Route = createFileRoute("/devices/$id/streams")({
   beforeLoad: requireWorkspace,
@@ -29,7 +31,13 @@ function DeviceStreamsPage() {
   // Per-camera enables from the device's recording config (keyed by stream key;
   // absent = enabled). Drives the "camera turned off" placeholder in the grid.
   const cameraEnables = device?.config.recording?.video?.cameras
-  const viewType = device?.uiPrefs.activeStreamsViewType ?? "card"
+  // PROTOTYPE: "raw" is not in the backend's view-type enum yet, so it is held
+  // in localStorage and wins over the saved pref when set. Everything else
+  // reads the stored value exactly as before. See lib/prototype-raw-view.ts.
+  const rawOverride = useMemo(() => readRawOverride(id), [id])
+  const viewType: ActiveStreamsViewType = rawOverride
+    ? "raw"
+    : (device?.uiPrefs.activeStreamsViewType ?? "card")
   const imuView = device?.uiPrefs.imuView ?? null
   const metaLoading =
     deviceQuery.isPending || (device !== null && modelQuery.isPending)
@@ -84,12 +92,16 @@ function DeviceStreamsPage() {
   const recordingOnDevice = media?.recording?.value === true
   // The section wrapper around the grid comes from StreamsView; the null here
   // (no video capabilities) suppresses it, matching the old inline gate.
+  // Map and Raw both want the bare grid: they supply their own framing, and a
+  // "Media" heading inside a two-panel layout is noise. Raw also stacks its
+  // tiles (cam0 above cam1) because they sit in a narrow left column.
   const videoSlot =
     videoCaps.length > 0 ? (
-      viewType === "map" ? (
+      viewType === "map" || viewType === "raw" ? (
         <LiveVideoGrid
           deviceId={id}
           videoCaps={videoCaps}
+          columns={viewType === "raw" ? 1 : 2}
           recordingOnDevice={recordingOnDevice}
           cameraEnables={cameraEnables}
           liveBlock={liveBlock}
@@ -105,6 +117,24 @@ function DeviceStreamsPage() {
         />
       )
     ) : null
+
+  if (viewType === "raw") {
+    return (
+      <StreamsView
+        viewType="raw"
+        caps={caps}
+        latest={latest}
+        imuView={imuView}
+        position={position}
+        track={track}
+        course={course}
+        following={following}
+        onFollowingChange={setFollowing}
+        videoSlot={videoSlot}
+        rawSlot={<RawTelemetryPanel deviceId={id} />}
+      />
+    )
+  }
 
   if (viewType === "map") {
     return (

@@ -43,6 +43,9 @@ export interface StreamsViewProps {
   // The section wrapper only renders when non-null, mirroring the live page's
   // videoCaps.length gate.
   videoSlot?: ReactNode
+  // Raw View's payload panel (the live wire frame). Live-only: replay has no
+  // MQTT feed, passes nothing, and so falls back to the card layout below.
+  rawSlot?: ReactNode
   // Replay-only: recorded route underlay + traveled highlight for the map
   // (live pages omit it and keep the breadcrumb `track`).
   replayTrace?: ReplayTrace
@@ -69,6 +72,7 @@ export function StreamsView({
   following,
   onFollowingChange,
   videoSlot,
+  rawSlot,
   replayTrace,
   gpsEmptyLabel = "Waiting for GPS fix…",
 }: StreamsViewProps) {
@@ -83,6 +87,30 @@ export function StreamsView({
     { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
   const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
+
+  // Raw View (prototype): an even split. The cameras stack down the left half
+  // (cam0 above cam1) and the wire payload holds the right. No telemetry cards:
+  // the JSON already carries every metric, and the point of this view is to
+  // read the payload rather than the app's reading of it. Below `lg` the halves
+  // stack, like Map View.
+  //
+  // Gated on `rawSlot` so a device whose saved pref is "raw" degrades to the
+  // card layout on pages that have no raw feed (replay) instead of rendering an
+  // empty pane.
+  if (viewType === "raw" && rawSlot != null) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col gap-3 lg:flex-row">
+        {videoSlot != null ? (
+          // Its own scroll: two 40vh-capped tiles can outgrow a short viewport,
+          // and that must not push the JSON panel off the page.
+          <div className="min-h-0 shrink-0 overflow-y-auto lg:flex-1">
+            {videoSlot}
+          </div>
+        ) : null}
+        {rawSlot}
+      </div>
+    )
+  }
 
   // Map View: a split location-first layout. The map holds the left half; the
   // right half stacks the telemetry sections, the live 3D orientation of the

@@ -167,6 +167,7 @@ export function LiveVideoGrid({
   deviceId,
   videoCaps,
   title,
+  columns = 2,
   recordingOnDevice = false,
   cameraEnables,
   liveBlock,
@@ -174,6 +175,9 @@ export function LiveVideoGrid({
   deviceId: string
   videoCaps: { key: string; label?: string }[]
   title?: string
+  // Tiles per row at `lg` and up; below that the grid is always single-column.
+  // Raw View stacks its tiles in a narrow left column, hence 1.
+  columns?: 1 | 2
   // Live on-device video recording state (media.recording.value from the
   // telemetry payload). Device-level, so it applies to every tile.
   recordingOnDevice?: boolean
@@ -192,12 +196,17 @@ export function LiveVideoGrid({
   const labelFor = (streamKey: string) =>
     videoCaps.find((c) => c.key === streamKey)?.label ?? streamKey
 
+  const gridClass = cn(
+    "grid grid-cols-1 gap-3",
+    columns === 2 && "lg:grid-cols-2",
+  )
+
   let body
   if (loadError) {
     body = <p className="text-sm text-destructive">{xgMessage(loadError)}</p>
   } else if (channels === undefined) {
     body = (
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className={gridClass}>
         <Skeleton className="aspect-video max-h-[40vh] w-full" />
         <Skeleton className="aspect-video max-h-[40vh] w-full" />
       </div>
@@ -210,7 +219,7 @@ export function LiveVideoGrid({
     )
   } else {
     body = (
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className={gridClass}>
         {channels.map((ch) => {
           // Precedence (disabled > blocked > player) is decided in one pure
           // function so it can be tested without a DOM. Anything other than

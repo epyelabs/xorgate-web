@@ -12,7 +12,7 @@ import {
   useReplayTelemetry,
   type UseReplayManifestParams,
 } from "@xorgate/react"
-import { xgMessage } from "@/lib/xorgate"
+import { xgMessage, type ActiveStreamsViewType } from "@/lib/xorgate"
 import { useDevice, useDeviceModel } from "@/queries/devices"
 import {
   gpsMetrics,
@@ -27,6 +27,8 @@ import { StreamsView } from "@/components/streams-view/streams-view"
 import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
 import { TelemetryTrendsSheet } from "@/components/replay/telemetry-trends-sheet"
+import { ReplayJsonPanel } from "@/components/replay/replay-json-panel"
+import { readRawOverride } from "@/lib/prototype-raw-view"
 
 interface ReplaySearch {
   session?: string
@@ -73,10 +75,16 @@ function DeviceReplayPage() {
   const caps = useDeviceModel(device?.deviceModelId).data?.ioCapabilities ?? null
   const imuView = device?.uiPrefs.imuView ?? null
   // Local (non-persisted) view toggle; until the operator touches it, the
-  // view follows the device's saved Active Streams preference.
-  const [viewOverride, setViewType] = useState<"card" | "map" | null>(null)
-  const viewType =
-    viewOverride ?? device?.uiPrefs.activeStreamsViewType ?? "card"
+  // view follows the device's saved Active Streams preference. PROTOTYPE: and
+  // the localStorage "raw" override, which the server cannot store yet.
+  const [viewOverride, setViewType] = useState<ActiveStreamsViewType | null>(
+    null
+  )
+  const viewType: ActiveStreamsViewType =
+    viewOverride ??
+    (readRawOverride(id)
+      ? "raw"
+      : (device?.uiPrefs.activeStreamsViewType ?? "card"))
   const [following, setFollowing] = useState(true)
 
   // One params object per distinct replay target; keyed by its serialized
@@ -175,10 +183,18 @@ function DeviceReplayPage() {
   // Streams tab); card view adds the "Media" section heading, map view drops
   // the bare grid into the side column like LiveVideoGrid does.
   const tileGrid = (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">{tiles}</div>
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-3",
+        // Raw View stacks its tiles: they sit in a half-width left column.
+        viewType !== "raw" && "lg:grid-cols-2"
+      )}
+    >
+      {tiles}
+    </div>
   )
   const videoSlot =
-    lanes.length === 0 ? null : viewType === "map" ? (
+    lanes.length === 0 ? null : viewType === "map" || viewType === "raw" ? (
       tileGrid
     ) : (
       <div className="flex flex-col gap-3">
@@ -191,7 +207,7 @@ function DeviceReplayPage() {
     <div
       className={cn(
         "flex flex-col gap-3",
-        viewType === "map" && "h-full min-h-0"
+        (viewType === "map" || viewType === "raw") && "h-full min-h-0"
       )}
     >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -259,14 +275,21 @@ function DeviceReplayPage() {
           {/* Local (non-persisted) view toggle; the initial value follows the
               device's saved Active Streams view. */}
           <div className="flex items-center gap-1">
-            {(["card", "map"] as const).map((v) => (
+            {(
+              [
+                ["card", "Card"],
+                ["map", "Map"],
+                // PROTOTYPE: see lib/prototype-raw-view.ts.
+                ["raw", "Raw"],
+              ] as const
+            ).map(([v, label]) => (
               <Button
                 key={v}
                 size="sm"
                 variant={viewType === v ? "secondary" : "ghost"}
                 onClick={() => setViewType(v)}
               >
-                {v === "card" ? "Card" : "Map"}
+                {label}
               </Button>
             ))}
           </div>
@@ -305,7 +328,11 @@ function DeviceReplayPage() {
         </p>
       ) : null}
 
-      <div className={cn(viewType === "map" && "min-h-0 flex-1")}>
+      <div
+        className={cn(
+          (viewType === "map" || viewType === "raw") && "min-h-0 flex-1"
+        )}
+      >
         <StreamsView
           viewType={viewType}
           caps={caps}
@@ -317,6 +344,15 @@ function DeviceReplayPage() {
           following={following}
           onFollowingChange={setFollowing}
           videoSlot={videoSlot}
+          rawSlot={
+            <ReplayJsonPanel
+              latest={telemetry.latest}
+              // Whole seconds, like the trends sheet: the header timestamp
+              // still tracks playback without churning on every frame.
+              playheadTs={Math.round(player.playheadTs / 1000) * 1000}
+              loading={telemetry.loading}
+            />
+          }
           replayTrace={{
             route: telemetry.routeLines,
             traveled: telemetry.traveledLines,

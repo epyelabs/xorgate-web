@@ -130,9 +130,17 @@ export function xgMessage(err: unknown): string {
 // there is exactly one definition; do not widen these locally.
 // ---------------------------------------------------------------------------
 
-export type ActiveStreamsViewType = NonNullable<
-  DeviceUiPrefs["activeStreamsViewType"]
->
+// ⚠ PROTOTYPE EXCEPTION to the "do not widen" rule above. "raw" is a third
+// Active Streams layout we are trying out; the published @xorgate/sdk types
+// this union as "card" | "map" because the value is not in the backend's
+// ACTIVE_STREAMS_VIEW_TYPES enum yet, so the server rejects it and the choice
+// is held in localStorage (see src/lib/prototype-raw-view.ts). Without the
+// widening every `viewType === "raw"` comparison is a type error.
+// Delete the `| "raw"` once the backend enum, the regenerated contract and a
+// republished SDK carry it.
+export type ActiveStreamsViewType =
+  | NonNullable<DeviceUiPrefs["activeStreamsViewType"]>
+  | "raw"
 export type ImuView = NonNullable<DeviceUiPrefs["imuView"]>
 export type ImuMount = ImuMountConfig
 export type VideoPresetName = NonNullable<

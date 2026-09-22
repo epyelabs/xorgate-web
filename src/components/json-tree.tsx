@@ -51,12 +51,14 @@ function JsonNode({
   name,
   value,
   depth,
+  openDepth,
 }: {
   name: string | null
   value: unknown
   depth: number
+  openDepth: number
 }) {
-  const [open, setOpen] = useState(depth < 2)
+  const [open, setOpen] = useState(depth < openDepth)
   const [limit, setLimit] = useState(PAGE)
   const container = Array.isArray(value) || isObject(value)
   const label =
@@ -102,7 +104,13 @@ function JsonNode({
       {open ? (
         <div className="ml-1.5 border-l border-border/60 pl-2">
           {entries.slice(0, limit).map(([k, v]) => (
-            <JsonNode key={k} name={k} value={v} depth={depth + 1} />
+            <JsonNode
+              key={k}
+              name={k}
+              value={v}
+              depth={depth + 1}
+              openDepth={openDepth}
+            />
           ))}
           {count > limit ? (
             <button
@@ -122,13 +130,18 @@ function JsonNode({
 export function JsonTree({
   value,
   className,
+  openDepth = 2,
 }: {
   value: unknown
   className?: string
+  // How many levels start expanded. The default (root + its first level) suits
+  // an opaque artifact; a caller that knows its shape can open further — a
+  // telemetry frame wants its `metrics` groups unfolded, for instance.
+  openDepth?: number
 }) {
   return (
     <div className={cn("font-mono text-[11px] leading-relaxed", className)}>
-      <JsonNode name={null} value={value} depth={0} />
+      <JsonNode name={null} value={value} depth={0} openDepth={openDepth} />
     </div>
   )
 }

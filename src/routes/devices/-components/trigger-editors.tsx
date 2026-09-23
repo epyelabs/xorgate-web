@@ -8,6 +8,7 @@ import {
   VideoIcon,
   XIcon,
   type LucideIcon,
+  RouteIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,6 +47,7 @@ type ConditionTrigger = Extract<
 const TRIGGER_ICON: Record<AttachmentTriggerType, LucideIcon> = {
   session_completed: HardDriveDownloadIcon,
   segment_uploaded: VideoIcon,
+  telemetry_session_completed: RouteIcon,
   schedule: ClockIcon,
   telemetry_condition: GaugeIcon,
 }
@@ -62,6 +64,7 @@ const OPERATOR_OPTIONS: { value: ConditionOperator; label: string }[] = [
 const TRIGGER_ORDER: AttachmentTriggerType[] = [
   "session_completed",
   "segment_uploaded",
+  "telemetry_session_completed",
   "schedule",
   "telemetry_condition",
 ]
@@ -76,6 +79,8 @@ function makeDefaultTrigger(
     case "session_completed":
     case "segment_uploaded":
       return { type, streamKeys: [] }
+    case "telemetry_session_completed":
+      return { type }
     case "schedule":
       return {
         type,
@@ -547,6 +552,15 @@ export function TriggersEditor({
                 onChange={(n) => update(i, n)}
                 streamKeys={streamKeys}
               />
+            ) : null}
+            {t.type === "telemetry_session_completed" ? (
+              <p className="text-xs text-muted-foreground">
+                Fires about ten minutes after the device's telemetry recorder
+                stops writing, once the session's overview and insights
+                (distance, duration, stops) are built. The run's telemetry
+                window is the session's recorded span; the insights ride
+                along in the trigger context. Nothing to configure.
+              </p>
             ) : null}
             {t.type === "schedule" ? (
               <ScheduleFields value={t} onChange={(n) => update(i, n)} />

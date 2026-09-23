@@ -16,6 +16,7 @@ import { metricLabel } from "./telemetry-meta"
 export const attachmentTriggerTypeSchema = z.enum([
   "session_completed", // auto after a device-recorded session finishes uploading
   "segment_uploaded", // auto per ~60s chunk, as each one lands (near-realtime)
+  "telemetry_session_completed", // auto once a recorded telemetry session closes and its insights are built
   "schedule", // recurring (cron) over a chosen telemetry / media context window
   "telemetry_condition", // when persisted telemetry crosses configured thresholds
 ])
@@ -50,6 +51,7 @@ export const TRIGGER_TYPE_LABELS: Record<
 > = {
   session_completed: "After an on-device session completes",
   segment_uploaded: "As each recorded chunk arrives",
+  telemetry_session_completed: "After a recorded drive's telemetry completes",
   schedule: "On a schedule",
   telemetry_condition: "On telemetry condition",
 }
@@ -95,6 +97,15 @@ export const attachmentTriggerSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("segment_uploaded"),
     streamKeys: z.array(z.string()).min(1, "Pick at least one stream"),
+  }),
+  // The telemetry twin of session_completed: fires once a device-recorded
+  // TELEMETRY session has closed (10 quiet minutes) and its overview and
+  // insights (distance, duration, stops, ...) are built; the run's telemetry
+  // window is the session's recorded span. Not stream-keyed: one telemetry
+  // recorder per device. AT-LEAST-ONCE like the media twin (a straggler
+  // reopens the session and it fires again after the re-close).
+  z.object({
+    type: z.literal("telemetry_session_completed"),
   }),
   z.object({
     type: z.literal("schedule"),
@@ -164,6 +175,9 @@ export type ManualRunContext =
   | { triggerType: "session_completed"; sessionId: string }
   // Fires per chunk. `seq` omitted = the session's newest segment.
   | { triggerType: "segment_uploaded"; sessionId: string; seq?: number }
+  // Fires per telemetry session, so pick exactly one (a telemetry session id,
+  // not a media session id: they are different tables).
+  | { triggerType: "telemetry_session_completed"; sessionId: string }
   | { triggerType: "schedule"; selection: ScheduleRunSelection }
   | { triggerType: "telemetry_condition"; window: ManualWindow }
 
@@ -173,6 +187,8 @@ export function triggerSummary(trigger: AttachmentTrigger): string {
     case "session_completed":
     case "segment_uploaded":
       return `stream: ${trigger.streamKeys.join(", ")}`
+    case "telemetry_session_completed":
+      return "each recorded telemetry session, with its insights"
     case "schedule":
       return `cron ${trigger.cron}`
     case "telemetry_condition":

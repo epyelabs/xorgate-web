@@ -18,7 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SessionsList, WindowPicker } from "@/components/session-pickers"
-import type { MediaSegment, MediaSession } from "@xorgate/sdk"
+import type { MediaSegment, MediaSession, TelemetrySession } from "@xorgate/sdk"
+import { formatDuration } from "@/components/data-table"
+import { formatDateTime } from "@/lib/format-time"
 import { xg, xgMessage } from "@/lib/xorgate"
 import { runAttachmentNow } from "@/lib/device-workflows-api"
 import {
@@ -72,12 +74,21 @@ export function RunNowDialog({
   // Chunk runs (segment_uploaded) additionally pick ONE segment of the session.
   const [segments, setSegments] = useState<MediaSegment[] | null>(null)
   const [segmentSeq, setSegmentSeq] = useState<number | null>(null)
+  // Telemetry-session runs pick ONE telemetry session (its own table, its
+  // own ids: not a media session).
+  const [telemetrySessions, setTelemetrySessions] = useState<
+    TelemetrySession[] | null
+  >(null)
+  const [telemetrySessionId, setTelemetrySessionId] = useState<string | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState(false)
 
   const sessionSingle =
     trigger?.type === "session_completed" || trigger?.type === "segment_uploaded"
   const needsSessions = sessionSingle || trigger?.type === "schedule"
   const needsSegment = trigger?.type === "segment_uploaded"
+  const needsTelemetrySession = trigger?.type === "telemetry_session_completed"
 
   // Reset the trigger selection when the dialog opens / targets another attachment.
   useEffect(() => {
@@ -97,8 +108,37 @@ export function RunNowDialog({
     setScheduleN(5)
     setSegments(null)
     setSegmentSeq(null)
+    setTelemetrySessionId(null)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, attachment?.id, triggerIdx])
+
+  // The device's newest telemetry sessions (closed or open; an open one runs
+  // over what has arrived so far, with insights null until it is built).
+  useEffect(() => {
+    if (!open || !needsTelemetrySession) return
+    let cancelled = false
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setTelemetrySessions(null)
+    setSessionError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    ;(async () => {
+      try {
+        const { items: rows } = await xg().telemetry.sessions.list(deviceId, {
+          limit: SESSION_PAGE,
+          order: "desc",
+          status: "any",
+        })
+        if (cancelled) return
+        setTelemetrySessions(rows)
+        setTelemetrySessionId(rows[0]?.id ?? null)
+      } catch (err) {
+        if (!cancelled) setSessionError(xgMessage(err))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, needsTelemetrySession, deviceId, triggerIdx])
 
   // Load the device's on-device sessions when the selected trigger needs them.
   // Newest first, server-side — all streams, not just the trigger's, so a
@@ -176,6 +216,8 @@ export function RunNowDialog({
       ? sessions !== null && selectedSessionIds.length === 1
       : trigger.type === "segment_uploaded"
         ? sessions !== null && selectedSessionIds.length === 1 && segmentSeq !== null
+        : trigger.type === "telemetry_session_completed"
+          ? telemetrySessionId !== null
         : trigger.type === "schedule"
           ? scheduleMode === "sessions"
             ? selectedSessionIds.length > 0
@@ -193,6 +235,11 @@ export function RunNowDialog({
               sessionId: selectedSessionIds[0] ?? "",
               ...(segmentSeq !== null ? { seq: segmentSeq } : {}),
             }
+          : trigger.type === "telemetry_session_completed"
+            ? {
+                triggerType: "telemetry_session_completed",
+                sessionId: telemetrySessionId ?? "",
+              }
           : trigger.type === "schedule"
             ? {
                 triggerType: "schedule",
@@ -320,6 +367,52 @@ export function RunNowDialog({
                   </p>
                 </div>
               ) : null}
+            </div>
+          ) : trigger?.type === "telemetry_session_completed" ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium">Telemetry session</span>
+              {sessionError ? (
+                <p className="rounded-md border border-dashed border-destructive/50 px-3 py-4 text-center text-xs text-destructive">
+                  Couldn&apos;t load telemetry sessions: {sessionError}
+                </p>
+              ) : telemetrySessions === null ? (
+                <p className="text-xs text-muted-foreground">
+                  Loading telemetry sessions…
+                </p>
+              ) : telemetrySessions.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  This device has no recorded telemetry sessions.
+                </p>
+              ) : (
+                <Select
+                  value={telemetrySessionId ?? ""}
+                  onValueChange={(v) => setTelemetrySessionId(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pick a session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {telemetrySessions.map((s) => {
+                      const km = s.insights?.distance?.meters
+                      return (
+                        <SelectItem key={s.id} value={s.id}>
+                          {formatDateTime(s.from)} ·{" "}
+                          {formatDuration(Date.parse(s.to) - Date.parse(s.from))}
+                          {typeof km === "number"
+                            ? ` · ${(km / 1000).toFixed(1)} km`
+                            : ""}
+                          {s.status === "open" ? " · receiving" : ""}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                This trigger fires per telemetry session, so pick one. The run's
+                telemetry window is the session's recorded span and its insights
+                ride along in the trigger context.
+              </p>
             </div>
           ) : trigger?.type === "schedule" ? (
             <div className="flex flex-col gap-1.5">

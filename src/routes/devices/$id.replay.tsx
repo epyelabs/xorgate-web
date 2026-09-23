@@ -155,8 +155,17 @@ function DeviceReplayPage() {
   const videoExpired = !rangeMode && lanes.length === 0
   const noVideoInRange = rangeMode && lanes.length === 0
   const hasPartial = lanes.some((l) => l.hasPartial)
-  const unsynced = manifest.sessions.some((s) => s.timeSource === "unsynced")
-  const anyOpen = manifest.sessions.some((s) => s.status === "open")
+  // Video AND telemetry sessions feed the badges (telemetry-session-artifacts
+  // P6; P3 had left them video-only): a drive whose camera is off but whose
+  // telemetry recorder is still uploading is "Receiving", and a telemetry
+  // session stamped by an unsynchronized clock cannot be trusted either.
+  const telemetrySessions = manifest.telemetry?.sessions ?? []
+  const unsynced =
+    manifest.sessions.some((s) => s.timeSource === "unsynced") ||
+    telemetrySessions.some((s) => s.timeSource === "unsynced")
+  const anyOpen =
+    manifest.sessions.some((s) => s.status === "open") ||
+    telemetrySessions.some((s) => s.status === "open")
   const title =
     lanes.length > 0
       ? lanes.map((l) => l.streamKey).join(" + ")

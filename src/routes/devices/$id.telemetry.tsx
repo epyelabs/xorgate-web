@@ -25,11 +25,14 @@ import {
 } from "@/components/ui/select"
 import { xg, xgMessage } from "@/lib/xorgate"
 import {
+  TELEMETRY_HOT_WINDOW_DAYS,
   buildTelemetryCsv,
   collectTelemetryForExport,
+  rangeReachesArtifacts,
 } from "@/lib/telemetry-export"
 import { useTelemetryReadings } from "@/hooks/use-telemetry-readings"
 import { TelemetryTable } from "@/components/telemetry-table"
+import { RecordedSessionsPanel } from "@/components/telemetry-sessions-panel"
 
 type RangeMode = "all" | "1h" | "6h" | "24h" | "7d" | "custom"
 type Order = "asc" | "desc"
@@ -298,6 +301,16 @@ function DeviceTelemetryPage() {
       ? `${order === "desc" ? "Most recent" : "Oldest"} ${total.toLocaleString()} samples · ${coveredSpanLabel(coveredFrom, coveredTo)}`
       : null
 
+  // The table and the CSV export read the hot window only (telemetry-session-
+  // artifacts plan, D8/D9): a custom range that starts before it can never be
+  // complete here, and the honest thing is to say so and point at the
+  // per-session artifacts, which is what the Recorded sessions panel is for.
+  // The clock is sampled once per mount: the boundary moves by a day a day,
+  // and re-reading it on every render would be an impure call during render.
+  const [mountedAt] = useState(() => Date.now())
+  const reachesArtifacts =
+    rangeMode !== "all" && rangeReachesArtifacts(fromIso, mountedAt)
+
   const customActive = rangeMode === "custom"
   const customLabel =
     customActive && search.from && search.to
@@ -355,22 +368,34 @@ function DeviceTelemetryPage() {
           </span>
         </p>
       ) : null}
+      {reachesArtifacts ? (
+        <p className="text-xs text-muted-foreground">
+          History and CSV export cover the last {TELEMETRY_HOT_WINDOW_DAYS}{" "}
+          days. Older recordings are kept per session for a year: open{" "}
+          <span className="text-foreground/70">Recorded sessions</span> below to
+          download a session&apos;s overview or raw segments.
+        </p>
+      ) : null}
     </div>
   )
 
   const footer = (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1.5"
-        onClick={exportCsv}
-        disabled={exporting || total === 0}
-      >
-        <DownloadIcon className="size-3.5" />
-        {exporting ? "Exporting…" : "Export CSV"}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={exportCsv}
+          disabled={exporting || total === 0}
+          title={`Exports the hot window only (last ${TELEMETRY_HOT_WINDOW_DAYS} days)`}
+        >
+          <DownloadIcon className="size-3.5" />
+          {exporting ? "Exporting…" : "Export CSV"}
+        </Button>
+        <RecordedSessionsPanel deviceId={id} from={fromIso} to={toIso} />
+      </div>
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
@@ -451,7 +476,9 @@ function DeviceTelemetryPage() {
             <p className="text-sm text-muted-foreground">
               {rangeMode === "all"
                 ? "No telemetry history. Turn on “Record telemetry on device” in Settings to start recording."
-                : "No telemetry in this range."}
+                : reachesArtifacts
+                  ? `No samples in this range within the ${TELEMETRY_HOT_WINDOW_DAYS}-day history window. Recordings older than that are kept per session: open Recorded sessions to download them.`
+                  : "No telemetry in this range."}
             </p>
           }
         />

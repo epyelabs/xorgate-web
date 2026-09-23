@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest"
 import type { TelemetryTableColumn, TelemetryTablePage } from "@xorgate/sdk"
 import {
   TELEMETRY_EXPORT_CAP,
+  TELEMETRY_HOT_WINDOW_DAYS,
   type TelemetryExport,
   buildTelemetryCsv,
+  collectSessionSegments,
   collectTelemetryForExport,
+  hotWindowStart,
+  rangeReachesArtifacts,
 } from "@/lib/telemetry-export"
 
 // A stand-in for GET /devices/{id}/telemetry/readings?shape=table that
@@ -358,5 +362,84 @@ describe("buildTelemetryCsv", () => {
       ["x.y"],
     )
     expect(csv).toBe('Time,"x.y (a,b""c)"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// telemetry-session-artifacts P5 (5.5): the export covers the hot window; the
+// artifacts cover the rest.
+// ---------------------------------------------------------------------------
+
+describe("rangeReachesArtifacts", () => {
+  const now = Date.UTC(2026, 8, 23, 12)
+  const day = 24 * 60 * 60 * 1000
+
+  it("the All range (no from) always reaches past the window", () => {
+    expect(rangeReachesArtifacts(undefined, now)).toBe(true)
+  })
+
+  it("a from inside the window does not; one before it does", () => {
+    expect(TELEMETRY_HOT_WINDOW_DAYS).toBe(90)
+    expect(hotWindowStart(now)).toBe(now - 90 * day)
+    expect(rangeReachesArtifacts(new Date(now - 89 * day).toISOString(), now)).toBe(false)
+    expect(rangeReachesArtifacts(new Date(now - 91 * day).toISOString(), now)).toBe(true)
+    expect(rangeReachesArtifacts(new Date(now - 90 * day).toISOString(), now)).toBe(false)
+  })
+
+  it("an unparseable from is treated as reaching (never hides the affordance)", () => {
+    expect(rangeReachesArtifacts("garbage", now)).toBe(true)
+  })
+})
+
+describe("collectSessionSegments", () => {
+  const header = '{"type":"header","v":1,"deviceId":"d","sessionId":"s","timeSource":"rtc","rateHz":1}'
+  const seg = (startTs: number, n: number) => ({
+    seq: 0,
+    startTs,
+    endTs: startTs + (n - 1) * 1000,
+    samples: n,
+    bytes: 100,
+    url: `https://s3/seg-${startTs}`,
+    text: [header, ...Array.from({ length: n }, (_, i) => `{"ts":${startTs + i * 1000},"metrics":{}}`)].join("\n") + "\n",
+  })
+
+  it("concatenates every line of every segment in startTs order and counts samples", async () => {
+    const a = seg(1000, 3)
+    const b = seg(10_000, 2)
+    const calls: string[] = []
+    const res = await collectSessionSegments({ segments: [b, a] }, async (url) => {
+      calls.push(url)
+      return url.endsWith("1000") ? a.text : b.text
+    })
+    expect(res.segments).toBe(2)
+    expect(res.samples).toBe(5)
+    const lines = res.text.trimEnd().split("\n")
+    expect(lines.length).toBe(7)
+    expect(lines[0]).toBe(header)
+    expect(lines[1]).toContain('"ts":1000')
+    expect(lines[4]).toBe(header)
+    expect(lines[5]).toContain('"ts":10000')
+    expect(res.bytes).toBe(new TextEncoder().encode(res.text).length)
+    expect(calls).toEqual([a.url, b.url])
+  })
+
+  it("keeps order under bounded concurrency and is empty for no segments", async () => {
+    const segs = [seg(1000, 1), seg(2000, 1), seg(3000, 1), seg(4000, 1), seg(5000, 1)]
+    const res = await collectSessionSegments(
+      { segments: segs },
+      async (url) => {
+        // Answer out of order on purpose.
+        await new Promise((r) => setTimeout(r, url.endsWith("1000") ? 5 : 0))
+        return segs.find((s) => s.url === url)!.text
+      },
+      { concurrency: 2 },
+    )
+    const tsLines = res.text.split("\n").filter((l) => l.startsWith('{"ts"'))
+    expect(tsLines.map((l) => JSON.parse(l).ts)).toEqual([1000, 2000, 3000, 4000, 5000])
+    expect(await collectSessionSegments({ segments: [] }, async () => "")).toEqual({ text: "", segments: 0, samples: 0, bytes: 0 })
+  })
+
+  it("propagates a failed fetch (an expired URL must not produce a partial file)", async () => {
+    await expect(collectSessionSegments({ segments: [seg(1, 1)] }, async () => { throw new Error("403") })).rejects.toThrow("403")
   })
 })

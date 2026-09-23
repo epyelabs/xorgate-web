@@ -1,4 +1,4 @@
-import type { TelemetryTablePage } from "@xorgate/sdk"
+import type { ReplayTelemetrySession, TelemetryTablePage } from "@xorgate/sdk"
 import { formatUnit, metricLabel } from "@/lib/telemetry-meta"
 
 /**
@@ -41,10 +41,95 @@ import { formatUnit, metricLabel } from "@/lib/telemetry-meta"
  *
  * It walks the endpoint's TABLE shape (`shape=table`), which is what made a
  * 20 000-row export affordable: the flat shape repeats the metric key, the unit
- * and a re-serialised ISO timestamp once per reading, and this API does not
- * compress. Only the fetch callback and this loop know the difference — the
- * cursor logic below is shape-agnostic.
+ * and a re-serialised ISO timestamp once per reading, and this API did not
+ * compress (it gzips since telemetry-session-artifacts P5). Only the fetch
+ * callback and this loop know the difference — the cursor logic below is
+ * shape-agnostic.
+ *
+ * ⚠ **The walk covers the HOT WINDOW only** (telemetry-session-artifacts plan,
+ * README D8/D9, 2026-09-22). `/telemetry/readings` reads `telemetry_readings`,
+ * which since that plan holds the last TELEMETRY_HOT_WINDOW_DAYS of samples;
+ * older months are dropped a partition at a time. The record for recorded
+ * telemetry is the per-session artifacts in S3 (the device's own gzipped
+ * segments plus one overview object), reachable through the replay manifest.
+ * So a CSV export cannot reach past the window, by design, and the page says
+ * so: for older sessions it offers the artifacts instead (`collectSessionSegments`
+ * below and the Recorded sessions panel). The table itself stays on the hot
+ * window by decision (D9).
  */
+
+/**
+ * The hot window as the API keeps it (backend TELEMETRY_RETENTION_DAYS, owner
+ * decision Q1). Only the copy uses it: the server is the authority on what a
+ * range returns, this just tells the user WHY an old range is empty.
+ */
+export const TELEMETRY_HOT_WINDOW_DAYS = 90
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Epoch ms of the oldest sample the history table can still show. */
+export function hotWindowStart(now: number = Date.now()): number {
+  return now - TELEMETRY_HOT_WINDOW_DAYS * DAY_MS
+}
+
+/**
+ * True when the requested range reaches past the hot window, so a CSV export
+ * (or the table) cannot be complete for it and the artifacts are the way to
+ * the rest. `undefined` `from` is the "All" range, which by definition does.
+ */
+export function rangeReachesArtifacts(fromIso: string | undefined, now: number = Date.now()): boolean {
+  if (fromIso === undefined) return true
+  const from = Date.parse(fromIso)
+  return Number.isNaN(from) || from < hotWindowStart(now)
+}
+
+/** What a raw-segments download produced, for the toast. */
+export interface SessionSegmentsExport {
+  /** The concatenated JSONL: every line of every segment, in `startTs` order. */
+  text: string
+  segments: number
+  /** Sample lines (header lines excluded). */
+  samples: number
+  bytes: number
+}
+
+/**
+ * Download a telemetry session's RAW segments as one JSONL file: fetch each
+ * presigned segment URL from the replay manifest's `telemetry` block (the
+ * objects carry `Content-Encoding: gzip`, so `fetch()` inflates them natively)
+ * and concatenate the lines in `startTs` order. Header lines are kept: each
+ * segment starts with one and they carry the clock provenance (`timeSource`
+ * re-emissions mid-session are the reason there can be several).
+ *
+ * `fetchText` is injected so the walk is testable without a network; at the
+ * call site it is `(url) => fetch(url).then((r) => r.text())` with a status
+ * check. A 403 means the manifest's URLs expired: refetch the manifest.
+ */
+export async function collectSessionSegments(
+  session: Pick<ReplayTelemetrySession, "segments">,
+  fetchText: (url: string) => Promise<string>,
+  opts: { concurrency?: number } = {},
+): Promise<SessionSegmentsExport> {
+  const concurrency = Math.max(1, opts.concurrency ?? 4)
+  const segments = [...session.segments].sort((a, b) => a.startTs - b.startTs)
+  const texts: string[] = new Array(segments.length)
+  for (let i = 0; i < segments.length; i += concurrency) {
+    const batch = segments.slice(i, i + concurrency)
+    const got = await Promise.all(batch.map((seg) => fetchText(seg.url)))
+    for (let j = 0; j < got.length; j += 1) texts[i + j] = got[j]
+  }
+  const lines: string[] = []
+  let samples = 0
+  for (const text of texts) {
+    for (const line of text.split("\n")) {
+      if (line.length === 0) continue
+      lines.push(line)
+      if (!line.startsWith('{"type":"header"')) samples += 1
+    }
+  }
+  const text = lines.length ? lines.join("\n") + "\n" : ""
+  return { text, segments: segments.length, samples, bytes: new TextEncoder().encode(text).length }
+}
 
 /** Rows (timestamps) an export will write before it stops and warns. */
 export const TELEMETRY_EXPORT_CAP = 20_000

@@ -50,6 +50,13 @@ export const qk = {
     deviceId: string,
     params: Record<string, unknown>
   ) => [...qk.device(orgId, wsId, deviceId), "telemetry-readings", params] as const,
+  // The recorded-telemetry session index (artifacts + insights, no URLs).
+  telemetrySessions: (
+    orgId: Id,
+    wsId: Id,
+    deviceId: string,
+    params: Record<string, unknown>
+  ) => [...qk.device(orgId, wsId, deviceId), "telemetry-sessions", params] as const,
   telemetryRecent: (
     orgId: Id,
     wsId: Id,

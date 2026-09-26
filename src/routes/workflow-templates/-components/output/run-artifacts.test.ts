@@ -6,6 +6,7 @@ import {
   framesCountFor,
   inputKeysFromManifest,
   previewSeqs,
+  videoNodes,
 } from "./run-artifacts"
 
 const runId = "0336f969-62cd-4b06-9add-b38ff25a1d7d"
@@ -127,5 +128,45 @@ describe("buildArtifactGroups", () => {
     })
     expect(groups.map((g) => g.id)).toEqual(["events", "run"])
     expect(groups[0].entries[0].meta).toBe("1 event with payloads")
+  })
+})
+
+describe("videoNodes", () => {
+  const depthRun = (config: Record<string, unknown>, videos: Record<string, { key: string; frames: number; fps: number }>) =>
+    run({
+      definition: {
+        schemaVersion: 2,
+        nodes: [
+          { id: "vid", type: "source.video", position: { x: 0, y: 0 }, data: { label: "Video", config: {} } },
+          { id: "depth", type: "model.depth", position: { x: 0, y: 0 }, data: { label: "Depth", config } },
+          { id: "seg", type: "model.segmentation", position: { x: 0, y: 0 }, data: { label: "Seg", config: {} } },
+        ],
+        edges: [],
+      },
+      steps: [{ seq: 1, nodeId: "depth", label: "Depth", status: "ok", output: "depth over 30 frame(s) (depth-anything-v2-small v1, ~900 ms/frame)", durationMs: 1 }],
+      artifacts: { eventsKey: null, outputs: {}, videos },
+    })
+
+  it("lists Depth Estimation (it renders its own colormap) without a Visualization node", () => {
+    const r = depthRun({}, { depth: { key: `${prefix}video/depth.mp4`, frames: 30, fps: 2 } })
+    expect(videoNodes(r.definition, r)).toEqual([{ id: "depth", label: "Depth" }])
+    expect(framesCountFor(r, "depth")).toBe(30)
+    const groups = buildArtifactGroups({ run: r, definition: null, nodeLabels: new Map(), manifestInputs: null })
+    expect(groups.find((g) => g.id === "videos")?.entries.map((e) => e.key)).toEqual([`${prefix}video/depth.mp4`])
+  })
+
+  it("reads the frame count from the depth step summary when no video was muxed", () => {
+    const r = depthRun({}, {})
+    expect(framesCountFor(r, "depth")).toBe(30)
+  })
+
+  it("skips Depth Estimation with renderPreview off, and nodes that render nothing", () => {
+    const r = depthRun({ renderPreview: false }, {})
+    expect(videoNodes(r.definition, r)).toEqual([])
+  })
+
+  it("lists any node the run recorded a video for", () => {
+    const r = depthRun({ renderPreview: false }, { seg: { key: `${prefix}video/seg.mp4`, frames: 4, fps: 2 } })
+    expect(videoNodes(r.definition, r).map((n) => n.id)).toEqual(["seg"])
   })
 })

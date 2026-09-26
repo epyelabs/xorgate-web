@@ -10,6 +10,7 @@ import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 
 export const V2_RUN_PREFIX = "workflows/v2/runs/"
 export const VISUALIZATION_TYPE = "output.visualization"
+export const DEPTH_TYPE = "model.depth"
 // In-browser parse cap for the JSON viewer; larger files are download-only.
 export const JSON_VIEW_MAX_BYTES = 5 * 1024 * 1024
 
@@ -64,24 +65,36 @@ export function isViewable(entry: ArtifactEntry): boolean {
   return entry.format === "json" || entry.format === "jsonl"
 }
 
-export function visualizationNodes(
+// Nodes that render frames, so the host muxes a video/<nodeId>.mp4 for them:
+// every Visualization node, and Depth Estimation unless its renderPreview is
+// off (the engine writes its colormap to frames/<nodeId>/). Any other node the
+// run recorded a video for is listed too, so a future renderer shows up
+// without a change here.
+export function videoNodes(
   definition: WorkflowDefinition | null,
+  run?: WorkflowRunDetail,
 ): { id: string; label: string }[] {
-  if (!definition) return []
+  const videos = run?.artifacts?.videos ?? {}
+  if (!definition) return Object.keys(videos).map((id) => ({ id, label: id }))
   return definition.nodes
-    .filter((n) => n.type === VISUALIZATION_TYPE)
+    .filter(
+      (n) =>
+        n.type === VISUALIZATION_TYPE ||
+        (n.type === DEPTH_TYPE && n.data.config?.renderPreview !== false) ||
+        n.id in videos,
+    )
     .map((n) => ({ id: n.id, label: n.data.label || n.type }))
 }
 
-// How many annotated frames a visualization node wrote: the muxed video's
-// count when the host recorded one, else the step summary ("50 annotated
-// frame(s)"), else unknown.
+// How many frames a rendering node wrote: the muxed video's count when the
+// host recorded one, else the step summary ("50 annotated frame(s)",
+// "depth over 50 frame(s)"), else unknown.
 export function framesCountFor(run: WorkflowRunDetail, nodeId: string): number | null {
   const video = run.artifacts?.videos?.[nodeId]
   if (video) return video.frames
   const step = run.steps.find((s) => s.nodeId === nodeId)
-  const m = /(\d+) annotated frame/.exec(step?.output ?? "")
-  return m ? Number(m[1]) : null
+  const m = /(\d+) annotated frame|depth over (\d+) frame/.exec(step?.output ?? "")
+  return m ? Number(m[1] ?? m[2]) : null
 }
 
 // Frame seqs are contiguous from 0 (decode_sample numbers sampled frames);
@@ -168,7 +181,7 @@ export function buildArtifactGroups(args: {
 
   const videos: ArtifactEntry[] = []
   const frames: ArtifactEntry[] = []
-  for (const viz of visualizationNodes(definition ?? run.definition)) {
+  for (const viz of videoNodes(definition ?? run.definition, run)) {
     const video = run.artifacts?.videos?.[viz.id]
     const count = framesCountFor(run, viz.id)
     if (count !== null && count > 0) {

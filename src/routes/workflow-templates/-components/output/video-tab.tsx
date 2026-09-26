@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 import { downloadArtifact, useArtifactUrl } from "./artifact-fetch"
-import { framesCountFor, visualizationNodes } from "./run-artifacts"
+import { framesCountFor, videoNodes } from "./run-artifacts"
 
 function OutputVideo({
   runId,
@@ -54,7 +54,8 @@ function OutputVideo({
   )
 }
 
-// The engine's real visual output: one MP4 per visualization node, served
+// The engine's real visual output: one MP4 per rendering node (Visualization,
+// Depth Estimation's colormap), served
 // from S3 through the presigned artifact URL. Nothing is drawn client-side.
 export function VideoTab({
   run,
@@ -65,15 +66,15 @@ export function VideoTab({
   definition: WorkflowDefinition | null
   nodeLabels: Map<string, string>
 }) {
-  const vizNodes = visualizationNodes(definition ?? run.definition)
+  const vizNodes = videoNodes(definition ?? run.definition, run)
   if (vizNodes.length === 0) {
     return (
       <div className="flex min-h-40 flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground">
         <VideoOffIcon className="size-5" />
         <p className="text-xs">
-          This workflow has no Visualization node, so the engine produced no
-          output video. Add an Annotated Frames output to render detections onto
-          the video.
+          This workflow has no node that renders video, so the engine produced
+          no output video. Add a Video Visualization output to draw detections,
+          masks or depth onto the video.
         </p>
       </div>
     )

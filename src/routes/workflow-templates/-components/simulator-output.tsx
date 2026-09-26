@@ -33,7 +33,7 @@ import { EventsTab } from "./output/events-tab"
 import { RunHeader, stepCounts } from "./output/run-header"
 import { TraceTab } from "./output/trace-tab"
 import { VideoTab } from "./output/video-tab"
-import { buildArtifactGroups, visualizationNodes } from "./output/run-artifacts"
+import { buildArtifactGroups, videoNodes } from "./output/run-artifacts"
 
 // The simulator "Output" area, backed by a REAL run: while in flight it shows
 // the live step trace / events / preview frames arriving over IoT WSS; once
@@ -363,12 +363,13 @@ export function SimulatorOutput({
     )
   }
 
-  // The Video tab exists only for graphs with a Visualization node: it plays
+  // The Video tab exists only for graphs with a node that renders frames
+  // (Visualization, Depth Estimation): it plays
   // the muxed MP4, or says why there is none (failed run, older run). A
   // telemetry-only graph has nothing video-related to show, so no tab.
   const hasVideo = Object.keys(run.artifacts?.videos ?? {}).length > 0
   const showVideoTab =
-    hasVideo || visualizationNodes(ranDefinition ?? run.definition).length > 0
+    hasVideo || videoNodes(ranDefinition ?? run.definition, run).length > 0
   const defaultTab = hasVideo && phase !== "failed" ? "video" : "trace"
   const steps = stepCounts(run)
   // Files the Data tab lists (materialized inputs are only known once the tab

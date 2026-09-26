@@ -61,6 +61,8 @@ const VISUALIZATION_OVERLAY_PORTS: Record<string, string[]> = {
   labels: ["detections", "segments"],
   depth_map: ["depth"],
   masks: ["segments"],
+  // "TRUCK - 5.2 M": needs a metric depth model upstream (engine 0.4.0+).
+  distance: ["depth"],
 }
 
 // Config keys the full-screen code function editor owns; the generic form

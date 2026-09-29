@@ -322,8 +322,9 @@ function WebhookDetailPage() {
               : endpoint.disabledReason === "failing"
                 ? "Five deliveries in a row used up every retry, over more than a day, so xorgate stopped sending and emailed the organization’s owners. "
                 : "Disabled by an owner or admin. "}
-            Nothing is delivered while it is disabled; events routed to it still
-            appear in this log and can be redelivered once it is enabled.
+            Nothing is delivered while it is disabled: events that happen
+            meanwhile are not queued for it, and scheduled retries end as
+            failed. Enable it again, then redeliver from this log what you need.
             {endpoint.disabledAt ? ` Since ${formatAt(endpoint.disabledAt)}.` : null}
           </AlertDescription>
           {canManage ? (

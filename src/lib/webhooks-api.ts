@@ -66,9 +66,10 @@ export type {
 const DISABLED_REASON: Record<string, string> = {
   manual: "Disabled",
   gone: "Disabled (410 Gone)",
+  failing: "Disabled (kept failing)",
 }
 
-/** "Disabled" or "Disabled (410 Gone)", from `disabledReason`. */
+/** "Disabled", "Disabled (410 Gone)" or "Disabled (kept failing)", from `disabledReason`. */
 export function disabledLabel(endpoint: WebhookEndpoint): string {
   return DISABLED_REASON[endpoint.disabledReason ?? ""] ?? "Disabled"
 }

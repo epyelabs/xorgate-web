@@ -319,7 +319,9 @@ function WebhookDetailPage() {
           <AlertDescription>
             {endpoint.disabledReason === "gone"
               ? "The receiver answered 410 Gone, which means “stop sending”. "
-              : "Disabled by an owner or admin. "}
+              : endpoint.disabledReason === "failing"
+                ? "Five deliveries in a row used up every retry, over more than a day, so xorgate stopped sending and emailed the organization’s owners. "
+                : "Disabled by an owner or admin. "}
             Nothing is delivered while it is disabled; events routed to it still
             appear in this log and can be redelivered once it is enabled.
             {endpoint.disabledAt ? ` Since ${formatAt(endpoint.disabledAt)}.` : null}

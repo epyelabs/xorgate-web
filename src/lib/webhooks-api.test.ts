@@ -26,9 +26,10 @@ describe("nodeWebhookNames", () => {
 })
 
 describe("disabledLabel / urlHost", () => {
-  it("names a 410 disable", () => {
+  it("names a 410 and an auto (failing) disable", () => {
     const ep = { disabledReason: "gone" } as WebhookEndpoint
     expect(disabledLabel(ep)).toBe("Disabled (410 Gone)")
+    expect(disabledLabel({ disabledReason: "failing" } as WebhookEndpoint)).toBe("Disabled (kept failing)")
     expect(disabledLabel({ disabledReason: null } as WebhookEndpoint)).toBe("Disabled")
   })
 

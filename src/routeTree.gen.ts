@@ -20,6 +20,7 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkflowTemplatesIndexRouteImport } from './routes/workflow-templates/index'
 import { Route as WorkflowInstancesIndexRouteImport } from './routes/workflow-instances/index'
+import { Route as WebhooksIndexRouteImport } from './routes/webhooks/index'
 import { Route as TrainingJobsIndexRouteImport } from './routes/training-jobs/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as ModelsIndexRouteImport } from './routes/models/index'
@@ -29,6 +30,7 @@ import { Route as DatasetsIndexRouteImport } from './routes/datasets/index'
 import { Route as ApiKeysIndexRouteImport } from './routes/api-keys/index'
 import { Route as WorkflowTemplatesIdRouteImport } from './routes/workflow-templates/$id'
 import { Route as WorkflowInstancesIdRouteImport } from './routes/workflow-instances/$id'
+import { Route as WebhooksIdRouteImport } from './routes/webhooks/$id'
 import { Route as TrainingJobsIdRouteImport } from './routes/training-jobs/$id'
 import { Route as ModelsIdRouteImport } from './routes/models/$id'
 import { Route as DevicesIdRouteImport } from './routes/devices/$id'
@@ -100,6 +102,11 @@ const WorkflowInstancesIndexRoute = WorkflowInstancesIndexRouteImport.update({
   path: '/workflow-instances/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WebhooksIndexRoute = WebhooksIndexRouteImport.update({
+  id: '/webhooks/',
+  path: '/webhooks/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrainingJobsIndexRoute = TrainingJobsIndexRouteImport.update({
   id: '/training-jobs/',
   path: '/training-jobs/',
@@ -143,6 +150,11 @@ const WorkflowTemplatesIdRoute = WorkflowTemplatesIdRouteImport.update({
 const WorkflowInstancesIdRoute = WorkflowInstancesIdRouteImport.update({
   id: '/workflow-instances/$id',
   path: '/workflow-instances/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WebhooksIdRoute = WebhooksIdRouteImport.update({
+  id: '/webhooks/$id',
+  path: '/webhooks/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TrainingJobsIdRoute = TrainingJobsIdRouteImport.update({
@@ -237,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/models/$id': typeof ModelsIdRoute
   '/training-jobs/$id': typeof TrainingJobsIdRoute
+  '/webhooks/$id': typeof WebhooksIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
@@ -246,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/models/': typeof ModelsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/training-jobs/': typeof TrainingJobsIndexRoute
+  '/webhooks/': typeof WebhooksIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -273,6 +287,7 @@ export interface FileRoutesByTo {
   '/datasets/$id': typeof DatasetsIdRoute
   '/models/$id': typeof ModelsIdRoute
   '/training-jobs/$id': typeof TrainingJobsIdRoute
+  '/webhooks/$id': typeof WebhooksIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys': typeof ApiKeysIndexRoute
@@ -282,6 +297,7 @@ export interface FileRoutesByTo {
   '/models': typeof ModelsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/training-jobs': typeof TrainingJobsIndexRoute
+  '/webhooks': typeof WebhooksIndexRoute
   '/workflow-instances': typeof WorkflowInstancesIndexRoute
   '/workflow-templates': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -311,6 +327,7 @@ export interface FileRoutesById {
   '/devices/$id': typeof DevicesIdRouteWithChildren
   '/models/$id': typeof ModelsIdRoute
   '/training-jobs/$id': typeof TrainingJobsIdRoute
+  '/webhooks/$id': typeof WebhooksIdRoute
   '/workflow-instances/$id': typeof WorkflowInstancesIdRoute
   '/workflow-templates/$id': typeof WorkflowTemplatesIdRoute
   '/api-keys/': typeof ApiKeysIndexRoute
@@ -320,6 +337,7 @@ export interface FileRoutesById {
   '/models/': typeof ModelsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/training-jobs/': typeof TrainingJobsIndexRoute
+  '/webhooks/': typeof WebhooksIndexRoute
   '/workflow-instances/': typeof WorkflowInstancesIndexRoute
   '/workflow-templates/': typeof WorkflowTemplatesIndexRoute
   '/devices/$id/benchmark': typeof DevicesIdBenchmarkRoute
@@ -350,6 +368,7 @@ export interface FileRouteTypes {
     | '/devices/$id'
     | '/models/$id'
     | '/training-jobs/$id'
+    | '/webhooks/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
@@ -359,6 +378,7 @@ export interface FileRouteTypes {
     | '/models/'
     | '/settings/'
     | '/training-jobs/'
+    | '/webhooks/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -386,6 +406,7 @@ export interface FileRouteTypes {
     | '/datasets/$id'
     | '/models/$id'
     | '/training-jobs/$id'
+    | '/webhooks/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys'
@@ -395,6 +416,7 @@ export interface FileRouteTypes {
     | '/models'
     | '/settings'
     | '/training-jobs'
+    | '/webhooks'
     | '/workflow-instances'
     | '/workflow-templates'
     | '/devices/$id/benchmark'
@@ -423,6 +445,7 @@ export interface FileRouteTypes {
     | '/devices/$id'
     | '/models/$id'
     | '/training-jobs/$id'
+    | '/webhooks/$id'
     | '/workflow-instances/$id'
     | '/workflow-templates/$id'
     | '/api-keys/'
@@ -432,6 +455,7 @@ export interface FileRouteTypes {
     | '/models/'
     | '/settings/'
     | '/training-jobs/'
+    | '/webhooks/'
     | '/workflow-instances/'
     | '/workflow-templates/'
     | '/devices/$id/benchmark'
@@ -461,6 +485,7 @@ export interface RootRouteChildren {
   DevicesIdRoute: typeof DevicesIdRouteWithChildren
   ModelsIdRoute: typeof ModelsIdRoute
   TrainingJobsIdRoute: typeof TrainingJobsIdRoute
+  WebhooksIdRoute: typeof WebhooksIdRoute
   WorkflowInstancesIdRoute: typeof WorkflowInstancesIdRoute
   WorkflowTemplatesIdRoute: typeof WorkflowTemplatesIdRoute
   ApiKeysIndexRoute: typeof ApiKeysIndexRoute
@@ -470,6 +495,7 @@ export interface RootRouteChildren {
   ModelsIndexRoute: typeof ModelsIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
   TrainingJobsIndexRoute: typeof TrainingJobsIndexRoute
+  WebhooksIndexRoute: typeof WebhooksIndexRoute
   WorkflowInstancesIndexRoute: typeof WorkflowInstancesIndexRoute
   WorkflowTemplatesIndexRoute: typeof WorkflowTemplatesIndexRoute
   DatasetsIdAnnotateItemIdRoute: typeof DatasetsIdAnnotateItemIdRoute
@@ -554,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkflowInstancesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/webhooks/': {
+      id: '/webhooks/'
+      path: '/webhooks'
+      fullPath: '/webhooks/'
+      preLoaderRoute: typeof WebhooksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/training-jobs/': {
       id: '/training-jobs/'
       path: '/training-jobs'
@@ -615,6 +648,13 @@ declare module '@tanstack/react-router' {
       path: '/workflow-instances/$id'
       fullPath: '/workflow-instances/$id'
       preLoaderRoute: typeof WorkflowInstancesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/webhooks/$id': {
+      id: '/webhooks/$id'
+      path: '/webhooks/$id'
+      fullPath: '/webhooks/$id'
+      preLoaderRoute: typeof WebhooksIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/training-jobs/$id': {
@@ -768,6 +808,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevicesIdRoute: DevicesIdRouteWithChildren,
   ModelsIdRoute: ModelsIdRoute,
   TrainingJobsIdRoute: TrainingJobsIdRoute,
+  WebhooksIdRoute: WebhooksIdRoute,
   WorkflowInstancesIdRoute: WorkflowInstancesIdRoute,
   WorkflowTemplatesIdRoute: WorkflowTemplatesIdRoute,
   ApiKeysIndexRoute: ApiKeysIndexRoute,
@@ -777,6 +818,7 @@ const rootRouteChildren: RootRouteChildren = {
   ModelsIndexRoute: ModelsIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
   TrainingJobsIndexRoute: TrainingJobsIndexRoute,
+  WebhooksIndexRoute: WebhooksIndexRoute,
   WorkflowInstancesIndexRoute: WorkflowInstancesIndexRoute,
   WorkflowTemplatesIndexRoute: WorkflowTemplatesIndexRoute,
   DatasetsIdAnnotateItemIdRoute: DatasetsIdAnnotateItemIdRoute,

@@ -8,13 +8,17 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { JsonTree } from "@/components/json-tree"
+import { WebhookTargetBadge } from "@/components/webhooks/webhook-target-badge"
+import { nodeWebhookNames } from "@/lib/webhooks-api"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 import { downloadArtifact } from "./artifact-fetch"
 
 // One accordion item per emitted event: header = kind, local time (ISO on
 // hover), confidence; body = summary, the full payload as a tree, the clip
-// key when the event carries evidence.
+// key when the event carries evidence. An event whose node names a webhook
+// endpoint carries a "would deliver to" badge (simulations never deliver).
 export function EventsTab({ run }: { run: WorkflowRunDetail }) {
+  const webhookNames = nodeWebhookNames(run.definition)
   if (run.events.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
@@ -38,6 +42,12 @@ export function EventsTab({ run }: { run: WorkflowRunDetail }) {
                   {Number.isNaN(at.getTime()) ? ev.occurredAt : at.toLocaleString()}
                 </span>
               </span>
+              <WebhookTargetBadge
+                event={ev}
+                mode={run.mode}
+                names={webhookNames}
+                link={false}
+              />
               <Badge variant="secondary" className="shrink-0">
                 {ev.confidence.toFixed(2)}
               </Badge>

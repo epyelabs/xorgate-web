@@ -307,7 +307,11 @@ function WorkflowInstanceDetailPage() {
       </Section>
 
       <Section title="Events produced">
-        <RunEvents events={displayEvents} />
+        <RunEvents
+          events={displayEvents}
+          mode={run.mode}
+          definition={run.definition}
+        />
       </Section>
 
       <Section title="Run record">

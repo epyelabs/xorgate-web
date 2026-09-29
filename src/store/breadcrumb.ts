@@ -17,6 +17,9 @@ interface BreadcrumbState {
   setJobName: (jobName: string | null) => void
   modelName: string | null
   setModelName: (modelName: string | null) => void
+  // The webhook endpoint detail page's crumb.
+  webhookName: string | null
+  setWebhookName: (webhookName: string | null) => void
 }
 
 export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
@@ -32,4 +35,6 @@ export const useBreadcrumbStore = create<BreadcrumbState>((set) => ({
   setJobName: (jobName) => set({ jobName }),
   modelName: null,
   setModelName: (modelName) => set({ modelName }),
+  webhookName: null,
+  setWebhookName: (webhookName) => set({ webhookName }),
 }))

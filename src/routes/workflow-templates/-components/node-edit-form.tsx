@@ -18,6 +18,7 @@ import { readFunctionConfig } from "@/lib/code-function-runtime"
 import { cn } from "@/lib/utils"
 import { useWorkflowCatalog } from "@/store/workflow-catalog"
 import { useWorkflowEditor } from "@/store/workflow-editor"
+import { EndpointRefField } from "./endpoint-ref-field"
 import { ModelRefField } from "./model-ref-field"
 
 // The node editor body, rendered inside the per-node popover. Fields are
@@ -657,6 +658,15 @@ export function NodeEditForm({ nodeId }: { nodeId: string }) {
                     }
                   : undefined
               }
+            />
+          ) : node.data.catalogType === "output.event" && key === "webhook" ? (
+            // Engine 0.5.0: the endpoint NAME the node's events deliver to.
+            <EndpointRefField
+              key={key}
+              fieldId={`cfg-${key}`}
+              value={config[key]}
+              description={schema.description}
+              setValue={(v) => updateNodeConfig(node.id, key, v)}
             />
           ) : (
             <ConfigField

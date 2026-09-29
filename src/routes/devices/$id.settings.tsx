@@ -22,6 +22,7 @@ import { MediaTab } from "./-components/settings/media-tab"
 import { PowerTab } from "./-components/settings/power-tab"
 import { SystemTab } from "./-components/settings/system-tab"
 import { TelemetryTab } from "./-components/settings/telemetry-tab"
+import { WebhooksTab } from "./-components/settings/webhooks-tab"
 
 // The active sub-tab lives in the URL so a specific settings group is
 // linkable/bookmarkable and Back restores it (same dialect as the Media tab's
@@ -224,6 +225,9 @@ function DeviceSettingsPage() {
                 commit={commit}
                 commitRecording={commitRecording}
               />
+            </TabsContent>
+            <TabsContent value="webhooks">
+              <WebhooksTab deviceId={id} />
             </TabsContent>
           </>
         )}

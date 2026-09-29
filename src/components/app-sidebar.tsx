@@ -23,6 +23,7 @@ import {
   Settings,
   Users,
   Waypoints,
+  Webhook,
 } from "lucide-react"
 import { Link } from "@tanstack/react-router"
 import { XorgateAppIcon, XorgateLogo } from "@/components/xorgate-logo"
@@ -58,6 +59,7 @@ const organizationNav = [
     ],
   },
   { title: "API Keys", url: "/api-keys", icon: <KeyRound /> },
+  { title: "Webhooks", url: "/webhooks", icon: <Webhook /> },
   { title: "Members", url: "/members", icon: <Users /> },
   // Billing is hidden until the feature is ready; the /billing route still
   // exists, it just is not linked from the sidebar.

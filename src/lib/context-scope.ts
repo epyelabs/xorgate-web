@@ -12,7 +12,10 @@ const WORKSPACE_SCOPED_DETAIL = [
   /^\/workflow-instances\/[^/]+/,
 ]
 
-const ORGANIZATION_SCOPED_DETAIL = [/^\/workflow-templates\/[^/]+/]
+const ORGANIZATION_SCOPED_DETAIL = [
+  /^\/workflow-templates\/[^/]+/,
+  /^\/webhooks\/[^/]+/,
+]
 
 export type ContextScope = "workspace" | "organization"
 

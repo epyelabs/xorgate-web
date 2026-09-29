@@ -12,6 +12,8 @@ export const SETTINGS_TABS = [
   "connectivity",
   "power",
   "system",
+  // Cloud-side event routing (plans/xorgate-webhooks); not device config.
+  "webhooks",
 ] as const
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
@@ -24,4 +26,5 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   connectivity: "Connectivity",
   power: "Power",
   system: "System",
+  webhooks: "Webhooks",
 }

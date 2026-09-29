@@ -23,6 +23,15 @@ describe("roleHasPermission", () => {
   })
 })
 
+describe("webhooks:manage", () => {
+  it("mirrors api-keys:manage (owner/admin, the backend's check)", () => {
+    expect(rolesWithPermission("webhooks:manage")).toEqual(
+      rolesWithPermission("api-keys:manage")
+    )
+    expect(rolesWithPermission("webhooks:manage")).toEqual(["owner", "admin"])
+  })
+})
+
 describe("rolesWithPermission", () => {
   it("lists the roles the 403 screen should name", () => {
     expect(rolesWithPermission("billing:manage")).toEqual(["owner"])

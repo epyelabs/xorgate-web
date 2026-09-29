@@ -12,6 +12,9 @@ export type Permission =
   | "members:read"
   | "members:manage"
   | "api-keys:manage"
+  // Webhook endpoints (register, rotate, test, redeliver) and a device's
+  // webhook routes: owner/admin, the backend's own check. Every role reads.
+  | "webhooks:manage"
   | "billing:manage"
   | "workspace:manage"
   // Giving a device away — owner/admin, matching every other destructive
@@ -29,6 +32,7 @@ const ALL_PERMISSIONS: Permission[] = [
   "members:read",
   "members:manage",
   "api-keys:manage",
+  "webhooks:manage",
   "billing:manage",
   "workspace:manage",
   "devices:transfer",
@@ -43,6 +47,7 @@ const ROLE_PERMISSIONS: Record<MembershipRole, Permission[]> = {
     "members:read",
     "members:manage",
     "api-keys:manage",
+    "webhooks:manage",
     "workspace:manage",
     "devices:transfer",
     "models:annotate",

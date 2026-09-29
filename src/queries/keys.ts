@@ -24,6 +24,20 @@ export const qk = {
   org: (orgId: Id) => ["org", orgId] as const,
   members: (orgId: Id) => [...qk.org(orgId), "members"] as const,
   apiKeys: (orgId: Id) => [...qk.org(orgId), "api-keys"] as const,
+  // Webhook endpoints are org resources. One endpoint's deliveries EXTEND its
+  // key, so invalidating qk.webhook(...) refreshes its log too; the list sits
+  // under the same "webhooks" prefix so qk.webhooks(orgId) clears everything.
+  webhooks: (orgId: Id) => [...qk.org(orgId), "webhooks"] as const,
+  webhookList: (orgId: Id) => [...qk.webhooks(orgId), "list"] as const,
+  webhook: (orgId: Id, endpointId: string) =>
+    [...qk.webhooks(orgId), "endpoint", endpointId] as const,
+  webhookDeliveries: (
+    orgId: Id,
+    endpointId: string,
+    params: Record<string, unknown>
+  ) => [...qk.webhook(orgId, endpointId), "deliveries", params] as const,
+  webhookDelivery: (orgId: Id, endpointId: string, deliveryId: string) =>
+    [...qk.webhook(orgId, endpointId), "delivery", deliveryId] as const,
   // The model catalog is platform-wide, but reads go through the org-scoped
   // client, so it is keyed (and cleared) per org anyway.
   deviceModels: (orgId: Id) => [...qk.org(orgId), "device-models"] as const,
@@ -96,6 +110,9 @@ export const qk = {
   ) => [...qk.device(orgId, wsId, deviceId), "session-runs", params] as const,
   segments: (orgId: Id, wsId: Id, deviceId: string, sessionId: string) =>
     [...qk.device(orgId, wsId, deviceId), "segments", sessionId] as const,
+  // Cloud-side routing of this device's presence and session events.
+  deviceWebhooks: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "webhooks"] as const,
   deviceAttachments: (orgId: Id, wsId: Id, deviceId: string) =>
     [...qk.device(orgId, wsId, deviceId), "workflow-attachments"] as const,
   // Both extend the device key, so the invalidation a transfer already does

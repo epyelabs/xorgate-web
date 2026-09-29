@@ -51,6 +51,8 @@ interface ModelsCrumbNames {
   datasetName: string | null
   jobName: string | null
   modelName: string | null
+  // Not a Models page, but an org-level detail name riding the same bag.
+  webhookName: string | null
 }
 
 // The Models section (xorgate-models M4): three org-wide lists under one nav
@@ -124,6 +126,13 @@ function resolveCrumbs(
   if (pathname === "/settings") return [{ label: "Settings" }]
   if (pathname === "/members") return [{ label: "Members" }]
   if (pathname === "/api-keys") return [{ label: "API Keys" }]
+  if (pathname === "/webhooks") return [{ label: "Webhook endpoints" }]
+  if (pathname.startsWith("/webhooks/")) {
+    return [
+      { label: "Webhook endpoints", href: "/webhooks" },
+      { label: modelsNames.webhookName ?? "Endpoint" },
+    ]
+  }
   if (pathname === "/billing") return [{ label: "Billing" }]
   if (pathname === "/devices") return [{ label: "Devices" }]
   if (pathname.startsWith("/devices/")) {
@@ -176,6 +185,7 @@ function RootLayout() {
   const datasetName = useBreadcrumbStore((s) => s.datasetName)
   const jobName = useBreadcrumbStore((s) => s.jobName)
   const modelName = useBreadcrumbStore((s) => s.modelName)
+  const webhookName = useBreadcrumbStore((s) => s.webhookName)
   const location = useLocation()
 
   // The initial route load blocks in beforeLoad on /me, and /me's arrival
@@ -236,7 +246,7 @@ function RootLayout() {
     deviceName,
     templateName,
     instanceName,
-    { datasetName, jobName, modelName }
+    { datasetName, jobName, modelName, webhookName }
   )
 
   return (

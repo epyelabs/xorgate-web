@@ -41,6 +41,12 @@ export const runEventSchema = z.object({
   clipKey: z.string().nullable().optional(),
   payloadSummary: z.string(),
   payload: z.unknown().optional(),
+  // ADDITIVE (webhooks P2, engine 0.5.0): the output.event node that emitted
+  // it (null on runs from older engines), and, on SIMULATION runs only, the
+  // node's `webhook` endpoint name (null when the node has none). Production
+  // runs route by the node's name from `definition` instead.
+  nodeId: z.string().nullable().optional(),
+  wouldDeliverTo: z.string().nullable().optional(),
 })
 
 // Where a v2 run's S3 artifacts live (run detail `artifacts` column; null on

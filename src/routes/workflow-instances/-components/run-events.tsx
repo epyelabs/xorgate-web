@@ -1,9 +1,12 @@
 import { FilmIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
-import type { RunEvent } from "@/lib/workflow-run-schemas"
+import { WebhookTargetBadge } from "@/components/webhooks/webhook-target-badge"
+import { nodeWebhookNames } from "@/lib/webhooks-api"
+import type { RunEvent, RunMode } from "@/lib/workflow-run-schemas"
+import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 
-const columns: DataTableColumn<RunEvent>[] = [
+const baseColumns: DataTableColumn<RunEvent>[] = [
   {
     id: "kind",
     header: "Kind",
@@ -46,7 +49,36 @@ const columns: DataTableColumn<RunEvent>[] = [
   },
 ]
 
-export function RunEvents({ events }: { events: RunEvent[] }) {
+// The webhook column appears only when some output.event node in the run's
+// graph names an endpoint: "routed to x" (production) or "would deliver to x"
+// (simulation), from the event's nodeId (engine 0.5.0+).
+function webhookColumn(
+  mode: RunMode,
+  names: Map<string, string>
+): DataTableColumn<RunEvent> {
+  return {
+    id: "webhook",
+    header: "Webhook",
+    cell: (event) => (
+      <WebhookTargetBadge event={event} mode={mode} names={names} />
+    ),
+  }
+}
+
+export function RunEvents({
+  events,
+  mode,
+  definition,
+}: {
+  events: RunEvent[]
+  mode: RunMode
+  definition: WorkflowDefinition
+}) {
+  const names = nodeWebhookNames(definition)
+  const columns =
+    names.size > 0
+      ? [...baseColumns.slice(0, -1), webhookColumn(mode, names), baseColumns[baseColumns.length - 1]]
+      : baseColumns
   if (events.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border py-8 text-center">

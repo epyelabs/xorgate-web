@@ -35,7 +35,7 @@ export function DeliveryDrawer({
   onRedeliver: (delivery: WebhookDelivery) => void
 }) {
   const query = useWebhookDelivery(endpointId, deliveryId)
-  const d = query.data?.delivery
+  const d = query.data
 
   return (
     <Sheet open={deliveryId !== null} onOpenChange={onOpenChange}>

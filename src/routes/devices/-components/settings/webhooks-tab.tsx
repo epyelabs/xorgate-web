@@ -33,11 +33,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { CreateWebhookDialog } from "@/components/webhooks/create-webhook-dialog"
 import { useHasPermission } from "@/lib/permissions"
-import { xgMessage } from "@/lib/xorgate"
+import { xg, xgMessage } from "@/lib/xorgate"
 import {
   DEVICE_WEBHOOK_EVENT_GROUPS,
   DEVICE_WEBHOOK_EVENT_TYPES,
-  setDeviceWebhooks,
   type DeviceWebhookEventType,
   type DeviceWebhookRoute,
 } from "@/lib/webhooks-api"
@@ -76,15 +75,15 @@ export function WebhooksTab({ deviceId }: { deviceId: string }) {
   const [editing, setEditing] = useState<DeviceWebhookRoute | "new" | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const routes = routesQuery.data?.routes ?? []
+  const routes = routesQuery.data ?? []
   const endpointsById = new Map(
-    (endpointsQuery.data?.webhooks ?? []).map((e) => [e.id, e])
+    (endpointsQuery.data?.items ?? []).map((e) => [e.id, e])
   )
 
   async function save(next: RouteSet, message: string): Promise<boolean> {
     setSaving(true)
     try {
-      const res = await setDeviceWebhooks(deviceId, next)
+      const res = await xg().devices.webhooks.set(deviceId, next)
       queryClient.setQueryData(qk.deviceWebhooks(orgId, wsId, deviceId), res)
       toast.success(message)
       return true
@@ -250,7 +249,7 @@ function RouteDialog({
   onSave: (route: RouteSet[number]) => Promise<boolean>
 }) {
   const endpointsQuery = useWebhookEndpoints()
-  const endpoints = endpointsQuery.data?.webhooks ?? []
+  const endpoints = endpointsQuery.data?.items ?? []
   const [endpointId, setEndpointId] = useState("")
   const [types, setTypes] = useState<DeviceWebhookEventType[]>([])
   const [createOpen, setCreateOpen] = useState(false)

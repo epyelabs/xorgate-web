@@ -11,8 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { SecretReveal } from "@/components/webhooks/secret-reveal"
-import { xgMessage } from "@/lib/xorgate"
-import { rotateWebhookSecret, type WebhookEndpoint } from "@/lib/webhooks-api"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { WebhookEndpoint } from "@/lib/webhooks-api"
 
 // Rotation keeps the previous secret valid for a window (24 h): deliveries
 // carry two `v1,` signatures meanwhile, so the receiver can switch at its own
@@ -40,7 +40,7 @@ export function RotateSecretDialog({
   async function handleConfirm() {
     setRotating(true)
     try {
-      const res = await rotateWebhookSecret(endpoint.id)
+      const res = await xg().webhooks.rotateSecret(endpoint.id)
       setResult({ secret: res.secret, hours: res.previousSecretValidForHours })
       onRotated()
     } catch (err) {

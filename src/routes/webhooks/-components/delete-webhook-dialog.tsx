@@ -10,8 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { xgMessage } from "@/lib/xorgate"
-import { deleteWebhook, type WebhookEndpoint } from "@/lib/webhooks-api"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { WebhookEndpoint } from "@/lib/webhooks-api"
 
 export function DeleteWebhookDialog({
   open,
@@ -29,7 +29,7 @@ export function DeleteWebhookDialog({
   async function handleConfirm() {
     setDeleting(true)
     try {
-      await deleteWebhook(endpoint.id)
+      await xg().webhooks.delete(endpoint.id)
       toast.success(`Endpoint "${endpoint.name}" deleted`)
       onOpenChange(false)
       onDeleted()

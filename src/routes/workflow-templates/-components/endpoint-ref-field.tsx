@@ -41,7 +41,7 @@ export function EndpointRefField({
   setValue: (v: unknown) => void
 }) {
   const endpointsQuery = useWebhookEndpoints()
-  const endpoints = endpointsQuery.data?.webhooks ?? []
+  const endpoints = endpointsQuery.data?.items ?? []
   const canManage = useHasPermission("webhooks:manage")
   const [createOpen, setCreateOpen] = useState(false)
 

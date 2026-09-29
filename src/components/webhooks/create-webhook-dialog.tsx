@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { xgMessage } from "@/lib/xorgate"
-import { createWebhook, type WebhookEndpoint } from "@/lib/webhooks-api"
+import { xg, xgMessage } from "@/lib/xorgate"
+import type { WebhookEndpoint } from "@/lib/webhooks-api"
 import { useInvalidateWebhooks } from "@/queries/webhooks"
 import { SecretReveal } from "./secret-reveal"
 
@@ -101,7 +101,7 @@ export function CreateWebhookDialog({
     }
     setSubmitting(true)
     try {
-      const res = await createWebhook({
+      const res = await xg().webhooks.create({
         name: n,
         url: u,
         description: description.trim() || null,

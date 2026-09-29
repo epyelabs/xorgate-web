@@ -56,7 +56,7 @@ function WebhooksPage() {
     (s) => s.currentOrganizationId
   )
   const endpointsQuery = useWebhookEndpoints()
-  const endpoints = endpointsQuery.data?.webhooks ?? []
+  const endpoints = endpointsQuery.data?.items ?? []
   const error =
     endpointsQuery.data || !endpointsQuery.error
       ? null

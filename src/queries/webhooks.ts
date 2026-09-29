@@ -4,14 +4,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import {
-  getDeviceWebhooks,
-  getWebhook,
-  getWebhookDelivery,
-  listWebhookDeliveries,
-  listWebhooks,
-  type WebhookDeliveryListParams,
-} from "@/lib/webhooks-api"
+import { xg } from "@/lib/xorgate"
+import type { WebhookDeliveryListParams } from "@/lib/webhooks-api"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
 
@@ -24,7 +18,7 @@ export function useWebhookEndpoints() {
   const { orgId } = useTenant()
   return useQuery({
     queryKey: qk.webhookList(orgId),
-    queryFn: () => listWebhooks(ALL),
+    queryFn: () => xg().webhooks.list(ALL),
     enabled: orgId !== null,
   })
 }
@@ -42,7 +36,7 @@ export function useWebhookEndpoint(endpointId: string, pollUntil?: number) {
   const { orgId } = useTenant()
   return useQuery({
     queryKey: qk.webhook(orgId, endpointId),
-    queryFn: () => getWebhook(endpointId),
+    queryFn: () => xg().webhooks.get(endpointId),
     enabled: orgId !== null,
     refetchInterval: () => (polling(pollUntil) ? POLL_MS : false),
   })
@@ -59,12 +53,12 @@ export function useWebhookDeliveries(
   const { orgId } = useTenant()
   return useQuery({
     queryKey: qk.webhookDeliveries(orgId, endpointId, { ...params }),
-    queryFn: () => listWebhookDeliveries(endpointId, params),
+    queryFn: () => xg().webhooks.deliveries.list(endpointId, params),
     enabled: orgId !== null,
     placeholderData: keepPreviousData,
     refetchInterval: (query) =>
       polling(pollUntil) ||
-      query.state.data?.deliveries.some((d) => d.status === "pending")
+      query.state.data?.items.some((d) => d.status === "pending")
         ? POLL_MS
         : false,
   })
@@ -74,7 +68,7 @@ export function useWebhookDelivery(endpointId: string, deliveryId: string | null
   const { orgId } = useTenant()
   return useQuery({
     queryKey: qk.webhookDelivery(orgId, endpointId, deliveryId ?? ""),
-    queryFn: () => getWebhookDelivery(endpointId, deliveryId!),
+    queryFn: () => xg().webhooks.deliveries.get(endpointId, deliveryId!),
     enabled: orgId !== null && deliveryId !== null,
   })
 }
@@ -93,7 +87,7 @@ export function useDeviceWebhooks(deviceId: string, enabled = true) {
   const { orgId, wsId, ready } = useTenant()
   return useQuery({
     queryKey: qk.deviceWebhooks(orgId, wsId, deviceId),
-    queryFn: () => getDeviceWebhooks(deviceId),
+    queryFn: () => xg().devices.webhooks.get(deviceId),
     enabled: ready && enabled,
   })
 }

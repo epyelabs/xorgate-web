@@ -33,12 +33,9 @@ import {
 import { requireAuth } from "@/lib/auth-guard"
 import { useHasPermission } from "@/lib/permissions"
 import { formatRelative } from "@/lib/relative-time"
-import { xgMessage } from "@/lib/xorgate"
+import { xg, xgMessage } from "@/lib/xorgate"
 import {
   disabledLabel,
-  redeliverWebhook,
-  testWebhook,
-  updateWebhook,
   type WebhookDelivery,
   type WebhookDeliveryStatus,
 } from "@/lib/webhooks-api"
@@ -90,7 +87,7 @@ function WebhookDetailPage() {
   const [pollUntil, setPollUntil] = useState<number | undefined>(undefined)
   const watch = () => setPollUntil(Date.now() + WATCH_MS)
   const endpointQuery = useWebhookEndpoint(id, pollUntil)
-  const endpoint = endpointQuery.data?.webhook ?? null
+  const endpoint = endpointQuery.data ?? null
 
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(PAGE_SIZES[1])
@@ -101,7 +98,7 @@ function WebhookDetailPage() {
     order: "desc",
     status: statusFilter === "any" ? undefined : statusFilter,
   }, pollUntil)
-  const deliveries = deliveriesQuery.data?.deliveries ?? []
+  const deliveries = deliveriesQuery.data?.items ?? []
 
   const [openDelivery, setOpenDelivery] = useState<string | null>(null)
   const [rotateOpen, setRotateOpen] = useState(false)
@@ -138,7 +135,7 @@ function WebhookDetailPage() {
   async function sendTest() {
     setBusy("test")
     try {
-      const res = await testWebhook(id)
+      const res = await xg().webhooks.test(id)
       toast.success(
         res.dispatched
           ? "Ping queued; it appears below within seconds."
@@ -158,7 +155,7 @@ function WebhookDetailPage() {
   async function setEnabled(enabled: boolean) {
     setBusy("toggle")
     try {
-      await updateWebhook(id, { enabled })
+      await xg().webhooks.update(id, { enabled })
       toast.success(enabled ? "Endpoint enabled" : "Endpoint disabled")
       invalidate()
     } catch (err) {
@@ -171,7 +168,7 @@ function WebhookDetailPage() {
   async function redeliver(delivery: WebhookDelivery) {
     setBusy(delivery.id)
     try {
-      await redeliverWebhook(id, delivery.id)
+      await xg().webhooks.deliveries.redeliver(id, delivery.id)
       toast.success("Redelivery queued (same webhook-id, fresh retry schedule)")
       setPage(1)
       watch()

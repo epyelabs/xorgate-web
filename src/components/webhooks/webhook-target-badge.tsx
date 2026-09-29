@@ -44,7 +44,7 @@ export function WebhookTargetBadge({
   // claim the "(no such endpoint)" suffix is about to contradict.
   if (!name || endpointsQuery.isPending) return null
 
-  const endpoint = endpointsQuery.data?.webhooks.find((e) => e.name === name)
+  const endpoint = endpointsQuery.data?.items.find((e) => e.name === name)
   const missing = endpointsQuery.isSuccess && !endpoint
   const verb = mode === "simulation" ? "would deliver to" : "routed to"
 

@@ -138,6 +138,14 @@ export const qk = {
     deviceId: string,
     params: Record<string, unknown>
   ) => [...qk.device(orgId, wsId, deviceId), "workflow-runs", params] as const,
+  // Data purges (plans/device-wf-data-delete). All three extend the device
+  // key so `useInvalidateDevices()(deviceId)` refreshes them with the rest.
+  devicePurges: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "purges"] as const,
+  devicePurge: (orgId: Id, wsId: Id, deviceId: string, purgeId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "purge", purgeId] as const,
+  devicePurgePreview: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "purge-preview"] as const,
 
   workflowTemplates: (orgId: Id, wsId: Id) =>
     [...qk.ws(orgId, wsId), "workflow-templates"] as const,

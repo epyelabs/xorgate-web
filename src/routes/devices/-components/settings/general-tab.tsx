@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -36,7 +35,9 @@ import { updateDeviceSchema } from "@/lib/schemas"
 import { useHasPermission } from "@/lib/permissions"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
+import { DangerRow } from "./danger-row"
 import { OwnershipCard } from "./ownership-card"
+import { PurgeDeviceDataRow } from "./purge-device-data-row"
 import { UpdateDeviceDialog } from "../update-device-dialog"
 import { formatTimestamp } from "./shared"
 
@@ -394,22 +395,31 @@ export function GeneralTab({
           reversible in one click, which is not the company Delete keeps. */}
       {canTransfer ? <OwnershipCard device={device} /> : null}
 
-      {/* Action in the header rather than a content row of its own: one button
-          under a two-line header leaves a card of mostly padding. */}
+      {/* Two stacked actions: purging the history (owner/admin, and the row
+          renders its own separator so a member sees no orphan rule) above
+          deleting the device itself. */}
       <Card className="ring-destructive/30">
         <CardHeader>
           <CardTitle className="text-destructive">Danger zone</CardTitle>
-          <CardDescription>
-            Permanently delete this device: its recordings, telemetry history,
-            live-video channels and cloud identity. The agent, if still running,
-            must be re-enrolled with a new claim code.
-          </CardDescription>
-          <CardAction>
-            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-              Delete device
-            </Button>
-          </CardAction>
+          <CardDescription>Irreversible actions for this device.</CardDescription>
         </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <PurgeDeviceDataRow device={device} />
+          <DangerRow
+            testId="delete-device-row"
+            title="Delete device"
+            description="Permanently delete this device: its recordings, telemetry history, live-video channels and cloud identity. The agent, if still running, must be re-enrolled with a new claim code."
+            action={
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+                data-testid="delete-device"
+              >
+                Delete device
+              </Button>
+            }
+          />
+        </CardContent>
       </Card>
 
       <DeleteDeviceDialog

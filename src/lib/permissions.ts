@@ -21,6 +21,12 @@ export type Permission =
   // device operation and the backend's own check. A member may edit a device
   // but must not hand it to another workspace or another organization.
   | "devices:transfer"
+  // Purging a device's history (attached workflows and their runs, recorded
+  // telemetry, recorded media) — owner/admin, the backend's own gate, like
+  // `devices:transfer`. The Settings section itself checks `useCurrentRole()`
+  // explicitly (a destructive button must not fail open); this entry is for
+  // the 403 copy and the tests.
+  | "devices:purge"
   // Models section (xorgate-models Q5): members annotate, import and build
   // versions; admins and owners start training and assist jobs (they cost
   // money) and archive or delete registry models; viewers read.
@@ -36,6 +42,7 @@ const ALL_PERMISSIONS: Permission[] = [
   "billing:manage",
   "workspace:manage",
   "devices:transfer",
+  "devices:purge",
   "models:annotate",
   "models:train",
   "models:manage",
@@ -50,6 +57,7 @@ const ROLE_PERMISSIONS: Record<MembershipRole, Permission[]> = {
     "webhooks:manage",
     "workspace:manage",
     "devices:transfer",
+    "devices:purge",
     "models:annotate",
     "models:train",
     "models:manage",

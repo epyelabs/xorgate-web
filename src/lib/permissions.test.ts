@@ -32,6 +32,20 @@ describe("webhooks:manage", () => {
   })
 })
 
+describe("devices:purge", () => {
+  it("mirrors devices:transfer (owner/admin, the backend's own gate)", () => {
+    expect(rolesWithPermission("devices:purge")).toEqual(
+      rolesWithPermission("devices:transfer")
+    )
+    expect(rolesWithPermission("devices:purge")).toEqual(["owner", "admin"])
+  })
+
+  it("is withheld from members and viewers", () => {
+    expect(roleHasPermission("member", "devices:purge")).toBe(false)
+    expect(roleHasPermission("viewer", "devices:purge")).toBe(false)
+  })
+})
+
 describe("rolesWithPermission", () => {
   it("lists the roles the 403 screen should name", () => {
     expect(rolesWithPermission("billing:manage")).toEqual(["owner"])

@@ -32,6 +32,7 @@ export function DestroyDialog({
   confirmLabel,
   pendingLabel,
   onConfirm,
+  confirmDisabled = false,
   children,
 }: {
   open: boolean
@@ -45,11 +46,18 @@ export function DestroyDialog({
   confirmLabel: string
   pendingLabel: string
   onConfirm: () => Promise<void> | void
+  /**
+   * Extra reason the confirm stays disabled even once the phrase is typed —
+   * e.g. a choice inside `children` that has not been made yet.
+   */
+  confirmDisabled?: boolean
   children?: React.ReactNode
 }) {
   const [pending, setPending] = useState(false)
   const [typed, setTyped] = useState("")
-  const armed = confirmText === undefined || typed.trim() === confirmText
+  const armed =
+    !confirmDisabled &&
+    (confirmText === undefined || typed.trim() === confirmText)
 
   function handleOpenChange(next: boolean) {
     if (pending) return

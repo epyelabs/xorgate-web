@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import { EllipsisVerticalIcon, PowerIcon, SearchXIcon, ZapIcon } from "lucide-react"
+import {
+  EllipsisVerticalIcon,
+  PlayIcon,
+  PowerIcon,
+  SearchXIcon,
+  ZapIcon,
+} from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,7 +22,12 @@ import { StatusScreen } from "@/components/error-screens"
 import { DeviceBacklogBadge } from "@/components/device-backlog-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { xg, xgMessage } from "@/lib/xorgate"
-import { isXorgateError, type Device, type DeviceStatus } from "@xorgate/sdk"
+import {
+  isXorgateError,
+  type Device,
+  type DeviceStatus,
+  type SimulationHostState,
+} from "@xorgate/sdk"
 import {
   useDevice,
   useDeviceModel,
@@ -27,6 +38,16 @@ import { DevicePresence } from "@/components/device-presence"
 import { DeviceModelDialog } from "./-components/device-model-dialog"
 import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
+import { RebootSimulationDialog } from "./-components/reboot-simulation-dialog"
+import { SimulatedBadge } from "./-components/simulated-badge"
+import { useDeviceSimulation } from "@/queries/simulations"
+import {
+  buildSimulationConfig,
+  HOST_STATE_LABELS,
+  hostStateTone,
+  storedSimulationConfig,
+} from "@/lib/device-simulation"
+import { useHasPermission } from "@/lib/permissions"
 import {
   DeviceAlertsButton,
   type DeviceAlert,
@@ -107,6 +128,45 @@ function ThrottleIndicator({
     >
       <title>{`Power throttling: ${decodeThrottleBits(mask).join(", ")}`}</title>
     </ZapIcon>
+  )
+}
+
+const HOST_TONE_CLASS: Record<ReturnType<typeof hostStateTone>, string> = {
+  ok: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
+  busy: "border-sky-500/50 text-sky-600 dark:text-sky-400",
+  off: "border-border text-muted-foreground",
+  error: "border-destructive/50 text-destructive",
+}
+
+// What the simulator host last said, shown only while a simulated device is
+// not online (starting, parked, failed): its status dot alone cannot tell
+// "parked by a power off" from "still coming up".
+function SimulationHostChip({
+  state,
+  message,
+  powerOnRequested,
+}: {
+  state: SimulationHostState
+  message: string | null
+  powerOnRequested: boolean
+}) {
+  // A start request is acted on at the host's next pass; until then the host
+  // still reports the parked state, which would read as "nothing happened".
+  const label =
+    powerOnRequested && state === "stopped"
+      ? "Power on requested"
+      : HOST_STATE_LABELS[state]
+  return (
+    <span
+      data-testid="simulation-host-state"
+      data-host-state={state}
+      title={message ?? undefined}
+      className={`rounded-full border px-1.5 py-px text-[0.65rem] font-medium ${
+        HOST_TONE_CLASS[hostStateTone(state)]
+      }`}
+    >
+      Simulator: {label}
+    </span>
   )
 }
 
@@ -208,6 +268,45 @@ function DeviceLayout() {
       ? undefined
       : `Device is ${liveDevice.status}. It must be online to accept commands.`
 
+  // Simulated devices (plans/xorgate-device-simulator). `device.simulated` is
+  // the server-side fact; the agent's reported mode is never consulted. A sim
+  // that is not online is either still starting or parked by a power_off, and
+  // commands cannot reach it either way, so its one action is "Power on"
+  // (README Q8). The host's report is the progress signal while it comes up.
+  const simulated = device?.simulated ?? false
+  const canSimulate = useHasPermission("devices:simulate")
+  // Set by "Power on", cleared by "Power off"; only meaningful while the
+  // device is still not online, so derived rather than reset by an effect.
+  const [powerOnClicked, setPowerOnClicked] = useState(false)
+  const powerOnRequested = powerOnClicked && !canCommand
+  const [poweringOn, setPoweringOn] = useState(false)
+  const simulationQuery = useDeviceSimulation(id, {
+    enabled: simulated,
+    fast: simulated && (!canCommand || powerOnRequested),
+  })
+  const simulation = simulationQuery.data ?? null
+  const currentScenarioId =
+    storedSimulationConfig(device?.config)?.scenarioId ??
+    simulation?.scenarioId ??
+    null
+  const canPowerOn = simulated && canSimulate && !canCommand && !!liveDevice
+
+  async function handlePowerOn() {
+    setPoweringOn(true)
+    try {
+      await xg().devices.simulations.start(id)
+      setPowerOnClicked(true)
+      toast.success(
+        `Power on requested for ${device?.name ?? device?.serial ?? "the device"}. The simulator host starts it on its next pass.`
+      )
+      void simulationQuery.refetch()
+    } catch (err) {
+      toast.error(xgMessage(err))
+    } finally {
+      setPoweringOn(false)
+    }
+  }
+
   // Clear the published name when leaving the device (or switching to a
   // different one) so the breadcrumb never shows a stale name.
   useEffect(() => {
@@ -260,6 +359,7 @@ function DeviceLayout() {
                 <h1 className="text-md truncate font-semibold tracking-tight">
                   {device?.name ?? device?.serial ?? "Device"}
                 </h1>
+                {simulated ? <SimulatedBadge /> : null}
                 {device ? (
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {deviceModel ? (
@@ -294,6 +394,13 @@ function DeviceLayout() {
                       pulse={(liveDevice ?? device).status === "online"}
                     />
                     <ThrottleIndicator latest={latest} />
+                    {simulated && !canCommand && simulation ? (
+                      <SimulationHostChip
+                        state={simulation.hostState}
+                        message={simulation.hostMessage}
+                        powerOnRequested={powerOnRequested}
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground">{id}</span>
@@ -324,15 +431,27 @@ function DeviceLayout() {
                   <Button
                     variant="outline"
                     size="icon-sm"
-                    disabled={!canCommand}
+                    disabled={!canCommand && !canPowerOn}
                     aria-label="More device actions"
                   >
                     <EllipsisVerticalIcon />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {/* Simulated devices only: the one action an offline sim
+                      takes. Never rendered for real hardware. */}
+                  {canPowerOn ? (
+                    <DropdownMenuItem
+                      disabled={poweringOn}
+                      onSelect={() => void handlePowerOn()}
+                    >
+                      <PlayIcon />
+                      Power on
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuItem
                     variant="destructive"
+                    disabled={!canCommand}
                     onSelect={() => setPowerOffDialogOpen(true)}
                   >
                     <PowerIcon />
@@ -426,7 +545,45 @@ function DeviceLayout() {
           (and, for reboot, returning) is the real feedback, and it arrives via
           the status badge on its own. On failure the dialog stays open so the
           error is readable and the action is retryable. */}
-      {device ? (
+      {device && simulated ? (
+        <RebootSimulationDialog
+          open={rebootDialogOpen}
+          onOpenChange={setRebootDialogOpen}
+          deviceName={device.name ?? device.serial}
+          currentScenarioId={currentScenarioId}
+          onConfirm={async (scenarioId) => {
+            const label = device.name ?? device.serial
+            // README Q5: write the WHOLE namespace (all three fields are
+            // required) from a fresh read, so another operator's loop/gap is
+            // kept, then a plain reboot. The agent already switches on the
+            // config change; the reboot is the visible offline -> online.
+            let switched = false
+            try {
+              if (scenarioId && scenarioId !== currentScenarioId) {
+                const fresh = await xg().devices.get(id)
+                await xg().devices.patchConfig(id, {
+                  simulation: buildSimulationConfig(fresh.config, scenarioId),
+                })
+                switched = true
+                invalidateDevices(id)
+              }
+              await xg().devices.reboot(id)
+              toast.success(
+                switched
+                  ? `Rebooting ${label} into the new scenario`
+                  : `Reboot command sent to ${label}`
+              )
+              setRebootDialogOpen(false)
+            } catch (err) {
+              toast.error(
+                switched
+                  ? `Scenario switched (the device picks it up live), but the reboot was not sent: ${xgMessage(err)}`
+                  : xgMessage(err)
+              )
+            }
+          }}
+        />
+      ) : device ? (
         <RebootDeviceDialog
           open={rebootDialogOpen}
           onOpenChange={setRebootDialogOpen}
@@ -453,6 +610,7 @@ function DeviceLayout() {
           onConfirm={async () => {
             try {
               await xg().devices.powerOff(id)
+              setPowerOnClicked(false)
               toast.success(
                 `Power off command sent to ${device.name ?? device.serial}`
               )

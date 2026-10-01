@@ -146,6 +146,13 @@ export const qk = {
     [...qk.device(orgId, wsId, deviceId), "purge", purgeId] as const,
   devicePurgePreview: (orgId: Id, wsId: Id, deviceId: string) =>
     [...qk.device(orgId, wsId, deviceId), "purge-preview"] as const,
+  // A simulated device's host report (plans/xorgate-device-simulator).
+  // Extends the device key, so the device invalidation refreshes it too.
+  deviceSimulation: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "simulation"] as const,
+  // The scenario catalog is platform-wide; keyed per org like deviceModels.
+  simulationScenarios: (orgId: Id) =>
+    [...qk.org(orgId), "simulation-scenarios"] as const,
 
   workflowTemplates: (orgId: Id, wsId: Id) =>
     [...qk.ws(orgId, wsId), "workflow-templates"] as const,

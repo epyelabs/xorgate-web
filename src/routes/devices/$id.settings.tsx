@@ -161,6 +161,7 @@ function DeviceSettingsPage() {
                 device={device}
                 identity={identity}
                 identityLoaded={identityLoaded}
+                configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
                 updateAgent={updateAgent}

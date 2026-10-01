@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   isXorgateError,
   type CameraMountConfig,
+  type SimulationConfig,
   type CellularConfig,
   type Device,
   type DeviceConfigPatch,
@@ -84,6 +85,13 @@ export interface DeviceSettingsPatch {
    * `device.config.cameraMount`, never from a top-level field.
    */
   cameraMountConfig?: CameraMountConfig | null
+  /**
+   * Simulated devices only. Routed like `cameraMount` (no legacy column); the
+   * Settings card is read-only and the scenario is switched from the reboot
+   * dialog, so nothing commits this today. It is here so the namespace has a
+   * field like every other one.
+   */
+  simulationConfig?: SimulationConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -108,6 +116,7 @@ const CONFIG_FIELDS = {
   timeSyncConfig: "timeSync",
   cellularConfig: "cellular",
   cameraMountConfig: "cameraMount",
+  simulationConfig: "simulation",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */

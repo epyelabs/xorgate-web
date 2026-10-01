@@ -29,6 +29,7 @@ import type {
 import {
   reportedAgentBuild,
   reportedAgentMode,
+  type DeviceConfigStatus,
   type ReportedAgentBuild,
 } from "@/lib/device-config-status"
 import { updateDeviceSchema } from "@/lib/schemas"
@@ -38,6 +39,7 @@ import { InfoRow } from "../info-row"
 import { DangerRow } from "./danger-row"
 import { OwnershipCard } from "./ownership-card"
 import { PurgeDeviceDataRow } from "./purge-device-data-row"
+import { SimulationCard } from "./simulation-card"
 import { UpdateDeviceDialog } from "../update-device-dialog"
 import { formatTimestamp } from "./shared"
 
@@ -58,12 +60,14 @@ export function GeneralTab({
   device,
   identity,
   identityLoaded,
+  configStatus,
   isPending,
   commit,
   updateAgent,
   updatingAgent,
 }: {
   device: Device
+  configStatus: DeviceConfigStatus
   identity: DeviceIdentity | null
   identityLoaded: boolean
   isPending: (key: string) => boolean
@@ -116,8 +120,13 @@ export function GeneralTab({
     installedVersion !== null &&
     latestBuild.version !== installedVersion
 
-  const canUpdate = device.status === "online" && !updatingAgent
-  const updateHint = updatingAgent
+  // A simulated device's agent is the simulator host's image: it rejects the
+  // update command ("managed by host image"), so don't offer it.
+  const canUpdate =
+    device.status === "online" && !updatingAgent && !device.simulated
+  const updateHint = device.simulated
+    ? "A simulated device runs the simulator host's agent image"
+    : updatingAgent
     ? "Update in progress…"
     : device.status !== "online"
       ? "The device must be online to be updated"
@@ -300,11 +309,21 @@ export function GeneralTab({
               {/* Reported by the device, never set from here: a box left in
                   `sim` publishes synthetic data, so it has to be visible — but
                   switching a fielded device to sim remotely would silently
-                  replace real data with simulated data. */}
+                  replace real data with simulated data. A device CREATED as
+                  simulated is keyed off the server's `simulated` flag instead:
+                  its agent reports `replay`, which must not read as "Real". */}
               <InfoRow
                 label="Agent mode"
                 value={
-                  agentMode === null ? (
+                  device.simulated ? (
+                    <Badge
+                      variant="outline"
+                      data-testid="agent-mode-simulated"
+                      className="border-violet-500/50 text-violet-600 dark:text-violet-400"
+                    >
+                      Simulated ({agentMode ?? "replay"})
+                    </Badge>
+                  ) : agentMode === null ? (
                     "—"
                   ) : (
                     <Badge
@@ -341,6 +360,10 @@ export function GeneralTab({
           </CardContent>
         </Card>
       </div>
+
+      {device.simulated ? (
+        <SimulationCard device={device} status={configStatus.simulation} />
+      ) : null}
 
       {/* The identity card is where certificate management (view / rotate)
           lands later — see the plan's phase-5 §5d. Its actions area is left

@@ -27,6 +27,10 @@ export type Permission =
   // explicitly (a destructive button must not fail open); this entry is for
   // the 403 copy and the tests.
   | "devices:purge"
+  // Registering a simulated device and powering a parked one back on
+  // (plans/xorgate-device-simulator): owner/admin, the create and start
+  // routes' own check. Commands on a running sim are ordinary device commands.
+  | "devices:simulate"
   // Models section (xorgate-models Q5): members annotate, import and build
   // versions; admins and owners start training and assist jobs (they cost
   // money) and archive or delete registry models; viewers read.
@@ -43,6 +47,7 @@ const ALL_PERMISSIONS: Permission[] = [
   "workspace:manage",
   "devices:transfer",
   "devices:purge",
+  "devices:simulate",
   "models:annotate",
   "models:train",
   "models:manage",
@@ -58,6 +63,7 @@ const ROLE_PERMISSIONS: Record<MembershipRole, Permission[]> = {
     "workspace:manage",
     "devices:transfer",
     "devices:purge",
+    "devices:simulate",
     "models:annotate",
     "models:train",
     "models:manage",

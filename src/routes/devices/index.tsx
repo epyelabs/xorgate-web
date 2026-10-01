@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
-import { ArrowRightLeftIcon, ChevronDownIcon, FilterIcon, PlusIcon } from "lucide-react"
+import {
+  ArrowRightLeftIcon,
+  ChevronDownIcon,
+  FilterIcon,
+  FlaskConicalIcon,
+  PlusIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -33,6 +39,8 @@ import { DevicePresence } from "@/components/device-presence"
 import { StickyHeader } from "@/components/sticky-header"
 import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
+import { RegisterSimulationDialog } from "./-components/register-simulation-dialog"
+import { SimulatedBadge } from "./-components/simulated-badge"
 import { BulkTransferDialog } from "./-components/bulk-transfer-dialog"
 
 export const Route = createFileRoute("/devices/")({
@@ -74,6 +82,14 @@ const STATUS_OPTIONS: readonly (DeviceStatus | "any")[] = [
   "decommissioned",
 ]
 
+// Real hardware vs simulated devices (plans/xorgate-device-simulator). A
+// client filter over the fleet query rather than `devices.list({simulated})`:
+// the fleet query already holds every row (the KPI tiles need them all) and
+// each carries `simulated`, so this costs no request, composes with the status
+// filter and the search, and cannot disagree with the rows on screen.
+type KindFilter = "any" | "real" | "simulated"
+const KIND_OPTIONS: readonly KindFilter[] = ["any", "real", "simulated"]
+
 const DEVICE_STATUS_COLOR: Record<DeviceStatus, string> = {
   online: "bg-emerald-500",
   offline: "bg-amber-500",
@@ -91,7 +107,10 @@ function DevicesListPage() {
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<DeviceStatus | "any">("any")
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [kindFilter, setKindFilter] = useState<KindFilter>("any")
   const [provisionOpen, setProvisionOpen] = useState(false)
+  const [simulationOpen, setSimulationOpen] = useState(false)
+  const canSimulate = useHasPermission("devices:simulate")
   const [page, setPage] = useState(1)
   const [size, setSize] = useState(DEFAULT_SIZE)
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
@@ -135,13 +154,15 @@ function DevicesListPage() {
     const q = query.trim().toLowerCase()
     return fleet.filter((d) => {
       if (statusFilter !== "any" && d.status !== statusFilter) return false
+      if (kindFilter !== "any" && d.simulated !== (kindFilter === "simulated"))
+        return false
       if (!q) return true
       return (
         d.serial.toLowerCase().includes(q) ||
         (d.name ?? "").toLowerCase().includes(q)
       )
     })
-  }, [fleet, query, statusFilter])
+  }, [fleet, query, statusFilter, kindFilter])
 
   // Optional client sort (Last seen / Created). Without an active sort the fleet
   // keeps the server's updatedAt-desc order.
@@ -173,7 +194,8 @@ function DevicesListPage() {
     [roster, pageRows]
   )
 
-  const isFiltered = query.trim() !== "" || statusFilter !== "any"
+  const isFiltered =
+    query.trim() !== "" || statusFilter !== "any" || kindFilter !== "any"
 
   const setSearch = (value: string) => {
     setQuery(value)
@@ -183,9 +205,14 @@ function DevicesListPage() {
     setStatusFilter(next)
     setPage(1)
   }
+  const setKind = (next: KindFilter) => {
+    setKindFilter(next)
+    setPage(1)
+  }
   const clearFilters = () => {
     setQuery("")
     setStatusFilter("any")
+    setKindFilter("any")
     setPage(1)
   }
   const onToggleSort = (columnId: string) => {
@@ -254,8 +281,11 @@ function DevicesListPage() {
           params={{ id: device.id }}
           className="block leading-tight"
         >
-          <span className="block text-sm font-medium text-foreground hover:underline">
-            {device.name ?? device.serial}
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground hover:underline">
+              {device.name ?? device.serial}
+            </span>
+            {device.simulated ? <SimulatedBadge /> : null}
           </span>
           {device.name ? (
             <span className="block text-xs text-muted-foreground">
@@ -373,6 +403,25 @@ function DevicesListPage() {
     </DropdownMenu>
   )
 
+  const kindFilterMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" data-testid="kind-filter">
+          <FilterIcon />
+          type: {kindFilter}
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {KIND_OPTIONS.map((opt) => (
+          <DropdownMenuItem key={opt} onSelect={() => setKind(opt)}>
+            {opt}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <div className="flex h-[calc(100svh-4rem)] min-h-0 min-w-0 flex-col gap-6 p-4 pt-0 group-has-data-[collapsible=icon]/sidebar-wrapper:h-[calc(100svh-3rem)]">
       <StickyHeader className="border-b border-border pb-4">
@@ -385,6 +434,16 @@ function DevicesListPage() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {canSimulate ? (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setSimulationOpen(true)}
+              >
+                <FlaskConicalIcon />
+                Register simulation
+              </Button>
+            ) : null}
             <Button variant="brand" size="lg" onClick={handleProvision}>
               <PlusIcon />
               Register device
@@ -431,7 +490,12 @@ function DevicesListPage() {
                 placeholder: "Filter by name or serial…",
               }}
               searchAlign="right"
-              filters={statusFilterMenu}
+              filters={
+                <>
+                  {statusFilterMenu}
+                  {kindFilterMenu}
+                </>
+              }
             >
               {/* Only while rows are selected: an always-on bulk control is a
                   button that spends most of its life disabled. */}
@@ -471,10 +535,22 @@ function DevicesListPage() {
                   Provision your first device to start streaming.
                 </p>
               </div>
-              <Button variant="brand" size="sm" onClick={handleProvision}>
-                <PlusIcon />
-                Register device
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="brand" size="sm" onClick={handleProvision}>
+                  <PlusIcon />
+                  Register device
+                </Button>
+                {canSimulate ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSimulationOpen(true)}
+                  >
+                    <FlaskConicalIcon />
+                    Register simulation
+                  </Button>
+                ) : null}
+              </div>
             </div>
           }
           filteredEmpty={
@@ -494,6 +570,12 @@ function DevicesListPage() {
         open={provisionOpen}
         onOpenChange={setProvisionOpen}
         onClaimed={handleClaimed}
+      />
+
+      <RegisterSimulationDialog
+        open={simulationOpen}
+        onOpenChange={setSimulationOpen}
+        onCreated={handleClaimed}
       />
 
       <BulkTransferDialog

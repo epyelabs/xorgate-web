@@ -46,6 +46,14 @@ describe("devices:purge", () => {
   })
 })
 
+describe("devices:simulate", () => {
+  it("is owner/admin only, the create and start routes' own gate", () => {
+    expect(rolesWithPermission("devices:simulate")).toEqual(["owner", "admin"])
+    expect(roleHasPermission("member", "devices:simulate")).toBe(false)
+    expect(roleHasPermission("viewer", "devices:simulate")).toBe(false)
+  })
+})
+
 describe("rolesWithPermission", () => {
   it("lists the roles the 403 screen should name", () => {
     expect(rolesWithPermission("billing:manage")).toEqual(["owner"])

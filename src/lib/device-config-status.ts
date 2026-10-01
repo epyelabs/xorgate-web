@@ -24,6 +24,10 @@ export const CONFIG_NAMESPACES = [
   "timeSync",
   "cellular",
   "cameraMount",
+  // Simulated devices only (plans/xorgate-device-simulator). A real device
+  // never holds it: the cloud refuses it there and never publishes it, so it
+  // resolves to `unset` and contributes no attention badge.
+  "simulation",
 ] as const
 
 export type ConfigNamespace = (typeof CONFIG_NAMESPACES)[number]
@@ -257,6 +261,13 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
   return Object.fromEntries(
     CONFIG_NAMESPACES.map((ns): [ConfigNamespace, NamespaceStatus] => {
       const effective = reported.effective[ns]
+      // `simulation` exists only for devices created as simulated: the cloud
+      // refuses it for real hardware and never publishes it there. Without
+      // this, a real device's unrelated pending save would mark it "pending"
+      // too and badge the General tab for a card that tab never shows.
+      if (ns === "simulation" && !device.simulated) {
+        return [ns, { state: "unset", effective }]
+      }
       if (behind) {
         // Offline is not a failure — the retained message is waiting for the
         // device, which converges on its next connect without anyone re-saving.
@@ -305,6 +316,8 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   timeSync: ["system"],
   cellular: ["connectivity"],
   cameraMount: ["media"],
+  // Read-only Simulation card on General; switched from the reboot dialog.
+  simulation: ["general"],
 }
 
 /**

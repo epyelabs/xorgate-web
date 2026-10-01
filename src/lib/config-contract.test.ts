@@ -33,6 +33,8 @@ describe("config-contract.json", () => {
   })
 
   it("carries the namespaces the settings tabs render", () => {
+    // `simulation` is accepted only for simulated devices
+    // (plans/xorgate-device-simulator); its settings card is Phase 5's.
     expect(Object.keys(contract.namespaces).sort()).toEqual([
       "cameraMount",
       "cellular",
@@ -40,6 +42,7 @@ describe("config-contract.json", () => {
       "imuMount",
       "lteRecovery",
       "recording",
+      "simulation",
       "timeSync",
     ])
   })

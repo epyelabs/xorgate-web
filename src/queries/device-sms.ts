@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   getLatestSmsRead,
   getSmsRead,
+  smsErrorCode,
   startSmsRead,
   type SmsRead,
 } from "@/lib/device-sms-api"
@@ -65,7 +66,18 @@ export function useSmsRead(deviceId: string, readId: string | null) {
   return useQuery({
     queryKey: qk.deviceSmsRead(orgId, wsId, deviceId, readId ?? ""),
     queryFn: async (): Promise<SmsRead> => {
-      const read = await getSmsRead(deviceId, readId!)
+      let read: SmsRead
+      try {
+        read = await getSmsRead(deviceId, readId!)
+      } catch (err) {
+        // A newer `ok` read (another viewer's) deletes this device's older
+        // rows, pending ones included (contract §5). That newer read is
+        // exactly what this one was asking for, so show it instead of a 404.
+        if (smsErrorCode(err) !== "NOT_FOUND") throw err
+        const latest = await getLatestSmsRead(deviceId)
+        if (!latest) throw err
+        read = latest
+      }
       if (read.status === "ok") {
         queryClient.setQueryData(qk.deviceSmsLatest(orgId, wsId, deviceId), read)
       }

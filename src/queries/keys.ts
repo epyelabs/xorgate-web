@@ -146,6 +146,12 @@ export const qk = {
     [...qk.device(orgId, wsId, deviceId), "purge", purgeId] as const,
   devicePurgePreview: (orgId: Id, wsId: Id, deviceId: string) =>
     [...qk.device(orgId, wsId, deviceId), "purge-preview"] as const,
+  // SMS inbox (plans/device-sms-inbox). The stored copy and one in-flight
+  // read; both extend the device key, so a device invalidation refreshes them.
+  deviceSmsLatest: (orgId: Id, wsId: Id, deviceId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "sms-latest"] as const,
+  deviceSmsRead: (orgId: Id, wsId: Id, deviceId: string, readId: string) =>
+    [...qk.device(orgId, wsId, deviceId), "sms-read", readId] as const,
   // A simulated device's host report (plans/xorgate-device-simulator).
   // Extends the device key, so the device invalidation refreshes it too.
   deviceSimulation: (orgId: Id, wsId: Id, deviceId: string) =>

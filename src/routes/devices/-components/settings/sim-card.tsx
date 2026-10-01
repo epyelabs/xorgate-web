@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils"
 import { InfoRow } from "../info-row"
 import { SettingsCallout } from "./callout"
+import { SmsInboxButton } from "./sms-sheet"
 
 /**
  * The SIM currently in the device (manage_sim_card_info_in_settings, Phase 1).
@@ -87,8 +88,14 @@ export function SimCard({
             the card on a slow cadence and reports on a slower one, so a reading
             can legitimately be tens of minutes old without anything being
             wrong; saying so is better than implying it is live. */}
-        {(checked !== null || onRefresh !== undefined) && (
+        {(checked !== null || onRefresh !== undefined || sim !== null) && (
           <CardAction className="flex items-center gap-1.5">
+            {/* The SMS inbox (plans/device-sms-inbox §4.1). Only where the
+                device has reported a SIM block, i.e. it has a modem; with no
+                block there is nothing to read the messages from. Visible to
+                every role, and enabled offline (the sheet then shows the
+                stored copy). */}
+            {sim !== null && <SmsInboxButton device={device} />}
             {checked !== null && (
               <span className="text-muted-foreground font-normal" title={checked.exact}>
                 Read {checked.relative}

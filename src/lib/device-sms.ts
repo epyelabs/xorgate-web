@@ -82,7 +82,7 @@ export function smsSenderLabel(m: Pick<SmsMessage, "from" | "fromType">): string
   return formatMsisdn(from)
 }
 
-export const SMS_STORAGE_LABEL: Record<SmsStorage, string> = {
+export const SMS_STORAGE_LABEL: Record<string, string> & Record<SmsStorage, string> = {
   SM: "SIM",
   ME: "Modem",
 }

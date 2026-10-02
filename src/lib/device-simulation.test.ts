@@ -6,6 +6,7 @@ import {
   formatScenarioStats,
   SIMULATION_DEFAULTS,
   simulationCreateErrorMessage,
+  simulationScenarioTitle,
   storedSimulationConfig,
 } from "@/lib/device-simulation"
 import { computeConfigStatus, NAMESPACE_TABS } from "@/lib/device-config-status"
@@ -42,6 +43,25 @@ describe("storedSimulationConfig", () => {
     expect(storedSimulationConfig(null)).toBeNull()
     expect(storedSimulationConfig({ recording: {} })).toBeNull()
     expect(storedSimulationConfig({ simulation: null })).toBeNull()
+  })
+})
+
+describe("simulationScenarioTitle", () => {
+  const scenarios = [
+    { id: "urban-2026-09-18", title: "Short stop-and-go urban" },
+    { id: "city-2026-09-27", title: "City drive with stops" },
+  ]
+
+  it("names the stored scenario", () => {
+    const config = { simulation: { scenarioId: "urban-2026-09-18", loop: true, gapSeconds: 30 } }
+    expect(simulationScenarioTitle(config, scenarios)).toBe("Short stop-and-go urban")
+  })
+
+  it("is null while the catalog loads, for a real device, and for an unknown id", () => {
+    const config = { simulation: { scenarioId: "urban-2026-09-18", loop: true, gapSeconds: 30 } }
+    expect(simulationScenarioTitle(config, undefined)).toBeNull()
+    expect(simulationScenarioTitle({ recording: {} }, scenarios)).toBeNull()
+    expect(simulationScenarioTitle({ simulation: { scenarioId: "parked-2026-09-17" } }, scenarios)).toBeNull()
   })
 })
 

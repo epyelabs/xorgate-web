@@ -285,7 +285,7 @@ function DevicesListPage() {
             <span className="text-sm font-medium text-foreground hover:underline">
               {device.name ?? device.serial}
             </span>
-            {device.simulated ? <SimulatedBadge /> : null}
+            {device.simulated ? <SimulatedBadge config={device.config} /> : null}
           </span>
           {device.name ? (
             <span className="block text-xs text-muted-foreground">

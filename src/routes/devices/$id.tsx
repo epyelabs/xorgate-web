@@ -359,7 +359,7 @@ function DeviceLayout() {
                 <h1 className="text-md truncate font-semibold tracking-tight">
                   {device?.name ?? device?.serial ?? "Device"}
                 </h1>
-                {simulated ? <SimulatedBadge /> : null}
+                {simulated ? <SimulatedBadge config={device?.config ?? null} /> : null}
                 {device ? (
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {deviceModel ? (

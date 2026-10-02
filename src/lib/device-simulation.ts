@@ -82,6 +82,22 @@ export function hostStateTone(state: SimulationHostState): "ok" | "busy" | "off"
   }
 }
 
+/**
+ * The title of the scenario a sim is configured for, for the at-a-glance label
+ * beside the Simulated badge. Keyed off the stored namespace (the desired
+ * scenario, what the Settings card shows). Null while the catalog is loading,
+ * for a device with no namespace, or for an id the catalog no longer carries:
+ * the badge then reads plain "Simulated" rather than flashing a raw id.
+ */
+export function simulationScenarioTitle(
+  config: unknown,
+  scenarios: readonly Pick<SimulationScenario, "id" | "title">[] | undefined
+): string | null {
+  const scenarioId = storedSimulationConfig(config)?.scenarioId
+  if (!scenarioId || !scenarios) return null
+  return scenarios.find((s) => s.id === scenarioId)?.title ?? null
+}
+
 /** "15 min · 7.9 km · max 109 km/h", skipping whatever the catalog left null. */
 export function formatScenarioStats(
   s: Pick<SimulationScenario, "durationMs" | "distanceM" | "maxKph">

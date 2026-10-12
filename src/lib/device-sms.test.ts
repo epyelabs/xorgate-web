@@ -3,15 +3,24 @@ import type { Device } from "@xorgate/sdk"
 import type { SmsMessage, SmsRead, SmsReadResult } from "./device-sms-api"
 import {
   DEFAULT_SMS_LIMIT,
+  SMS_CLEAR_AGENT_REASON,
+  SMS_CLEAR_CAPABILITY,
+  SMS_CLEAR_ROLE_REASON,
+  isSmsClear,
   isSmsReadPending,
   parseSmsLimit,
   smsAgo,
   smsCapability,
+  smsClearConfirmText,
+  smsClearGate,
+  smsClearedToast,
+  smsClearedTotal,
   smsDisplayedRead,
   smsFullStoreWarnings,
   smsReadFailureMessage,
   smsSenderLabel,
   smsShowingLabel,
+  smsStorageSummary,
   smsTags,
   sortSmsMessages,
 } from "./device-sms"
@@ -250,5 +259,139 @@ describe("smsAgo", () => {
   it("is null for no stamp or a broken one", () => {
     expect(smsAgo(null, now)).toBeNull()
     expect(smsAgo("nope", now)).toBeNull()
+  })
+})
+
+// plans/device-sms-clear
+
+describe("smsCapability for sms.clear", () => {
+  it("checks the named capability", () => {
+    const both = deviceWith({ agent: { capabilities: ["sms.read", "sms.clear"] } })
+    const readOnly = deviceWith({ agent: { capabilities: ["sms.read"] } })
+    expect(smsCapability(both, SMS_CLEAR_CAPABILITY)).toBe("yes")
+    expect(smsCapability(readOnly, SMS_CLEAR_CAPABILITY)).toBe("no")
+    expect(smsCapability(readOnly)).toBe("yes")
+    expect(smsCapability(deviceWith({}), SMS_CLEAR_CAPABILITY)).toBe("unknown")
+  })
+})
+
+describe("smsClearedTotal / smsClearedToast", () => {
+  it("sums the stores", () => {
+    expect(smsClearedTotal({ SM: 7, ME: 23 })).toBe(30)
+    expect(smsClearedTotal({ ME: 0 })).toBe(0)
+    expect(smsClearedTotal({})).toBe(0)
+  })
+  it("ignores junk", () => {
+    expect(
+      smsClearedTotal({ SM: -1, ME: Number.NaN } as unknown as { SM: number })
+    ).toBe(0)
+    expect(smsClearedTotal({ SM: "4" } as unknown as { SM: number })).toBe(0)
+  })
+  it("is null without counts", () => {
+    expect(smsClearedTotal(undefined)).toBeNull()
+    expect(smsClearedTotal(null)).toBeNull()
+  })
+  it("reads as a sentence", () => {
+    expect(smsClearedToast({ SM: 7, ME: 23 })).toBe("Cleared 30 messages")
+    expect(smsClearedToast({ ME: 1 })).toBe("Cleared 1 message")
+    expect(smsClearedToast({})).toBe("Cleared 0 messages")
+    expect(smsClearedToast(undefined)).toBe("Messages cleared")
+  })
+})
+
+describe("smsClearConfirmText", () => {
+  it("names the count when known", () => {
+    expect(smsClearConfirmText(30)).toBe(
+      "This deletes all 30 messages from this device's SIM and modem."
+    )
+    expect(smsClearConfirmText(1)).toBe(
+      "This deletes the 1 message on this device's SIM and modem."
+    )
+  })
+  it("drops the number when unknown or zero", () => {
+    for (const n of [null, undefined, 0, Number.NaN]) {
+      expect(smsClearConfirmText(n)).toBe(
+        "This deletes all messages from this device's SIM and modem."
+      )
+    }
+  })
+  it("never uses an em-dash", () => {
+    expect(smsClearConfirmText(5)).not.toMatch(/\u2014/)
+  })
+})
+
+describe("smsClearGate", () => {
+  const ok = { role: "owner", capability: "yes", online: true, busy: false } as const
+  it("arms for owners and admins", () => {
+    expect(smsClearGate(ok)).toEqual({ allowed: true, reason: null })
+    expect(smsClearGate({ ...ok, role: "admin" }).allowed).toBe(true)
+    // an agent that never reported: the API's 409 decides
+    expect(smsClearGate({ ...ok, capability: "unknown" }).allowed).toBe(true)
+  })
+  it("refuses other roles, and a role still loading", () => {
+    for (const role of ["member", "viewer", null, undefined] as const) {
+      expect(smsClearGate({ ...ok, role })).toEqual({
+        allowed: false,
+        reason: SMS_CLEAR_ROLE_REASON,
+      })
+    }
+  })
+  it("refuses an old agent, offline, and a request in flight, in that order", () => {
+    expect(smsClearGate({ ...ok, capability: "no", online: false, busy: true }).reason).toBe(
+      SMS_CLEAR_AGENT_REASON
+    )
+    expect(smsClearGate({ ...ok, online: false, busy: true }).reason).toBe(
+      "The device is offline"
+    )
+    expect(smsClearGate({ ...ok, busy: true }).allowed).toBe(false)
+  })
+  it("puts role first", () => {
+    expect(
+      smsClearGate({ role: "member", capability: "no", online: false, busy: true }).reason
+    ).toBe(SMS_CLEAR_ROLE_REASON)
+  })
+})
+
+describe("clear rows", () => {
+  it("tells a clear from a read", () => {
+    expect(isSmsClear({ action: "clear" })).toBe(true)
+    expect(isSmsClear({ action: "read" })).toBe(false)
+    expect(isSmsClear({})).toBe(false)
+    expect(isSmsClear(null)).toBe(false)
+  })
+  it("explains a failed clear with the device's error", () => {
+    expect(
+      smsReadFailureMessage({
+        status: "error",
+        errorCode: "error",
+        errorMessage: "delete ME failed",
+        action: "clear",
+      })
+    ).toBe(
+      "The device couldn't clear every message (delete ME failed). Some may already be deleted."
+    )
+    expect(
+      smsReadFailureMessage({ status: "error", errorCode: "error", errorMessage: null, action: "clear" })
+    ).toBe("The device couldn't clear every message. Some may already be deleted.")
+    expect(
+      smsReadFailureMessage({ status: "error", errorCode: "no_sim", action: "clear" })
+    ).toMatch(/to clear/)
+    // a read keeps its own copy
+    expect(
+      smsReadFailureMessage({ status: "error", errorCode: "error", errorMessage: "x" })
+    ).toBe("The device couldn't read its messages.")
+  })
+})
+
+describe("smsStorageSummary", () => {
+  it("lists the stores that answered, SIM first", () => {
+    expect(
+      smsStorageSummary({ ME: { used: 0, total: 23 }, SM: { used: 0, total: 40 } })
+    ).toBe("SIM 0/40 · Modem 0/23")
+    expect(smsStorageSummary({ ME: { used: 3, total: 23 } })).toBe("Modem 3/23")
+  })
+  it("is null when nothing answered", () => {
+    expect(smsStorageSummary({})).toBeNull()
+    expect(smsStorageSummary(null)).toBeNull()
   })
 })

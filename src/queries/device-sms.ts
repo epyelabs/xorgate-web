@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  clearSms,
   getLatestSmsRead,
   getSmsRead,
   smsErrorCode,
@@ -55,7 +56,28 @@ export function useStartSmsRead(deviceId: string) {
 }
 
 /**
- * One read. Self-regulating poll (the `useDevicePurge` idiom): 1.5 s while
+ * Clear every message (plans/device-sms-clear). The 202 row (`action:
+ * "clear"`) is an `SmsRead` like any other, so it seeds the same polled
+ * query and the sheet tracks it through `useSmsRead`. On `ok` that row (with
+ * its empty sweep) becomes the stored copy, and the cloud deletes the older
+ * rows, so the old message text leaves the cache and the DB together.
+ */
+export function useClearSms(deviceId: string) {
+  const { orgId, wsId } = useTenant()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (limit: number) => clearSms(deviceId, limit),
+    onSuccess: (read) => {
+      queryClient.setQueryData(
+        qk.deviceSmsRead(orgId, wsId, deviceId, read.id),
+        read
+      )
+    },
+  })
+}
+
+/**
+ * One read (or clear). Self-regulating poll (the `useDevicePurge` idiom): 1.5 s while
  * the row is pending, stopping by itself at a terminal status. `readId` null
  * disables it, which is how closing the sheet stops all traffic. On `ok` the
  * row becomes the stored copy, so the list swaps in place.

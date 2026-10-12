@@ -4,8 +4,11 @@ import {
   CloudOffIcon,
   MessageSquareTextIcon,
   RefreshCwIcon,
+  Trash2Icon,
 } from "lucide-react"
-import type { Device } from "@xorgate/sdk"
+import { toast } from "sonner"
+import type { Device, MembershipRole } from "@xorgate/sdk"
+import { DestroyDialog } from "@/components/destroy-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -36,31 +39,43 @@ import {
 } from "@/components/ui/tooltip"
 import {
   SMS_DEVICE_OFFLINE,
+  SMS_INSUFFICIENT_ROLE,
   SMS_UNSUPPORTED_AGENT,
   smsErrorCode,
   type SmsMessage,
   type SmsRead,
+  type SmsReadAction,
 } from "@/lib/device-sms-api"
 import {
   DEFAULT_SMS_LIMIT,
+  SMS_CLEAR_AGENT_REASON,
+  SMS_CLEAR_CAPABILITY,
+  SMS_CLEAR_ROLE_REASON,
   SMS_LIMITS,
+  isSmsClear,
   isSmsReadPending,
   parseSmsLimit,
   smsCapability,
+  smsClearConfirmText,
+  smsClearGate,
+  smsClearedToast,
   smsDisplayedRead,
   smsFullStoreWarnings,
   smsReadFailureMessage,
   smsSenderLabel,
   smsAgo,
   smsShowingLabel,
+  smsStorageSummary,
   smsTags,
   sortSmsMessages,
   type SmsLimit,
 } from "@/lib/device-sms"
 import { formatDateTime } from "@/lib/format-time"
+import { useCurrentRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { xgMessage } from "@/lib/xorgate"
 import {
+  useClearSms,
   useLatestSmsRead,
   useSmsRead,
   useStartSmsRead,
@@ -86,6 +101,12 @@ import { useLiveDeviceStatus } from "@/store/presence"
  * shows), which is a cheap store read. The API gates reads on the REST status,
  * so a 409 DEVICE_OFFLINE from a device the overlay calls online is shown as
  * offline rather than as an error.
+ *
+ * "Clear all" (plans/device-sms-clear): owner and admin only, by an explicit
+ * role check (`useHasPermission` fails open while memberships load, which is
+ * wrong for a destructive button). Everyone else sees it disabled with the
+ * reason. A clear is a row like a read: it goes into the same `readId` and
+ * the same poll, and on `ok` its (empty) sweep becomes the stored copy.
  *
  * PRIVACY (contract §6): never log message text or senders.
  */
@@ -141,6 +162,8 @@ export function SmsInboxButton({ device }: { device: Device }) {
   const live = useLiveDeviceStatus(device) ?? device
   const online = live.status === "online"
   const capability = smsCapability(device)
+  const clearCapability = smsCapability(device, SMS_CLEAR_CAPABILITY)
+  const role = useCurrentRole()
 
   const [open, setOpen] = useState(false)
   const [limit, setLimit] = useState<SmsLimit>(loadLimit)
@@ -149,14 +172,32 @@ export function SmsInboxButton({ device }: { device: Device }) {
   const openRef = useRef(false)
 
   const start = useStartSmsRead(device.id)
+  const clear = useClearSms(device.id)
+  // Which request the sheet last made, so a 409/403 and the pending copy
+  // speak about the right one.
+  const [action, setAction] = useState<SmsReadAction>("read")
   const canAsk = online && capability !== "no"
 
   function startRead(n: SmsLimit) {
+    setAction("read")
+    clear.reset()
     start.mutate(n, {
       onSuccess: (read) => {
         if (openRef.current) setReadId(read.id)
       },
     })
+  }
+
+  /** Never throws: a failed POST stays in `clear.error` for the sheet. */
+  async function startClear(): Promise<void> {
+    setAction("clear")
+    start.reset()
+    try {
+      const read = await clear.mutateAsync(limit)
+      if (openRef.current) setReadId(read.id)
+    } catch {
+      // rendered as the sheet's notice
+    }
   }
 
   function onOpenChange(next: boolean) {
@@ -165,6 +206,8 @@ export function SmsInboxButton({ device }: { device: Device }) {
     if (!next) {
       setReadId(null)
       start.reset()
+      clear.reset()
+      setAction("read")
       return
     }
     if (canAsk) startRead(limit)
@@ -210,9 +253,13 @@ export function SmsInboxButton({ device }: { device: Device }) {
         limit={limit}
         onLimitChange={onLimitChange}
         readId={readId}
-        starting={start.isPending}
-        startError={start.error}
+        action={action}
+        starting={start.isPending || clear.isPending}
+        startError={action === "clear" ? clear.error : start.error}
         onRefresh={() => startRead(limit)}
+        role={role}
+        clearCapability={clearCapability}
+        onClear={startClear}
       />
     </>
   )
@@ -226,9 +273,13 @@ function SmsSheet({
   limit,
   onLimitChange,
   readId,
+  action,
   starting,
   startError,
   onRefresh,
+  role,
+  clearCapability,
+  onClear,
 }: {
   deviceId: string
   open: boolean
@@ -237,23 +288,49 @@ function SmsSheet({
   limit: SmsLimit
   onLimitChange: (limit: SmsLimit) => void
   readId: string | null
+  action: SmsReadAction
   starting: boolean
   startError: Error | null
   onRefresh: () => void
+  role: MembershipRole | null
+  clearCapability: "yes" | "no" | "unknown"
+  onClear: () => Promise<void>
 }) {
   const latestQ = useLatestSmsRead(deviceId, open)
   const readQ = useSmsRead(deviceId, readId)
   const now = useNow(open)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const current = readQ.data
   const stored = smsDisplayedRead(latestQ.data, current)
   const reading = starting || isSmsReadPending(current)
+  // In flight, and what is in flight is a clear: the old list is about to
+  // be wrong, so it gives way to the pending rows.
+  const clearing = reading && (action === "clear" || isSmsClear(current))
 
   const startCode = smsErrorCode(startError)
   const offline = !online || startCode === SMS_DEVICE_OFFLINE
   const unsupported = startCode === SMS_UNSUPPORTED_AGENT
   // The controls ask the device; there is nothing to ask when it cannot answer.
-  const controlsDisabled = offline || unsupported
+  // A clear refused for an old agent says nothing about reads.
+  const controlsDisabled = offline || (unsupported && action === "read")
+
+  const clearGate = smsClearGate({
+    role,
+    capability: unsupported && action === "clear" ? "no" : clearCapability,
+    online: !offline,
+    busy: reading,
+  })
+
+  // A clear that lands `ok` says how much it deleted. The row id is fresh per
+  // request and the sheet outlives its openings, so each clear toasts once.
+  const toastedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!current || current.status !== "ok" || !isSmsClear(current)) return
+    if (toastedRef.current === current.id) return
+    toastedRef.current = current.id
+    toast.success(smsClearedToast(current.result?.cleared))
+  }, [current])
 
   const failure = current ? smsReadFailureMessage(current) : null
   const canRetry =
@@ -264,8 +341,16 @@ function SmsSheet({
   // Inline notices above the list. The stored list stays below every one of
   // them: a failed refresh does not make the last good read wrong.
   let notice: { text: string; retry: boolean } | null = null
-  if (unsupported) {
-    notice = { text: "Update the device agent to read messages.", retry: false }
+  if (startCode === SMS_INSUFFICIENT_ROLE) {
+    notice = { text: `${SMS_CLEAR_ROLE_REASON}.`, retry: false }
+  } else if (unsupported) {
+    notice = {
+      text:
+        action === "clear"
+          ? `${SMS_CLEAR_AGENT_REASON}.`
+          : "Update the device agent to read messages.",
+      retry: false,
+    }
   } else if (startError && startCode !== SMS_DEVICE_OFFLINE) {
     notice = { text: xgMessage(startError), retry: true }
   } else if (readQ.error) {
@@ -273,6 +358,18 @@ function SmsSheet({
   } else if (failure !== null && !reading) {
     notice = { text: failure, retry: canRetry }
   }
+  // "Try again" repeats what failed. A clear goes back through the confirm.
+  const retryClear = action === "clear" || isSmsClear(current)
+  const retryAllowed = retryClear ? clearGate.allowed : !controlsDisabled
+  const onRetry = retryClear ? () => setConfirmOpen(true) : onRefresh
+
+  const clearAll = (where: "header" | "footer") => (
+    <ClearAllButton
+      gate={clearGate}
+      onClick={() => setConfirmOpen(true)}
+      where={where}
+    />
+  )
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -318,6 +415,7 @@ function SmsSheet({
             >
               <RefreshCwIcon className={cn(reading && "animate-spin")} />
             </Button>
+            <div className="ml-auto">{clearAll("header")}</div>
           </div>
         </SheetHeader>
 
@@ -336,8 +434,8 @@ function SmsSheet({
               tone="warn"
               testId="sms-notice"
               action={
-                notice.retry && !controlsDisabled ? (
-                  <Button variant="outline" size="xs" onClick={onRefresh}>
+                notice.retry && retryAllowed ? (
+                  <Button variant="outline" size="xs" onClick={onRetry}>
                     Try again
                   </Button>
                 ) : null
@@ -347,10 +445,12 @@ function SmsSheet({
             </Banner>
           ) : null}
 
-          {stored ? (
+          {clearing ? (
+            <LoadingRows asking label="Clearing messages…" />
+          ) : stored ? (
             <MessageList read={stored} now={now} />
           ) : latestQ.isPending || reading ? (
-            <LoadingRows asking={reading} />
+            <LoadingRows asking={reading} label="Asking the device…" />
           ) : latestQ.error ? (
             <Banner
               icon={<AlertTriangleIcon />}
@@ -383,11 +483,71 @@ function SmsSheet({
           ) : null}
         </div>
 
-        {stored?.result ? (
-          <SheetFooterInfo read={stored} now={now} />
+        {stored?.result && !clearing ? (
+          <SheetFooterInfo
+            read={stored}
+            now={now}
+            clearAction={clearAll("footer")}
+          />
         ) : null}
       </SheetContent>
+
+      <DestroyDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Clear all messages?"
+        description={smsClearConfirmText(stored?.result?.total ?? null)}
+        warning={
+          <span className="font-medium text-foreground">
+            This can't be undone.
+          </span>
+        }
+        confirmLabel="Clear all"
+        pendingLabel="Clearing…"
+        confirmDisabled={!clearGate.allowed}
+        onConfirm={async () => {
+          await onClear()
+          setConfirmOpen(false)
+        }}
+      />
     </Sheet>
+  )
+}
+
+/**
+ * "Clear all", in the header (labelled) and beside the full-store warning
+ * (compact). Disabled with the reason as its tooltip; the span keeps the
+ * tooltip alive on a disabled button, which swallows pointer events.
+ */
+function ClearAllButton({
+  gate,
+  onClick,
+  where,
+}: {
+  gate: ReturnType<typeof smsClearGate>
+  onClick: () => void
+  where: "header" | "footer"
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            variant="destructive"
+            size={where === "header" ? "sm" : "xs"}
+            disabled={!gate.allowed}
+            onClick={onClick}
+            data-testid={`sms-clear-${where}`}
+          >
+            {where === "header" ? <Trash2Icon data-icon="inline-start" /> : null}
+            Clear all
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {gate.reason ?? "Delete every message on the SIM and modem"}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -422,12 +582,10 @@ function Banner({
   )
 }
 
-function LoadingRows({ asking }: { asking: boolean }) {
+function LoadingRows({ asking, label }: { asking: boolean; label: string }) {
   return (
     <div className="flex flex-col gap-3" data-testid="sms-loading">
-      {asking ? (
-        <p className="text-xs text-muted-foreground">Asking the device…</p>
-      ) : null}
+      {asking ? <p className="text-xs text-muted-foreground">{label}</p> : null}
       {[0, 1, 2].map((i) => (
         <div key={i} className="flex flex-col gap-1.5 rounded-md border px-3 py-2.5">
           <Skeleton className="h-3 w-32" />
@@ -509,20 +667,38 @@ function MessageRow({ message: m, now }: { message: SmsMessage; now: number }) {
   )
 }
 
-function SheetFooterInfo({ read, now }: { read: SmsRead; now: number }) {
+function SheetFooterInfo({
+  read,
+  now,
+  clearAction,
+}: {
+  read: SmsRead
+  now: number
+  /** Offered beside the full-store warning, the case clearing exists for. */
+  clearAction: React.ReactNode
+}) {
   const result = read.result!
   const at = read.completedAt ?? read.createdAt
   const warnings = smsFullStoreWarnings(result.storage)
+  const storage = smsStorageSummary(result.storage)
+  const verb = isSmsClear(read) ? "Cleared" : "Read"
   return (
     <div
       className="flex flex-col gap-1.5 border-t border-border px-4 py-3 text-xs text-muted-foreground"
       data-testid="sms-footer"
     >
       <p>
-        <span title={formatDateTime(at)}>Read {smsAgo(at, now) ?? "at an unknown time"}</span>
+        <span title={formatDateTime(at)}>
+          {verb} {smsAgo(at, now) ?? "at an unknown time"}
+        </span>
         {" · "}
         {smsShowingLabel(result)}
       </p>
+      {storage ? (
+        <p data-testid="sms-storage" title="Messages stored / capacity">
+          Stored: {storage}
+        </p>
+      ) : null}
       {result.partial ? (
         <p>The device ran out of time, so some messages may be missing.</p>
       ) : null}
@@ -532,15 +708,22 @@ function SheetFooterInfo({ read, now }: { read: SmsRead; now: number }) {
           couldn't be decoded.
         </p>
       ) : null}
-      {warnings.map((w) => (
-        <p
-          key={w}
-          className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400 [&>svg]:mt-px [&>svg]:size-3.5 [&>svg]:shrink-0"
-        >
-          <AlertTriangleIcon />
-          {w}
-        </p>
-      ))}
+      {warnings.length > 0 ? (
+        <div className="flex items-start gap-2" data-testid="sms-full-warning">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {warnings.map((w) => (
+              <p
+                key={w}
+                className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400 [&>svg]:mt-px [&>svg]:size-3.5 [&>svg]:shrink-0"
+              >
+                <AlertTriangleIcon />
+                {w}
+              </p>
+            ))}
+          </div>
+          {clearAction}
+        </div>
+      ) : null}
     </div>
   )
 }

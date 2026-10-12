@@ -69,6 +69,7 @@ function read(over: Partial<SmsRead> = {}): SmsRead {
   return {
     id: "r1",
     deviceId: "d1",
+    action: "read",
     status: "ok",
     errorCode: null,
     errorMessage: null,

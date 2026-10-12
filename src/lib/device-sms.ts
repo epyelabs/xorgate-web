@@ -161,7 +161,7 @@ export function smsReadFailureMessage(
 }
 
 /** The row asked the device to clear rather than read. */
-export function isSmsClear(read: Pick<SmsRead, "action"> | null | undefined): boolean {
+export function isSmsClear(read: { action?: SmsRead["action"] } | null | undefined): boolean {
   return read?.action === "clear"
 }
 

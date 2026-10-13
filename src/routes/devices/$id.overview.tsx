@@ -8,7 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { TelemetryTable } from "@/components/telemetry-table"
 import { useLiveTelemetry } from "@xorgate/react"
 import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
-import { signalMetrics, systemMetrics } from "@/lib/capability-metrics"
+import {
+  obdMetrics,
+  signalMetrics,
+  systemMetrics,
+} from "@/lib/capability-metrics"
 import {
   formatMetricValue,
   formatUnit,
@@ -63,7 +67,13 @@ function DeviceOverviewPage() {
   const isOnline = device?.status === "online"
   const sysMetrics = systemMetrics(caps)
   const sigMetrics = signalMetrics(caps)
-  const healthMetrics = [...sysMetrics, ...sigMetrics]
+  // Of the vehicle group only the two health codes belong on the snapshot:
+  // the OBD link state and the check-engine lamp. The readings themselves
+  // live on Active Streams.
+  const vehicleHealth = obdMetrics(caps).filter(
+    (m) => m === "obd.link" || m === "obd.mil"
+  )
+  const healthMetrics = [...sysMetrics, ...sigMetrics, ...vehicleHealth]
   // Show only the newest few rows on the Overview; "View all" opens the full
   // Telemetry History tab. history is ascending, so the tail is the most recent.
   const recentTelemetry = recordedHistory.slice(-RECENT_TELEMETRY_ROWS)

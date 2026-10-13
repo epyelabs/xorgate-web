@@ -18,7 +18,12 @@
  */
 
 /** Which tab a panel sits under, mirroring the live/replay readout groups. */
-export type MetricSection = "GPS" | "Motion" | "System" | "Connectivity"
+export type MetricSection =
+  | "GPS"
+  | "Motion"
+  | "System"
+  | "Connectivity"
+  | "Vehicle"
 
 /** Tab order, and the only place the set is spelled out. */
 export const METRIC_SECTIONS: MetricSection[] = [
@@ -26,6 +31,7 @@ export const METRIC_SECTIONS: MetricSection[] = [
   "Motion",
   "System",
   "Connectivity",
+  "Vehicle",
 ]
 
 export interface ChartMetric {
@@ -82,7 +88,12 @@ export interface ChartMetricGroup {
  * same class of reason: a quaternion component is not a quantity anyone reads
  * off an axis (the Euler triple below is the same orientation in units a human
  * has intuitions about), and the other two are an enum and a bitmask, where a
- * line between two codes draws a value that never existed.
+ * line between two codes draws a value that never existed. The vehicle's
+ * `obd.link`, `obd.mil` and `obd.gear` stay out for the same reason.
+ *
+ * The Vehicle tab (v2 `peripherals.obd`) only lists panels for models that
+ * declare the field: the sheet intersects the catalog with the model, so a kit
+ * without the OBD reader never sees an empty Vehicle tab.
  */
 export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
   {
@@ -163,11 +174,11 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     metrics: [{ metric: "gps.course", label: "Course", precision: 0 }],
   },
   {
-    // The one multi-line panel in the catalog, and the reason it is allowed to
-    // be: the three axes share both a unit AND a range, so nothing is
-    // flattened by sharing a scale, and reading them apart is exactly the
-    // point. The colours come from slots 1-3, the three the palette holds to
-    // the stricter all-pairs gate.
+    // A multi-line panel, and the reason it is allowed to be: the three axes
+    // share both a unit AND a range, so nothing is flattened by sharing a
+    // scale, and reading them apart is exactly the point. The colours come
+    // from slots 1-3, the three the palette holds to the stricter all-pairs
+    // gate. The Vehicle tab's Speed and Throttle panels follow the same rule.
     id: "accel",
     section: "Motion",
     title: "Acceleration",
@@ -321,6 +332,76 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     metrics: [
       { metric: "lte.resets_24h", label: "Modem resets", precision: 0 },
     ],
+  },
+  {
+    id: "rpm",
+    section: "Vehicle",
+    title: "Engine speed",
+    unit: "rpm",
+    domain: [0, "auto"],
+    metrics: [{ metric: "obd.rpm", label: "RPM", precision: 0, defaultOn: true }],
+  },
+  {
+    // Two sensors for one quantity, on purpose (plan decision 4: GPS and OBD
+    // stay separate sensors). Same unit, same range, so they share an axis and
+    // the gap between them is the story: a GPS dropout the wheel speed rides
+    // through, or the reverse. `gps.speed` is also drawn on its own GPS panel;
+    // the visibility set is keyed by metric, so the chip is one chip in both.
+    id: "vehicle-speed",
+    section: "Vehicle",
+    title: "Speed",
+    unit: "km/h",
+    domain: [0, "auto"],
+    metrics: [
+      { metric: "obd.speed", label: "Vehicle", precision: 0, defaultOn: true },
+      { metric: "gps.speed", label: "GPS", precision: 1 },
+    ],
+  },
+  {
+    id: "coolant",
+    section: "Vehicle",
+    title: "Coolant temperature",
+    unit: "°C",
+    domain: ["auto", "auto"],
+    metrics: [
+      { metric: "obd.coolant_temp", label: "Coolant", precision: 0, defaultOn: true },
+    ],
+  },
+  {
+    // A fuel level keeps its zero for the same reason CPU load does: "13% of a
+    // tank" has to read at a glance. A refuel is the one step up; everything
+    // else slopes down.
+    id: "fuel-level",
+    section: "Vehicle",
+    title: "Fuel level",
+    unit: "%",
+    domain: [0, "auto"],
+    metrics: [
+      { metric: "obd.fuel_level", label: "Fuel level", precision: 0 },
+    ],
+  },
+  {
+    // Pedal is what the driver asked for, throttle is what the engine gave;
+    // both are percentages of travel, so they share the panel.
+    id: "throttle",
+    section: "Vehicle",
+    title: "Throttle and pedal",
+    unit: "%",
+    domain: [0, "auto"],
+    metrics: [
+      { metric: "obd.throttle", label: "Throttle", precision: 0 },
+      { metric: "obd.pedal", label: "Pedal", precision: 0 },
+    ],
+  },
+  {
+    // Monotonic, like the modem reset counter: the slope is the speed, the
+    // delta over the window the distance, as a cross-check on the GPS route.
+    id: "odometer",
+    section: "Vehicle",
+    title: "Odometer",
+    unit: "km",
+    domain: ["auto", "auto"],
+    metrics: [{ metric: "obd.odometer", label: "Odometer", precision: 0 }],
   },
 ]
 

@@ -249,6 +249,9 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
         statusLed?: { r: number; g: number; b: number } | null
       }
     | undefined
+  // v2 peripherals (obd2-bluetooth-integration): an OBD-II reader the model
+  // expects on every kit. Its Bluetooth address is a device setting, not here.
+  const obd = caps.schemaVersion === 2 ? caps.peripherals?.obd : undefined
 
   return (
     <div className="flex flex-col gap-2">
@@ -286,6 +289,21 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
       <Chips label="GPS fields" items={caps.comm?.gps?.fields} />
       <Chips label="Signal fields" items={caps.comm?.signal?.fields} />
       <Chips label="System fields" items={caps.system?.fields} />
+      {obd ? (
+        <>
+          <Field label="OBD adapter" value={obd.adapter} />
+          <Field label="OBD transport" value={obd.transport} />
+          <Field
+            label="OBD poll rate"
+            value={`${obd.rateHz ?? 1} Hz${obd.rateHz == null ? " (default)" : ""}`}
+          />
+          <Chips
+            label={`OBD fields (${obd.fields.length})`}
+            items={obd.fields}
+          />
+          <Chips label="OBD info" items={obd.info} />
+        </>
+      ) : null}
     </div>
   )
 }

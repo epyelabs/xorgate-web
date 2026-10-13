@@ -7,6 +7,7 @@ import {
   imuAccelMetrics,
   imuEulerMetrics,
   imuQuaternionMetrics,
+  obdMetrics,
   signalMetrics,
   systemMetrics,
 } from "@/lib/capability-metrics"
@@ -22,6 +23,7 @@ import {
   type ReplayTrace,
 } from "@/components/live-location-map"
 import { TelemetryPanel } from "@/components/telemetry-panel"
+import { VehicleReadout } from "@/components/vehicle-readout"
 import { ImuPanel } from "@/components/imu-panel"
 import { GpsStrip } from "@/components/gps-strip"
 
@@ -82,7 +84,11 @@ export function StreamsView({
     { title: "Signal", metrics: signalMetrics(caps) },
     { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
-  const hasTelemetry = imuGroups.length > 0 || telemetryGroups.length > 0
+  // The vehicle (OBD-II) group has its own card rather than a TelemetryReadout:
+  // its rows depend on the adapter's link state (see VehicleReadout).
+  const hasVehicle = obdMetrics(caps).length > 0
+  const hasTelemetry =
+    imuGroups.length > 0 || telemetryGroups.length > 0 || hasVehicle
 
   // Map View: a split location-first layout. The map holds the left half; the
   // right half stacks the telemetry sections, the live 3D orientation of the
@@ -126,6 +132,8 @@ export function StreamsView({
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <TelemetryPanel caps={caps} latest={latest} />
 
+          <VehicleReadout caps={caps} latest={latest} className="shrink-0" />
+
           <ImuPanel caps={caps} latest={latest} view={imuView} />
 
           {videoSlot != null ? (
@@ -163,6 +171,9 @@ export function StreamsView({
                   metrics={g.metrics}
                 />
               ))}
+              {hasVehicle ? (
+                <VehicleReadout caps={caps} latest={latest} />
+              ) : null}
             </div>
           </section>
         </>

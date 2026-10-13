@@ -32,6 +32,29 @@ export const METRIC_LABELS: Record<string, string> = {
   "system.throttled": "Throttle",
   "system.rail_5v": "5V Rail",
   "system.psu_max_current": "PSU Max",
+  // Vehicle OBD-II (v2 `peripherals.obd`), in the agent's canonical field
+  // order so orderMetrics() places the group after the box's own telemetry.
+  "obd.rpm": "RPM",
+  "obd.speed": "Vehicle Speed",
+  "obd.coolant_temp": "Coolant Temp",
+  "obd.engine_load": "Engine Load",
+  "obd.throttle": "Throttle",
+  "obd.pedal": "Pedal",
+  "obd.intake_temp": "Intake Temp",
+  "obd.ambient_temp": "Ambient Temp",
+  "obd.intake_map": "Intake MAP",
+  "obd.baro": "Barometric",
+  "obd.fuel_level": "Fuel Level",
+  "obd.fuel_rate": "Fuel Rate",
+  "obd.module_voltage": "Module Voltage",
+  "obd.adapter_voltage": "Adapter Voltage",
+  "obd.run_time": "Run Time",
+  "obd.odometer": "Odometer",
+  "obd.gear": "Gear",
+  "obd.distance_since_clear": "Since DTC Clear",
+  "obd.mil": "Check Engine",
+  "obd.dtc_count": "DTC Count",
+  "obd.link": "OBD Link",
 }
 
 export function metricLabel(metric: string): string {
@@ -104,6 +127,24 @@ export const GNSS_HEALTH_LABELS: Record<number, string> = {
   3: "Unhealthy",
 }
 
+// The OBD link health code, published by the vehicle collector while it runs
+// (plan D4, same pattern as lte.gnss_health). 2 is the only state in which the
+// other obd.* readings are current.
+export const OBD_LINK_LABELS: Record<number, string> = {
+  0: "No adapter",
+  1: "Adapter only",
+  2: "Vehicle",
+}
+
+/** `obd.link` value meaning the ECU is answering and the vehicle readings are live. */
+export const OBD_LINK_VEHICLE = 2
+
+// obd.mil is the malfunction indicator lamp, 0/1 on the wire.
+export const OBD_MIL_LABELS: Record<number, string> = {
+  0: "Off",
+  1: "On",
+}
+
 /**
  * Pivoted chart/table row: one point per timestamp, one key per metric.
  * Lived on the old use-iot-telemetry hook; the REST pivot hooks still build
@@ -124,6 +165,14 @@ export function formatMetricValue(
   if (value === null || value === undefined) return "—"
   // GNSS health is a coded state, not a quantity — show its name.
   if (metric === "lte.gnss_health") return GNSS_HEALTH_LABELS[value] ?? String(value)
+  // Vehicle OBD-II coded states: the link health code and the check-engine lamp.
+  if (metric === "obd.link") return OBD_LINK_LABELS[value] ?? String(value)
+  if (metric === "obd.mil") return OBD_MIL_LABELS[value] ?? String(value)
+  // Gear 0 is park/neutral (PID A4 reports no gear engaged), 1..n the gear.
+  if (metric === "obd.gear") return value === 0 ? "P/N" : String(Math.round(value))
+  // Counters and the odometer are whole numbers whatever the decoder sent.
+  if (metric === "obd.dtc_count" || metric === "obd.rpm" || metric === "obd.run_time")
+    return String(Math.round(value))
   // Coordinates need full precision — the default rounding mangles lat/lon.
   if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)
   // The 5V rail moves in millivolts (5.134 vs 5.089 is signal, not noise).

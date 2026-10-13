@@ -17,6 +17,7 @@ import { useDevice, useDeviceModel } from "@/queries/devices"
 import {
   gpsMetrics,
   imuMetrics,
+  obdMetrics,
   signalMetrics,
   systemMetrics,
 } from "@/lib/capability-metrics"
@@ -107,6 +108,7 @@ function DeviceReplayPage() {
       ...imuMetrics(caps),
       ...signalMetrics(caps),
       ...systemMetrics(caps),
+      ...obdMetrics(caps),
     ] as MetricName[]
   }, [caps])
   const telemetry = useReplayTelemetry(id, player, { metrics })

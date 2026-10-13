@@ -73,9 +73,22 @@ const FORGET_KEY = "device-obd-forget"
 /** 12 x 5 s: discovery runs ~10 to 20 s and the report follows within seconds. */
 const SCAN_POLL_TICKS = 12
 
-const POWER_SOURCE_OPTIONS: { value: ObdPowerSource; label: string }[] = [
-  { value: "switched", label: "Switched 12 V socket (default)" },
-  { value: "constant", label: "Hardwired, always on" },
+/**
+ * `obd.powerSource` describes the TRACKER DEVICE's feed, not the adapter's (the
+ * vehicle's OBD port powers the adapter either way, and it sleeps on its own
+ * once the engine stops). The trigger shows `label`; the list adds `description`.
+ */
+const POWER_SOURCE_OPTIONS: { value: ObdPowerSource; label: string; description: string }[] = [
+  {
+    value: "switched",
+    label: "Switched 12 V socket (default)",
+    description: "The device powers off with the ignition.",
+  },
+  {
+    value: "constant",
+    label: "Hardwired, always on",
+    description: "The device stays powered when the engine is off.",
+  },
 ]
 
 /**
@@ -426,7 +439,7 @@ export function ObdCard({
           </Field>
 
           <Field>
-            <FieldLabel htmlFor={POWER_KEY}>Power source</FieldLabel>
+            <FieldLabel htmlFor={POWER_KEY}>Device power source</FieldLabel>
             <Select
               value={resolved.powerSource}
               disabled={isPending(POWER_KEY)}
@@ -437,16 +450,18 @@ export function ObdCard({
               </SelectTrigger>
               <SelectContent>
                 {POWER_SOURCE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
+                  <SelectItem key={o.value} value={o.value} description={o.description}>
                     {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <FieldDescription>
-              Switched: the socket dies with the ignition, so polling simply stops when the engine
-              does. Hardwired: the device also pauses polling below 11.8 V and resumes above
-              12.4 V so it can never drain the battery.
+              How the tracker device itself is powered. The OBD-II adapter is powered by the
+              vehicle&apos;s port either way. On a switched socket polling simply ends when the
+              device loses power; on a hardwired install the device stops polling when the engine
+              ECU goes silent and pauses below 11.8 V (resuming above 12.4 V) so it can never
+              drain the battery.
             </FieldDescription>
           </Field>
 

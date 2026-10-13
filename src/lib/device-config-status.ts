@@ -28,6 +28,10 @@ export const CONFIG_NAMESPACES = [
   // never holds it: the cloud refuses it there and never publishes it, so it
   // resolves to `unset` and contributes no attention badge.
   "simulation",
+  // Vehicle OBD-II adapter (plans/obd2-bluetooth-integration). Accepted only
+  // for a model declaring `peripherals.obd`; elsewhere the cloud never holds
+  // it, so it resolves to `unset` like `simulation` on a real device.
+  "obd",
 ] as const
 
 export type ConfigNamespace = (typeof CONFIG_NAMESPACES)[number]
@@ -268,6 +272,14 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
       if (ns === "simulation" && !device.simulated) {
         return [ns, { state: "unset", effective }]
       }
+      // `obd` exists only for a model declaring `peripherals.obd`: the cloud
+      // refuses it elsewhere, and the agent reports an `effective.obd` block
+      // only when its hardware block carries the peripheral. A device holding
+      // neither has nothing to say about it, so an unrelated pending save must
+      // not badge the Vehicle tab of (say) an excavator.
+      if (ns === "obd" && effective === undefined && config.obd == null) {
+        return [ns, { state: "unset", effective }]
+      }
       if (behind) {
         // Offline is not a failure — the retained message is waiting for the
         // device, which converges on its next connect without anyone re-saving.
@@ -318,6 +330,7 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   cameraMount: ["media"],
   // Read-only Simulation card on General; switched from the reboot dialog.
   simulation: ["general"],
+  obd: ["vehicle"],
 }
 
 /**

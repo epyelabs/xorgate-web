@@ -22,6 +22,7 @@ import { MediaTab } from "./-components/settings/media-tab"
 import { PowerTab } from "./-components/settings/power-tab"
 import { SystemTab } from "./-components/settings/system-tab"
 import { TelemetryTab } from "./-components/settings/telemetry-tab"
+import { VehicleTab } from "./-components/settings/vehicle-tab"
 import { WebhooksTab } from "./-components/settings/webhooks-tab"
 
 // The active sub-tab lives in the URL so a specific settings group is
@@ -57,6 +58,7 @@ function DeviceSettingsPage() {
     commitRecording,
     refreshReport,
     refreshing,
+    pollReport,
     updateAgent,
     updatingAgent,
   } = useDeviceSettings(id)
@@ -204,6 +206,17 @@ function DeviceSettingsPage() {
                 configStatus={configStatus}
                 isPending={isPending}
                 commit={commit}
+                refreshReport={refreshReport}
+                refreshing={refreshing}
+              />
+            </TabsContent>
+            <TabsContent value="vehicle">
+              <VehicleTab
+                device={device}
+                configStatus={configStatus}
+                isPending={isPending}
+                commit={commit}
+                pollReport={pollReport}
                 refreshReport={refreshReport}
                 refreshing={refreshing}
               />

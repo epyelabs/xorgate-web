@@ -10,6 +10,10 @@ export const SETTINGS_TABS = [
   "telemetry",
   "media",
   "connectivity",
+  // The vehicle OBD-II adapter (plans/obd2-bluetooth-integration): the `obd`
+  // namespace plus the adapter's reported state. Shown for every device; a
+  // model without `peripherals.obd` gets one explanatory line.
+  "vehicle",
   "power",
   "system",
   // Cloud-side event routing (plans/xorgate-webhooks); not device config.
@@ -24,6 +28,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   telemetry: "Telemetry",
   media: "Media",
   connectivity: "Connectivity",
+  vehicle: "Vehicle",
   power: "Power",
   system: "System",
   webhooks: "Webhooks",

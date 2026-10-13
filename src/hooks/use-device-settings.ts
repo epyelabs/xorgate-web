@@ -9,6 +9,7 @@ import {
   type DeviceConfigPatch,
   type DeviceUiPrefsPatch,
   type LteRecoveryConfig,
+  type ObdConfig,
   type RecordingConfig,
   type TimeSyncConfig,
 } from "@xorgate/sdk"
@@ -92,6 +93,13 @@ export interface DeviceSettingsPatch {
    * field like every other one.
    */
   simulationConfig?: SimulationConfig | null
+  /**
+   * Vehicle OBD-II adapter (plans/obd2-bluetooth-integration). Routed like
+   * `cameraMount` (no legacy column); read it from `device.config.obd`. The
+   * API refuses it for a model without `peripherals.obd`, which the Vehicle
+   * tab gates on before offering a control.
+   */
+  obdConfig?: ObdConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -117,6 +125,7 @@ const CONFIG_FIELDS = {
   cellularConfig: "cellular",
   cameraMountConfig: "cameraMount",
   simulationConfig: "simulation",
+  obdConfig: "obd",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
@@ -160,6 +169,15 @@ export interface DeviceSettings {
    */
   refreshReport: () => void
   refreshing: boolean
+  /**
+   * Re-read the device row every few seconds until `done` says the report
+   * carries what the caller is waiting for, or `maxTicks` polls have passed.
+   * Resolves to whether `done` was met. Each fetch is folded into the page
+   * through the same server-owned-fields merge every other poller here uses,
+   * so a card waiting on (say) a scan result reads it off `device` like any
+   * other reported value instead of keeping a second copy of the row.
+   */
+  pollReport: (done: (device: Device) => boolean, maxTicks?: number) => Promise<boolean>
   /**
    * Ask the device to install the latest published agent build, then poll the
    * row until its reported build changes (or it comes back on the same one).
@@ -509,6 +527,34 @@ export function useDeviceSettings(id: string): DeviceSettings {
     })()
   }, [id, applyDevice])
 
+  // Generic report watcher (obd2-bluetooth-integration P3): the OBD scan is
+  // a command whose answer arrives on the config report (`effective.obd.scan`)
+  // rather than on the ack, so the card asks for the row until the scan it
+  // requested shows up. Same merge rule as `refreshReport`: server-owned
+  // fields only, never the live form state.
+  const pollReport = useCallback(
+    async (done: (device: Device) => boolean, maxTicks = 12): Promise<boolean> => {
+      for (let tick = 0; tick < maxTicks; tick++) {
+        await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
+        if (optimisticRef.current === null) return false
+        const fetched = await xg().devices.get(id)
+        serverRef.current = fetched
+        applyDevice({
+          ...(optimisticRef.current ?? fetched),
+          status: fetched.status,
+          lastSeenAt: fetched.lastSeenAt,
+          configRev: fetched.configRev,
+          obdScanRequestedAt: fetched.obdScanRequestedAt,
+          reportedConfig: fetched.reportedConfig,
+          reportedAt: fetched.reportedAt,
+        })
+        if (done(fetched)) return true
+      }
+      return false
+    },
+    [id, applyDevice]
+  )
+
   // Remote agent update (device_update_management, Phase 4). Lives here rather
   // than in the tab component for the same reason `refreshReport` does: the
   // outcome is a change in the DEVICE row, so the poll must feed the one
@@ -604,6 +650,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     commitRecording,
     refreshReport,
     refreshing,
+    pollReport,
     updateAgent,
     updatingAgent,
   }

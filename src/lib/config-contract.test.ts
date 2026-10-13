@@ -35,12 +35,15 @@ describe("config-contract.json", () => {
   it("carries the namespaces the settings tabs render", () => {
     // `simulation` is accepted only for simulated devices
     // (plans/xorgate-device-simulator); its settings card is Phase 5's.
+    // `obd` only for a model declaring `peripherals.obd`
+    // (plans/obd2-bluetooth-integration); its card is the Vehicle tab.
     expect(Object.keys(contract.namespaces).sort()).toEqual([
       "cameraMount",
       "cellular",
       "gnssAntBias",
       "imuMount",
       "lteRecovery",
+      "obd",
       "recording",
       "simulation",
       "timeSync",

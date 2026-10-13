@@ -36,7 +36,7 @@ describe("config-contract.json", () => {
     // `simulation` is accepted only for simulated devices
     // (plans/xorgate-device-simulator); its settings card is Phase 5's.
     // `obd` only for a model declaring `peripherals.obd`
-    // (plans/obd2-bluetooth-integration); its card is the Vehicle tab.
+    // (plans/obd2-bluetooth-integration); its card is the Peripherals tab.
     expect(Object.keys(contract.namespaces).sort()).toEqual([
       "cameraMount",
       "cellular",

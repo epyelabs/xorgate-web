@@ -172,7 +172,7 @@ export function TelemetryTab({
           <CardTitle>IMU mounting</CardTitle>
           <CardDescription>
             Correct roll, pitch and yaw for how the enclosure is physically
-            installed in the vehicle.
+            installed on the machine.
           </CardDescription>
           <CardAction>
             <ConfigStatusBadge status={configStatus.imuMount} />
@@ -187,7 +187,7 @@ export function TelemetryTab({
                 </FieldLabel>
                 <FieldDescription>
                   Off by default. When on, the device re-expresses roll, pitch
-                  and yaw in the vehicle&apos;s frame using the rotation below.
+                  and yaw in the machine&apos;s frame using the rotation below.
                   The raw quaternion and the sensor&apos;s factory calibration
                   are untouched; already-stored history is not rewritten.
                 </FieldDescription>
@@ -244,7 +244,7 @@ export function TelemetryTab({
                 </div>
               </div>
               <FieldDescription>
-                How the box is rotated relative to the vehicle, applied as yaw,
+                How the box is rotated relative to the machine, applied as yaw,
                 then pitch, then roll. Examples: mounted sideways (roll and
                 pitch appear swapped) → yaw 90; facing backwards (yaw off by
                 half a turn) → yaw 180; standing on its side → roll 90. Saved

@@ -23,7 +23,7 @@ export type MetricSection =
   | "Motion"
   | "System"
   | "Connectivity"
-  | "Vehicle"
+  | "OBD-II"
 
 /** Tab order, and the only place the set is spelled out. */
 export const METRIC_SECTIONS: MetricSection[] = [
@@ -31,7 +31,7 @@ export const METRIC_SECTIONS: MetricSection[] = [
   "Motion",
   "System",
   "Connectivity",
-  "Vehicle",
+  "OBD-II",
 ]
 
 export interface ChartMetric {
@@ -88,12 +88,12 @@ export interface ChartMetricGroup {
  * same class of reason: a quaternion component is not a quantity anyone reads
  * off an axis (the Euler triple below is the same orientation in units a human
  * has intuitions about), and the other two are an enum and a bitmask, where a
- * line between two codes draws a value that never existed. The vehicle's
+ * line between two codes draws a value that never existed. The OBD-II
  * `obd.link`, `obd.mil` and `obd.gear` stay out for the same reason.
  *
- * The Vehicle tab (v2 `peripherals.obd`) only lists panels for models that
+ * The OBD-II tab (v2 `peripherals.obd`) only lists panels for models that
  * declare the field: the sheet intersects the catalog with the model, so a kit
- * without the OBD reader never sees an empty Vehicle tab.
+ * without the OBD reader never sees an empty OBD-II tab.
  */
 export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
   {
@@ -178,7 +178,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // share both a unit AND a range, so nothing is flattened by sharing a
     // scale, and reading them apart is exactly the point. The colours come
     // from slots 1-3, the three the palette holds to the stricter all-pairs
-    // gate. The Vehicle tab's Speed and Throttle panels follow the same rule.
+    // gate. The OBD-II tab's Speed and Throttle panels follow the same rule.
     id: "accel",
     section: "Motion",
     title: "Acceleration",
@@ -335,7 +335,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
   },
   {
     id: "rpm",
-    section: "Vehicle",
+    section: "OBD-II",
     title: "Engine speed",
     unit: "rpm",
     domain: [0, "auto"],
@@ -347,19 +347,19 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // the gap between them is the story: a GPS dropout the wheel speed rides
     // through, or the reverse. `gps.speed` is also drawn on its own GPS panel;
     // the visibility set is keyed by metric, so the chip is one chip in both.
-    id: "vehicle-speed",
-    section: "Vehicle",
+    id: "obd-speed",
+    section: "OBD-II",
     title: "Speed",
     unit: "km/h",
     domain: [0, "auto"],
     metrics: [
-      { metric: "obd.speed", label: "Vehicle", precision: 0, defaultOn: true },
+      { metric: "obd.speed", label: "OBD", precision: 0, defaultOn: true },
       { metric: "gps.speed", label: "GPS", precision: 1 },
     ],
   },
   {
     id: "coolant",
-    section: "Vehicle",
+    section: "OBD-II",
     title: "Coolant temperature",
     unit: "°C",
     domain: ["auto", "auto"],
@@ -372,7 +372,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // tank" has to read at a glance. A refuel is the one step up; everything
     // else slopes down.
     id: "fuel-level",
-    section: "Vehicle",
+    section: "OBD-II",
     title: "Fuel level",
     unit: "%",
     domain: [0, "auto"],
@@ -384,7 +384,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // Pedal is what the driver asked for, throttle is what the engine gave;
     // both are percentages of travel, so they share the panel.
     id: "throttle",
-    section: "Vehicle",
+    section: "OBD-II",
     title: "Throttle and pedal",
     unit: "%",
     domain: [0, "auto"],
@@ -397,7 +397,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // Monotonic, like the modem reset counter: the slope is the speed, the
     // delta over the window the distance, as a cross-check on the GPS route.
     id: "odometer",
-    section: "Vehicle",
+    section: "OBD-II",
     title: "Odometer",
     unit: "km",
     domain: ["auto", "auto"],

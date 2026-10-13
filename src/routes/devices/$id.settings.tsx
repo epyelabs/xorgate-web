@@ -22,7 +22,7 @@ import { MediaTab } from "./-components/settings/media-tab"
 import { PowerTab } from "./-components/settings/power-tab"
 import { SystemTab } from "./-components/settings/system-tab"
 import { TelemetryTab } from "./-components/settings/telemetry-tab"
-import { VehicleTab } from "./-components/settings/vehicle-tab"
+import { PeripheralsTab } from "./-components/settings/peripherals-tab"
 import { WebhooksTab } from "./-components/settings/webhooks-tab"
 
 // The active sub-tab lives in the URL so a specific settings group is
@@ -210,8 +210,8 @@ function DeviceSettingsPage() {
                 refreshing={refreshing}
               />
             </TabsContent>
-            <TabsContent value="vehicle">
-              <VehicleTab
+            <TabsContent value="peripherals">
+              <PeripheralsTab
                 device={device}
                 configStatus={configStatus}
                 isPending={isPending}

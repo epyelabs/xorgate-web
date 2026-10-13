@@ -67,13 +67,13 @@ function DeviceOverviewPage() {
   const isOnline = device?.status === "online"
   const sysMetrics = systemMetrics(caps)
   const sigMetrics = signalMetrics(caps)
-  // Of the vehicle group only the two health codes belong on the snapshot:
+  // Of the OBD group only the two health codes belong on the snapshot:
   // the OBD link state and the check-engine lamp. The readings themselves
   // live on Active Streams.
-  const vehicleHealth = obdMetrics(caps).filter(
+  const obdHealth = obdMetrics(caps).filter(
     (m) => m === "obd.link" || m === "obd.mil"
   )
-  const healthMetrics = [...sysMetrics, ...sigMetrics, ...vehicleHealth]
+  const healthMetrics = [...sysMetrics, ...sigMetrics, ...obdHealth]
   // Show only the newest few rows on the Overview; "View all" opens the full
   // Telemetry History tab. history is ascending, so the tail is the most recent.
   const recentTelemetry = recordedHistory.slice(-RECENT_TELEMETRY_ROWS)

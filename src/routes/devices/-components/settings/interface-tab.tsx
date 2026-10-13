@@ -170,7 +170,7 @@ export function InterfaceTab({
                   </div>
                 </div>
                 <FieldDescription>
-                  Azimuth spins the camera around the vehicle (0 = behind, 90 =
+                  Azimuth spins the camera around the box (0 = behind, 90 =
                   right side); elevation raises it toward top-down (clamped to
                   ±85). Default: 45 / 24. Saved automatically.
                 </FieldDescription>

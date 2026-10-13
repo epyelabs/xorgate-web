@@ -31,7 +31,7 @@ const OBD_FIELDS = [
   "link",
 ]
 
-describe("vehicle (obd) metrics", () => {
+describe("OBD-II (obd) metrics", () => {
   it("labels all 21 fields, so no table header ever falls back to the raw key", () => {
     for (const f of OBD_FIELDS) {
       expect(METRIC_LABELS[`obd.${f}`], f).toBeTruthy()
@@ -43,7 +43,7 @@ describe("vehicle (obd) metrics", () => {
     // obd.link is the health code: 2 is the only state with live readings.
     expect(formatMetricValue(0, "obd.link")).toBe("No adapter")
     expect(formatMetricValue(1, "obd.link")).toBe("Adapter only")
-    expect(formatMetricValue(2, "obd.link")).toBe("Vehicle")
+    expect(formatMetricValue(2, "obd.link")).toBe("ECU answering")
     expect(formatMetricValue(7, "obd.link")).toBe("7")
     // The check-engine lamp.
     expect(formatMetricValue(0, "obd.mil")).toBe("Off")
@@ -63,7 +63,7 @@ describe("vehicle (obd) metrics", () => {
     expect(formatMetricValue(null, "obd.rpm")).toBe("—")
   })
 
-  it("orders the vehicle group after the device's own telemetry", () => {
+  it("orders the OBD group after the device's own telemetry", () => {
     const ordered = orderMetrics([
       "obd.rpm",
       "system.cpu_usage",

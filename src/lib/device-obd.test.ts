@@ -18,7 +18,7 @@ import {
 } from "./device-obd"
 
 /**
- * The Vehicle tab's decisions (obd2-bluetooth-integration P3). The ones that
+ * The Peripherals tab's decisions (obd2-bluetooth-integration P3). The ones that
  * matter: a device that has reported NO obd block renders as unknown, never
  * as "no adapter"; a save always carries the whole namespace; and "Forget"
  * leaves polling off with no adapter so the retained config cannot re-pair.
@@ -190,7 +190,7 @@ describe("obdStatusDisplay", () => {
     expect(at("disabled")).toMatchObject({ label: "Polling off", tone: "muted" })
     expect(at("not_configured").tone).toBe("muted")
     expect(at("connecting")).toMatchObject({ label: "Connecting", hint: null })
-    expect(at("live")).toMatchObject({ label: "Reading the vehicle", tone: "ok" })
+    expect(at("live")).toMatchObject({ label: "Reading the bus", tone: "ok" })
     expect(at("ecu_silent").tone).toBe("warn")
     expect(at("parked").tone).toBe("danger")
   })

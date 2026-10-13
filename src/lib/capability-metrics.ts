@@ -48,17 +48,17 @@ export function imuMetrics(caps: IoCapabilities | null): string[] {
   ]
 }
 
-// Vehicle OBD-II (v2 `peripherals.obd`, obd2-bluetooth-integration). The model
+// OBD-II peripheral (v2 `peripherals.obd`, obd2-bluetooth-integration). The model
 // declares `fields` in display order and the agent publishes `obd.<field>`;
 // this mirrors the SDK's declaredMetrics() and the backend's telemetry column
 // order (imu, system, gps, then obd in declared order). A v1 document has no
-// `peripherals` key, so it simply declares no vehicle metrics.
+// `peripherals` key, so it simply declares no OBD metrics.
 export function obdMetrics(caps: IoCapabilities | null): string[] {
   if (!caps || caps.schemaVersion !== 2) return []
   return (caps.peripherals?.obd?.fields ?? []).map((f) => `obd.${f}`)
 }
 
-/** The OBD link health code (0 no adapter, 1 adapter only, 2 vehicle answering). */
+/** The OBD link health code (0 no adapter, 1 adapter only, 2 ECU answering). */
 export const OBD_LINK_METRIC = "obd.link"
 
 // Chartable system fields: continuous quantities only — the throttle bitmask

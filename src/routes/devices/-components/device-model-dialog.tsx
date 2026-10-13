@@ -291,6 +291,7 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
       <Chips label="System fields" items={caps.system?.fields} />
       {obd ? (
         <>
+          <SubsectionTitle>OBD-II peripheral</SubsectionTitle>
           <Field label="OBD adapter" value={obd.adapter} />
           <Field label="OBD transport" value={obd.transport} />
           <Field
@@ -305,6 +306,14 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
         </>
       ) : null}
     </div>
+  )
+}
+
+// A group label inside a section, for the optional peripheral block that
+// follows the always-present capability rows.
+function SubsectionTitle({ children }: { children: string }) {
+  return (
+    <h4 className="pt-2 text-xs font-medium text-muted-foreground">{children}</h4>
   )
 }
 

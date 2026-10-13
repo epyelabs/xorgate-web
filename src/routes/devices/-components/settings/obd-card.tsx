@@ -228,9 +228,9 @@ export function ObdCard({
   return (
     <Card data-testid="obd-card">
       <CardHeader>
-        <CardTitle>Vehicle OBD-II</CardTitle>
+        <CardTitle>OBD-II adapter</CardTitle>
         <CardDescription>
-          The ELM327 adapter on the vehicle's diagnostic port and how the device polls it.
+          The ELM327 adapter on the diagnostic port and how the device polls it.
         </CardDescription>
         <CardAction>
           <ConfigStatusBadge status={configStatus.obd} />
@@ -240,10 +240,10 @@ export function ObdCard({
         <FieldGroup>
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor={ENABLED_KEY}>Poll the vehicle</FieldLabel>
+              <FieldLabel htmlFor={ENABLED_KEY}>Poll the adapter</FieldLabel>
               <FieldDescription>
                 Off by default. The kill switch for all OBD traffic: on, the device pairs with
-                the adapter below and reads the vehicle; off, it stops and reports no vehicle data.
+                the adapter below and reads the OBD-II bus; off, it stops and reports no OBD data.
               </FieldDescription>
             </FieldContent>
             <Switch
@@ -377,7 +377,7 @@ export function ObdCard({
               </SelectContent>
             </Select>
             <FieldDescription>
-              One cycle reads every selected field once. The vehicle's bus sets the ceiling; a
+              One cycle reads every selected field once. The OBD-II bus sets the ceiling; a
               slow adapter simply falls behind at higher rates.
             </FieldDescription>
           </Field>
@@ -421,7 +421,7 @@ export function ObdCard({
             <FieldDescription>
               {declared.length} field{declared.length === 1 ? "" : "s"} declared by the model.
               With none ticked (default) the device polls all of them; tick some to narrow the
-              set. Fields the vehicle does not provide are skipped either way.
+              set. Fields the bus does not provide are skipped either way.
             </FieldDescription>
           </Field>
 
@@ -455,7 +455,7 @@ export function ObdCard({
           {resolved.adapterMac !== null && canForget && (
             <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
               <p className="text-muted-foreground">
-                Forget the adapter when it is replaced or the device leaves this vehicle: the
+                Forget the adapter when it is replaced or the device is moved elsewhere: the
                 device drops the Bluetooth bond, polling turns off and the address is cleared.
               </p>
               <Button
@@ -483,7 +483,7 @@ export function ObdCard({
               drops its Bluetooth bond with{" "}
               <span className="font-mono text-foreground">{resolved.adapterMac}</span>, stops
               polling, and the address is cleared from these settings. Past sessions keep their
-              vehicle data. Setting up again means a new scan or typing the address.
+              OBD data. Setting up again means a new scan or typing the address.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

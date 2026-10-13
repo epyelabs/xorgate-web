@@ -135,7 +135,7 @@ export function MediaTab({
                       <FieldDescription>
                         Turning a camera off shuts it down completely — no
                         recording, no live view, no power drawn. Use one camera
-                        on a vehicle with a weaker power supply.
+                        on an installation with a weaker power supply.
                       </FieldDescription>
                     </FieldContent>
                     <Switch

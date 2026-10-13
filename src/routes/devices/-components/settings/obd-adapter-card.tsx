@@ -29,15 +29,15 @@ import { formatTimestamp } from "./shared"
 
 /**
  * The OBD adapter as the device reports it (plan section 9 stage 6, "trust
- * and audit"): the collector's state, the link code, the probed vehicle
+ * and audit"): the collector's state, the link code, the probed bus
  * profile and the helper's audit counters, straight off
  * `reportedConfig.effective.obd`.
  *
  * Read-only by construction, like the SIM card: there is no desired value
- * for "is the vehicle answering", so no ConfigStatusBadge. The one number an
+ * for "is the ECU answering", so no ConfigStatusBadge. The one number an
  * operator must never miss is the forbidden-command count: a non-zero value
  * is a helper bug (it tried a command outside its allowlist or over budget),
- * never a vehicle fault, so it is highlighted the moment it is above zero.
+ * never a bus fault, so it is highlighted the moment it is above zero.
  */
 
 const TONE: Record<ObdStatusDisplay["tone"], { text?: string; icon: React.ReactNode }> = {
@@ -68,7 +68,7 @@ export function ObdAdapterCard({
       <CardHeader>
         <CardTitle>OBD adapter</CardTitle>
         <CardDescription>
-          What the device reports about its adapter and the vehicle. Read-only.
+          What the device reports about its adapter and the OBD-II bus. Read-only.
         </CardDescription>
         <CardAction className="flex items-center gap-1.5">
           {device.reportedAt !== null && (
@@ -122,9 +122,9 @@ export function ObdAdapterCard({
             }
           />
           <InfoRow
-            label="Vehicle profile"
+            label="Bus profile"
             title={profile ?? undefined}
-            value={profile ?? (obd === null ? "—" : "No vehicle probed yet")}
+            value={profile ?? (obd === null ? "—" : "Nothing probed yet")}
           />
           <InfoRow label="Helper" value={obd?.helperVersion ?? "—"} />
         </dl>
@@ -172,7 +172,7 @@ export function ObdAdapterCard({
             className="border-destructive/40 text-destructive"
           >
             The OBD helper tried {forbidden} command{forbidden === 1 ? "" : "s"} outside its
-            allowlist or budget. That is a software fault on the device, not the vehicle: the
+            allowlist or budget. That is a software fault on the device, not the bus: the
             helper refused them, but report it.
           </SettingsCallout>
         )}

@@ -1,6 +1,6 @@
-// The vehicle OBD-II adapter, both halves (obd2-bluetooth-integration P3).
+// The OBD-II adapter, both halves (obd2-bluetooth-integration P3).
 //
-// Two planes meet on the Vehicle settings tab, the same split the APN card
+// Two planes meet on the Peripherals settings tab, the same split the APN card
 // keeps for cellular:
 //
 //  - the `obd` NAMESPACE (desired + status): what an operator asked for
@@ -9,7 +9,7 @@
 //    standard ConfigStatusBadge / ConfigStatusCallout like every sibling.
 //  - the reported-only runtime state under `effective.obd`: the collector's
 //    status word, the link code, where the settings came from, the probed
-//    vehicle profile, the audit counters and the last scan's candidates.
+//    bus profile, the audit counters and the last scan's candidates.
 //
 // All decisions live here, DOM-free, because the frontend vitest has no DOM;
 // the cards are thin renderers over these functions.
@@ -24,7 +24,7 @@ export type ObdFieldName = NonNullable<ObdConfig["fields"]>[number]
 /**
  * The model's OBD-II declaration, or null for a model without one. Only a v2
  * capabilities document can carry `peripherals`; a v1 document declares no
- * vehicle at all, so the Vehicle tab explains itself instead of rendering
+ * adapter at all, so the Peripherals tab explains itself instead of rendering
  * controls the API would refuse (400 on the `obd` namespace).
  */
 export function obdCapability(caps: IoCapabilities | null | undefined): ObdPeripheralCapability | null {
@@ -177,7 +177,7 @@ const OBD_STATES: readonly ObdReportedState[] = [
   "adapter_not_found",
 ]
 
-/** 0 no adapter, 1 adapter answering, 2 vehicle answering. */
+/** 0 no adapter, 1 adapter answering, 2 ECU answering. */
 export type ObdLink = 0 | 1 | 2
 
 export interface ObdScanCandidate {
@@ -210,7 +210,7 @@ export interface ObdReportedAudit {
   noData: number
   timeouts: number
   reconnects: number
-  /** forbidden_attempts + budget_violations: helper bugs, never vehicle faults. */
+  /** forbidden_attempts + budget_violations: helper bugs, never bus faults. */
   forbidden: number
   /** Distinct commands the helper has sent. */
   inventorySize: number
@@ -357,20 +357,20 @@ export function obdStatusDisplay(obd: ReportedObd | null): ObdStatusDisplay {
     case "pairing":
       return { label: "Pairing", hint: "Keep the adapter plugged in and powered while it pairs.", tone: "warn" }
     case "probing":
-      return { label: "Probing the vehicle", hint: null, tone: "warn" }
+      return { label: "Probing the bus", hint: null, tone: "warn" }
     case "live":
-      return { label: "Reading the vehicle", hint: null, tone: "ok" }
+      return { label: "Reading the bus", hint: null, tone: "ok" }
     case "ecu_silent":
       return {
         label: "Adapter only",
-        hint: "The adapter answers but the vehicle does not. Ignition off, or a protocol the adapter cannot reach.",
+        hint: "The adapter answers but the ECU does not. Ignition off, or a protocol the adapter cannot reach.",
         tone: "warn",
       }
     case "backoff":
     case "adapter_not_found":
       return {
         label: "Adapter not found",
-        hint: "The adapter is unplugged, out of range or not powered. Check the dongle and the vehicle's socket.",
+        hint: "The adapter is unplugged, out of range or not powered. Check the dongle and the diagnostic socket.",
         tone: "danger",
       }
     case "parked":
@@ -388,7 +388,7 @@ export function obdStatusDisplay(obd: ReportedObd | null): ObdStatusDisplay {
 export const OBD_LINK_LABELS: Record<ObdLink, string> = {
   0: "No adapter",
   1: "Adapter only",
-  2: "Vehicle answering",
+  2: "ECU answering",
 }
 
 /** "ISO 15765-4 (CAN 11/500) · ECUs 7E8,7E9 · 14/21 fields · ice", or null. */

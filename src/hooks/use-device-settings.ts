@@ -94,9 +94,9 @@ export interface DeviceSettingsPatch {
    */
   simulationConfig?: SimulationConfig | null
   /**
-   * Vehicle OBD-II adapter (plans/obd2-bluetooth-integration). Routed like
+   * OBD-II adapter (plans/obd2-bluetooth-integration). Routed like
    * `cameraMount` (no legacy column); read it from `device.config.obd`. The
-   * API refuses it for a model without `peripherals.obd`, which the Vehicle
+   * API refuses it for a model without `peripherals.obd`, which the Peripherals
    * tab gates on before offering a control.
    */
   obdConfig?: ObdConfig | null

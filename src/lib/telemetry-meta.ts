@@ -32,10 +32,10 @@ export const METRIC_LABELS: Record<string, string> = {
   "system.throttled": "Throttle",
   "system.rail_5v": "5V Rail",
   "system.psu_max_current": "PSU Max",
-  // Vehicle OBD-II (v2 `peripherals.obd`), in the agent's canonical field
+  // OBD-II peripheral (v2 `peripherals.obd`), in the agent's canonical field
   // order so orderMetrics() places the group after the box's own telemetry.
   "obd.rpm": "RPM",
-  "obd.speed": "Vehicle Speed",
+  "obd.speed": "OBD Speed",
   "obd.coolant_temp": "Coolant Temp",
   "obd.engine_load": "Engine Load",
   "obd.throttle": "Throttle",
@@ -127,17 +127,17 @@ export const GNSS_HEALTH_LABELS: Record<number, string> = {
   3: "Unhealthy",
 }
 
-// The OBD link health code, published by the vehicle collector while it runs
+// The OBD link health code, published by the OBD collector while it runs
 // (plan D4, same pattern as lte.gnss_health). 2 is the only state in which the
 // other obd.* readings are current.
 export const OBD_LINK_LABELS: Record<number, string> = {
   0: "No adapter",
   1: "Adapter only",
-  2: "Vehicle",
+  2: "ECU answering",
 }
 
-/** `obd.link` value meaning the ECU is answering and the vehicle readings are live. */
-export const OBD_LINK_VEHICLE = 2
+/** `obd.link` value meaning the ECU is answering and the OBD readings are live. */
+export const OBD_LINK_ECU = 2
 
 // obd.mil is the malfunction indicator lamp, 0/1 on the wire.
 export const OBD_MIL_LABELS: Record<number, string> = {
@@ -165,7 +165,7 @@ export function formatMetricValue(
   if (value === null || value === undefined) return "—"
   // GNSS health is a coded state, not a quantity — show its name.
   if (metric === "lte.gnss_health") return GNSS_HEALTH_LABELS[value] ?? String(value)
-  // Vehicle OBD-II coded states: the link health code and the check-engine lamp.
+  // OBD-II coded states: the link health code and the check-engine lamp.
   if (metric === "obd.link") return OBD_LINK_LABELS[value] ?? String(value)
   if (metric === "obd.mil") return OBD_MIL_LABELS[value] ?? String(value)
   // Gear 0 is park/neutral (PID A4 reports no gear engaged), 1..n the gear.

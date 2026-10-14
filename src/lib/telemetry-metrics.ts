@@ -12,10 +12,18 @@
  *
  * A panel never carries two units, and never a second y-axis.
  *
+ * The OBD-II section has the one place a panel carries two lines: OBD speed
+ * against GPS speed, a pair that shares a unit AND a range, so one axis tells
+ * them apart instead of flattening one of them. Every other OBD reading is its
+ * own chart, one per metric, in the order the readout grid lists them and
+ * under the label it prints (`metricLabel`, the same source).
+ *
  * Related to `capability-metrics.ts`, which answers a different question: that
  * one says what a device MODEL can report, this one says which of those the
  * graph knows how to scale. The sheet intersects the two.
  */
+
+import { metricLabel } from "@/lib/telemetry-meta"
 
 /** Which tab a panel sits under, mirroring the live/replay readout groups. */
 export type MetricSection =
@@ -72,8 +80,125 @@ export interface ChartMetricGroup {
    * temperature, voltage — and the shape is the only story.
    */
   domain: [number | "auto", number | "auto"]
+  /**
+   * The ticks to print instead of Recharts' even split of the domain. Only
+   * for a panel whose axis is a handful of states (the check-engine lamp is
+   * 0 or 1, and "0.25" is not a reading it can take).
+   */
+  ticks?: number[]
+  /**
+   * `"step"` holds each value until the next reading instead of curving
+   * between them. For a lamp or a gear a slope would draw states that never
+   * existed: the lamp was off, then it was on.
+   */
+  curve?: "step"
   metrics: ChartMetric[]
 }
+
+/**
+ * The OBD-II fields a model can declare, in the readout grid's order (the
+ * contract's `obd.fields` enum, which the device publishes as `obd.<field>`).
+ * `link` is not in it: it is the adapter's state, the card's gate rather than
+ * a reading of the car.
+ */
+export const OBD_CHART_FIELDS = [
+  "rpm",
+  "speed",
+  "coolant_temp",
+  "engine_load",
+  "throttle",
+  "pedal",
+  "intake_temp",
+  "ambient_temp",
+  "intake_map",
+  "baro",
+  "fuel_level",
+  "fuel_rate",
+  "module_voltage",
+  "adapter_voltage",
+  "run_time",
+  "odometer",
+  "gear",
+  "distance_since_clear",
+  "mil",
+  "dtc_count",
+] as const
+
+/**
+ * How each OBD reading is scaled, keyed by field.
+ *
+ * A percentage of travel or of a tank is pinned 0-100 here, unlike the box's
+ * own percentages: throttle, pedal and load are read AGAINST full travel
+ * ("half throttle"), and a quarter tank only reads as one against the whole.
+ * Voltages sit on a fixed 10-16 V, the band a 12 V system lives in, so a
+ * sagging adapter rail reads as sagging rather than being rescaled to fill
+ * the plot. Counters and clocks keep their zero; temperatures, pressure at
+ * altitude and a six-digit odometer float.
+ */
+const OBD_SCALES: Record<
+  (typeof OBD_CHART_FIELDS)[number],
+  Pick<ChartMetricGroup, "unit" | "domain" | "ticks" | "curve"> & {
+    precision: number
+    defaultOn?: boolean
+  }
+> = {
+  rpm: { unit: "rpm", domain: [0, "auto"], precision: 0, defaultOn: true },
+  speed: { unit: "km/h", domain: [0, "auto"], precision: 0, defaultOn: true },
+  coolant_temp: { unit: "°C", domain: ["auto", "auto"], precision: 0, defaultOn: true },
+  engine_load: { unit: "%", domain: [0, 100], precision: 0 },
+  throttle: { unit: "%", domain: [0, 100], precision: 0 },
+  pedal: { unit: "%", domain: [0, 100], precision: 0 },
+  intake_temp: { unit: "°C", domain: ["auto", "auto"], precision: 0 },
+  ambient_temp: { unit: "°C", domain: ["auto", "auto"], precision: 0 },
+  intake_map: { unit: "kPa", domain: [0, "auto"], precision: 0 },
+  baro: { unit: "kPa", domain: ["auto", "auto"], precision: 0 },
+  fuel_level: { unit: "%", domain: [0, 100], precision: 0, defaultOn: true },
+  fuel_rate: { unit: "L/h", domain: [0, "auto"], precision: 1 },
+  module_voltage: { unit: "V", domain: [10, 16], precision: 1 },
+  adapter_voltage: { unit: "V", domain: [10, 16], precision: 1 },
+  run_time: { unit: "s", domain: [0, "auto"], precision: 0 },
+  odometer: { unit: "km", domain: ["auto", "auto"], precision: 0 },
+  // 0 is park/neutral and a ten-speed box is the most the PID can report;
+  // held, not curved, since a car is never in gear three and a half.
+  gear: { unit: "", domain: [0, 10], precision: 0, curve: "step" },
+  distance_since_clear: { unit: "km", domain: ["auto", "auto"], precision: 0 },
+  // The lamp: off or on, drawn as a step so the plot reads as WHEN it lit.
+  mil: { unit: "", domain: [0, 1], ticks: [0, 1], precision: 0, curve: "step" },
+  dtc_count: { unit: "", domain: [0, "auto"], precision: 0, curve: "step" },
+}
+
+/**
+ * The OBD-II tab: one panel per field, in the grid's order, except that the
+ * speed panel also carries GPS speed. Two sensors for one quantity, on purpose
+ * (plan decision 4: GPS and OBD stay separate sensors). Same unit, same range,
+ * so they share an axis and the gap between them is the story: a GPS dropout
+ * the wheel speed rides through, or the reverse. `gps.speed` is also drawn on
+ * its own GPS panel; the visibility set is keyed by metric, so the chip is one
+ * chip in both.
+ */
+const OBD_GROUPS: ChartMetricGroup[] = OBD_CHART_FIELDS.map((field) => {
+  const scale = OBD_SCALES[field]
+  const metric = `obd.${field}`
+  const own: ChartMetric = {
+    metric,
+    label: metricLabel(metric),
+    precision: scale.precision,
+    defaultOn: scale.defaultOn,
+  }
+  return {
+    id: field === "speed" ? "obd-speed" : field.replace(/_/g, "-"),
+    section: "OBD-II",
+    title: field === "speed" ? "Speed" : metricLabel(metric),
+    unit: scale.unit,
+    domain: scale.domain,
+    ticks: scale.ticks,
+    curve: scale.curve,
+    metrics:
+      field === "speed"
+        ? [own, { metric: "gps.speed", label: "GPS Speed", precision: 1 }]
+        : [own],
+  }
+})
 
 /**
  * Every metric the graph knows how to plot, in the order the readouts
@@ -88,8 +213,9 @@ export interface ChartMetricGroup {
  * same class of reason: a quaternion component is not a quantity anyone reads
  * off an axis (the Euler triple below is the same orientation in units a human
  * has intuitions about), and the other two are an enum and a bitmask, where a
- * line between two codes draws a value that never existed. The OBD-II
- * `obd.link`, `obd.mil` and `obd.gear` stay out for the same reason.
+ * line between two codes draws a value that never existed. `obd.link` stays
+ * out for the same reason; the lamp and the gear are in, drawn as STEPS, since
+ * when the lamp lit is exactly the thing a replay is opened to find.
  *
  * The OBD-II tab (v2 `peripherals.obd`) only lists panels for models that
  * declare the field: the sheet intersects the catalog with the model, so a kit
@@ -178,7 +304,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
     // share both a unit AND a range, so nothing is flattened by sharing a
     // scale, and reading them apart is exactly the point. The colours come
     // from slots 1-3, the three the palette holds to the stricter all-pairs
-    // gate. The OBD-II tab's Speed and Throttle panels follow the same rule.
+    // gate. The OBD-II tab's Speed panel follows the same rule.
     id: "accel",
     section: "Motion",
     title: "Acceleration",
@@ -333,76 +459,7 @@ export const TELEMETRY_GRAPH_GROUPS: ChartMetricGroup[] = [
       { metric: "lte.resets_24h", label: "Modem resets", precision: 0 },
     ],
   },
-  {
-    id: "rpm",
-    section: "OBD-II",
-    title: "Engine speed",
-    unit: "rpm",
-    domain: [0, "auto"],
-    metrics: [{ metric: "obd.rpm", label: "RPM", precision: 0, defaultOn: true }],
-  },
-  {
-    // Two sensors for one quantity, on purpose (plan decision 4: GPS and OBD
-    // stay separate sensors). Same unit, same range, so they share an axis and
-    // the gap between them is the story: a GPS dropout the wheel speed rides
-    // through, or the reverse. `gps.speed` is also drawn on its own GPS panel;
-    // the visibility set is keyed by metric, so the chip is one chip in both.
-    id: "obd-speed",
-    section: "OBD-II",
-    title: "Speed",
-    unit: "km/h",
-    domain: [0, "auto"],
-    metrics: [
-      { metric: "obd.speed", label: "OBD", precision: 0, defaultOn: true },
-      { metric: "gps.speed", label: "GPS", precision: 1 },
-    ],
-  },
-  {
-    id: "coolant",
-    section: "OBD-II",
-    title: "Coolant temperature",
-    unit: "°C",
-    domain: ["auto", "auto"],
-    metrics: [
-      { metric: "obd.coolant_temp", label: "Coolant", precision: 0, defaultOn: true },
-    ],
-  },
-  {
-    // A fuel level keeps its zero for the same reason CPU load does: "13% of a
-    // tank" has to read at a glance. A refuel is the one step up; everything
-    // else slopes down.
-    id: "fuel-level",
-    section: "OBD-II",
-    title: "Fuel level",
-    unit: "%",
-    domain: [0, "auto"],
-    metrics: [
-      { metric: "obd.fuel_level", label: "Fuel level", precision: 0 },
-    ],
-  },
-  {
-    // Pedal is what the driver asked for, throttle is what the engine gave;
-    // both are percentages of travel, so they share the panel.
-    id: "throttle",
-    section: "OBD-II",
-    title: "Throttle and pedal",
-    unit: "%",
-    domain: [0, "auto"],
-    metrics: [
-      { metric: "obd.throttle", label: "Throttle", precision: 0 },
-      { metric: "obd.pedal", label: "Pedal", precision: 0 },
-    ],
-  },
-  {
-    // Monotonic, like the modem reset counter: the slope is the speed, the
-    // delta over the window the distance, as a cross-check on the GPS route.
-    id: "odometer",
-    section: "OBD-II",
-    title: "Odometer",
-    unit: "km",
-    domain: ["auto", "auto"],
-    metrics: [{ metric: "obd.odometer", label: "Odometer", precision: 0 }],
-  },
+  ...OBD_GROUPS,
 ]
 
 /** Flat view of the catalog, for lookups by metric name. */
@@ -424,8 +481,9 @@ export const CHART_METRIC_NAMES: string[] = [...CHART_METRICS.keys()]
  * Deliberately NOT `--chart-1..5`, which is five steps of gray: a magnitude
  * ramp, unusable for telling things apart.
  *
- * Seven is the count because the biggest tab (GPS) holds seven panels, so no
- * view ever needs an eighth.
+ * Seven was the count because the biggest tab (GPS) held seven panels. The
+ * OBD-II tab now holds twenty, so `seriesSlot` wraps: the eighth panel down
+ * takes the first hue again. That is fine for what the hue is doing there.
  *
  * Which gates are HARD here depends on the form. Almost every panel is its own
  * chart with its own title, one line and its own y-axis, so nobody has to tell
@@ -457,9 +515,14 @@ export function seriesSlot(
   metric: ChartMetric
 ): number {
   if (group.metrics.length > 1) return group.metrics.indexOf(metric)
-  return TELEMETRY_GRAPH_GROUPS.filter(
-    (g) => g.section === group.section
-  ).indexOf(group)
+  // Wrapped: the OBD-II tab holds more panels than the palette has slots,
+  // and the eighth panel down takes the first hue again. Neighbours still
+  // differ, which is all a single-line panel's colour is for.
+  return (
+    TELEMETRY_GRAPH_GROUPS.filter((g) => g.section === group.section).indexOf(
+      group
+    ) % SERIES_SLOTS
+  )
 }
 
 /** Fraction of the axis kept clear past the data, so a line never touches the frame. */

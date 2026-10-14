@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { MetricName, TelemetryHistory } from "@xorgate/sdk"
+import { chunkMetrics, mergeHistoryPages } from "@/lib/telemetry-batch"
 import { xg } from "@/lib/xorgate"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
@@ -20,13 +21,6 @@ export function telemetryInterval(fromMs: number, toMs: number): number {
   return Math.max(1, Math.ceil(spanSeconds / TARGET_BUCKETS))
 }
 
-/**
- * The API's per-request metric cap (`TelemetryHistoryParams.metric`: "at most
- * 20"). The catalog is larger than that, so a request for everything a CM5
- * declares has to go out in pieces — see `fetchHistory`.
- */
-const METRIC_CAP = 20
-
 /** One bucket: the wall-clock instant, plus each metric's average in it. */
 export type TelemetrySample = { t: number } & Record<string, number | null>
 
@@ -40,7 +34,8 @@ export interface SessionTelemetry {
 }
 
 /**
- * Every requested metric over the window, in as many calls as the cap needs.
+ * Every requested metric over the window, in as many calls as the API's
+ * per-request cap needs (`chunkMetrics`), never trimmed to fit.
  *
  * The chunks are independent reads of the same window at the same interval, so
  * their buckets land on the same instants and the pivot below merges them into
@@ -55,21 +50,12 @@ async function fetchHistory(
   interval: number,
   signal: AbortSignal
 ): Promise<TelemetryHistory> {
-  const chunks: MetricName[][] = []
-  for (let i = 0; i < metrics.length; i += METRIC_CAP)
-    chunks.push(metrics.slice(i, i + METRIC_CAP) as MetricName[])
-
   const pages = await Promise.all(
-    chunks.map((metric) =>
+    chunkMetrics(metrics as MetricName[]).map((metric) =>
       xg().telemetry.history(deviceId, { from, to, metric, interval, signal })
     )
   )
-  return {
-    readings: pages.flatMap((p) => p.readings ?? []),
-    // Every chunk asked for the same `interval`, so they echo the same width.
-    bucketSeconds: pages[0]?.bucketSeconds ?? null,
-    truncated: pages.some((p) => p.truncated),
-  }
+  return mergeHistoryPages(pages)
 }
 
 /** Long, flat readings → one row per bucket, keyed by metric. */
@@ -106,10 +92,13 @@ function pivot(history: TelemetryHistory, metrics: string[]): SessionTelemetry {
 /**
  * A replay window's telemetry, pivoted into one row per bucket.
  *
- * Every metric is fetched up front rather than only the ones currently on
- * screen, which is what makes toggling a series free: the visibility state
- * lives in the component and never reaches this cache. The alternative — the
- * visible set in the key — would put a network round trip behind every chip.
+ * `metrics` is exactly the set the caller wants drawn, and it is part of the
+ * key: the trends sheet asks only for the lines that are switched on, so a
+ * chip is a round trip, and the API is never asked for twenty charts to show
+ * four. Past the per-call cap the ask goes out in pieces (`chunkMetrics`) and
+ * comes back as one page; nothing is trimmed to fit. `keepPreviousData` keeps
+ * the charts already drawn on screen while the larger set loads, so a toggle
+ * adds a line rather than blanking the sheet.
  */
 export function useSessionTelemetry(
   deviceId: string,
@@ -143,6 +132,7 @@ export function useSessionTelemetry(
     // A closed recording's history does not change, and an open one's tail is
     // not what this sheet is for. Re-opening it inside a visit costs nothing.
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     select: (history) => pivot(history, metrics),
   })
 }

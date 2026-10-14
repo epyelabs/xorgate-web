@@ -157,6 +157,7 @@ function MetricPanel({
   samples,
   window,
   bucketSeconds,
+  loading,
   playheadTs,
   onSeek,
 }: {
@@ -167,6 +168,12 @@ function MetricPanel({
   window: { fromMs: number; toMs: number }
   /** Width the API averaged into, for the summary's honesty note. */
   bucketSeconds: number | null
+  /**
+   * A fetch is in flight for a set this panel's metric may be new to: the
+   * rows on screen are the previous set's, so an empty plot here is "not yet",
+   * not "nothing recorded".
+   */
+  loading: boolean
   playheadTs: number | null
   onSeek?: (ts: number) => void
 }) {
@@ -321,6 +328,7 @@ function MetricPanel({
             />
             <YAxis
               domain={domain}
+              ticks={group.ticks}
               width={38}
               tickLine={false}
               axisLine={false}
@@ -373,7 +381,9 @@ function MetricPanel({
                 // Recharts looks the tooltip's config entry up by `name`; the
                 // dataKey has to stay the raw metric to read the row.
                 name={seriesKey(metric.metric)}
-                type="monotone"
+                // A lamp or a gear is held until the next reading; a curve
+                // between two states draws values the car never had.
+                type={group.curve === "step" ? "stepAfter" : "monotone"}
                 stroke={`var(--color-${seriesKey(metric.metric)})`}
                 strokeWidth={2}
                 dot={false}
@@ -392,7 +402,7 @@ function MetricPanel({
         </ChartContainer>
       ) : (
         <p className="flex flex-1 items-center justify-center px-3 py-8 text-center text-xs text-muted-foreground">
-          No readings in this replay.
+          {loading ? "Loading…" : "No readings in this replay."}
         </p>
       )}
     </section>
@@ -475,22 +485,31 @@ export function TelemetryTrendsSheet({
 
   // Only metrics this device actually reports AND the catalog knows how to
   // scale. A model whose capabilities never loaded means the catalog stands
-  // alone rather than the sheet showing nothing.
+  // alone rather than the sheet showing nothing — minus the OBD-II section: a
+  // device whose declaration never arrived is not one to guess a car onto.
   const available = useMemo(() => {
     const declared = new Set(metrics)
     return metrics.length > 0
       ? CHART_METRIC_NAMES.filter((m) => declared.has(m))
-      : CHART_METRIC_NAMES
+      : CHART_METRIC_NAMES.filter((m) => !m.startsWith("obd."))
   }, [metrics])
+
+  // What actually goes to the API: the lines switched on, in catalog order.
+  // Asking for everything up front would make a chip free, but the OBD-II tab
+  // alone is past the per-call cap, and the sheet opens with a handful of
+  // lines on — fetching forty-odd to draw eight is the wrong trade.
+  const wanted = useMemo(
+    () => available.filter((m) => visible.has(m)),
+    [available, visible]
+  )
 
   const { from: fromMs, to: toMs } = window
   const range = useMemo(() => ({ from: fromMs, to: toMs }), [fromMs, toMs])
 
-  // Everything at once, not just what is on screen: the whole point is that a
-  // chip toggles instantly instead of putting a round trip behind it. The
-  // catalog is larger than the endpoint's 20-metric cap, so the hook splits
-  // the ask across calls.
-  const telemetry = useSessionTelemetry(deviceId, range, available, {
+  // Keyed on the wanted set, so a chip is a round trip; the hook keeps the
+  // previous set's rows on screen while the new one loads, and splits an ask
+  // past the cap ("Show all" on OBD-II) into as many calls as it takes.
+  const telemetry = useSessionTelemetry(deviceId, range, wanted, {
     enabled: open,
   })
 
@@ -662,6 +681,13 @@ export function TelemetryTrendsSheet({
                     <p className="py-16 text-center text-xs text-muted-foreground">
                       This device model reports nothing in this group.
                     </p>
+                  ) : !anyOn ? (
+                    // Before pending: with every chip off the query is
+                    // disabled, which react-query reports as pending forever,
+                    // and "Loading" would be a lie.
+                    <p className="py-16 text-center text-xs text-muted-foreground">
+                      Pick a metric above to plot it.
+                    </p>
                   ) : telemetry.isPending ? (
                     <p className="py-16 text-center text-xs text-muted-foreground">
                       Loading telemetry…
@@ -670,11 +696,7 @@ export function TelemetryTrendsSheet({
                     <p className="py-16 text-center text-xs text-muted-foreground">
                       Could not load telemetry: {xgMessage(telemetry.error)}
                     </p>
-                  ) : !anyOn ? (
-                    <p className="py-16 text-center text-xs text-muted-foreground">
-                      Pick a metric above to plot it.
-                    </p>
-                  ) : samples.length === 0 ? (
+                  ) : samples.length === 0 && !telemetry.isFetching ? (
                     <p className="py-16 text-center text-xs text-muted-foreground">
                       No telemetry was recorded in this window.
                     </p>
@@ -693,6 +715,7 @@ export function TelemetryTrendsSheet({
                           samples={samples}
                           window={{ fromMs, toMs }}
                           bucketSeconds={telemetry.data?.bucketSeconds ?? null}
+                          loading={telemetry.isFetching}
                           playheadTs={playheadTs}
                           onSeek={onSeek}
                         />

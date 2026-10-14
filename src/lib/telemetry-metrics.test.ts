@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest"
 import {
   axisDomain,
   CHART_METRIC_NAMES,
+  OBD_CHART_FIELDS,
   seriesSlot,
   SERIES_SLOTS,
   TELEMETRY_GRAPH_GROUPS,
   type ChartMetricGroup,
 } from "./telemetry-metrics"
+import { metricLabel } from "./telemetry-meta"
 
 /**
  * `axisDomain` is what stops a trends panel from being unreadable, and every
@@ -56,6 +58,14 @@ describe("axisDomain", () => {
 
   it("returns the catalog's own domain when there is no data to measure", () => {
     expect(axisDomain([0, "auto"], null)).toEqual([0, "auto"])
+  })
+
+  it("prints clean bounds, not binary residue", () => {
+    // Ambient temp 16-17 °C snapped to a 0.4 step: 39 * 0.4 is
+    // 15.600000000000001 in a double, and that tail reached the tick labels.
+    const [lo, hi] = axisDomain(["auto", "auto"], { min: 16, max: 17 })
+    expect(String(lo)).toBe("15.6")
+    expect(String(hi)).toBe("17.2")
   })
 })
 
@@ -109,5 +119,86 @@ describe("the catalog", () => {
       (g) => g.metrics.length > 1
     )
     for (const group of multi) expect(group.unit).toBeTruthy()
+  })
+})
+
+/**
+ * The OBD-II tab, by the owner's rule: every OBD metric the readout grid can
+ * show is a chart of its own, in the grid's order and under the grid's label,
+ * with the one exception of the speed panel, which carries GPS speed as a
+ * comparison.
+ */
+describe("the OBD-II section", () => {
+  const obd = TELEMETRY_GRAPH_GROUPS.filter((g) => g.section === "OBD-II")
+
+  it("lists all twenty OBD metrics, one panel each, in readout order", () => {
+    expect(obd.map((g) => g.metrics[0].metric)).toEqual([
+      "obd.rpm",
+      "obd.speed",
+      "obd.coolant_temp",
+      "obd.engine_load",
+      "obd.throttle",
+      "obd.pedal",
+      "obd.intake_temp",
+      "obd.ambient_temp",
+      "obd.intake_map",
+      "obd.baro",
+      "obd.fuel_level",
+      "obd.fuel_rate",
+      "obd.module_voltage",
+      "obd.adapter_voltage",
+      "obd.run_time",
+      "obd.odometer",
+      "obd.gear",
+      "obd.distance_since_clear",
+      "obd.mil",
+      "obd.dtc_count",
+    ])
+    expect(OBD_CHART_FIELDS).toHaveLength(20)
+    expect(CHART_METRIC_NAMES).not.toContain("obd.link")
+  })
+
+  it("one metric per panel, except the speed pair", () => {
+    for (const group of obd) {
+      if (group.id === "obd-speed") {
+        expect(group.metrics.map((m) => m.metric)).toEqual([
+          "obd.speed",
+          "gps.speed",
+        ])
+      } else {
+        expect(group.metrics, group.id).toHaveLength(1)
+      }
+    }
+    // Throttle and pedal are two charts now, not one.
+    expect(obd.filter((g) => g.metrics.length > 1)).toHaveLength(1)
+  })
+
+  it("uses the readout grid's labels", () => {
+    for (const group of obd) {
+      const metric = group.metrics[0].metric
+      expect(group.metrics[0].label, metric).toBe(metricLabel(metric))
+      if (group.id !== "obd-speed") expect(group.title, metric).toBe(metricLabel(metric))
+    }
+  })
+
+  it("scales percentages 0-100, voltages 10-16, gear 0-10 and the lamp 0/1", () => {
+    const by = (metric: string) => obd.find((g) => g.metrics[0].metric === metric)!
+    for (const pct of ["obd.engine_load", "obd.throttle", "obd.pedal", "obd.fuel_level"])
+      expect(by(pct).domain, pct).toEqual([0, 100])
+    for (const v of ["obd.module_voltage", "obd.adapter_voltage"])
+      expect(by(v).domain, v).toEqual([10, 16])
+    expect(by("obd.gear").domain).toEqual([0, 10])
+    expect(by("obd.mil").domain).toEqual([0, 1])
+    expect(by("obd.mil").ticks).toEqual([0, 1])
+    expect(by("obd.mil").curve).toBe("step")
+    expect(by("obd.dtc_count").domain).toEqual([0, 5])
+  })
+
+  it("opens with RPM, speed, coolant and fuel level on", () => {
+    const on = obd
+      .flatMap((g) => g.metrics)
+      .filter((m) => m.defaultOn)
+      .map((m) => m.metric)
+    expect(on).toEqual(["obd.rpm", "obd.speed", "obd.coolant_temp", "obd.fuel_level"])
   })
 })

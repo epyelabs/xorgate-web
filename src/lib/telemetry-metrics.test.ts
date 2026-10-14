@@ -59,6 +59,14 @@ describe("axisDomain", () => {
   it("returns the catalog's own domain when there is no data to measure", () => {
     expect(axisDomain([0, "auto"], null)).toEqual([0, "auto"])
   })
+
+  it("prints clean bounds, not binary residue", () => {
+    // Ambient temp 16-17 °C snapped to a 0.4 step: 39 * 0.4 is
+    // 15.600000000000001 in a double, and that tail reached the tick labels.
+    const [lo, hi] = axisDomain(["auto", "auto"], { min: 16, max: 17 })
+    expect(String(lo)).toBe("15.6")
+    expect(String(hi)).toBe("17.2")
+  })
 })
 
 describe("seriesSlot", () => {
@@ -183,6 +191,7 @@ describe("the OBD-II section", () => {
     expect(by("obd.mil").domain).toEqual([0, 1])
     expect(by("obd.mil").ticks).toEqual([0, 1])
     expect(by("obd.mil").curve).toBe("step")
+    expect(by("obd.dtc_count").domain).toEqual([0, 5])
   })
 
   it("opens with RPM, speed, coolant and fuel level on", () => {

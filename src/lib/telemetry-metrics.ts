@@ -164,7 +164,9 @@ const OBD_SCALES: Record<
   distance_since_clear: { unit: "km", domain: ["auto", "auto"], precision: 0 },
   // The lamp: off or on, drawn as a step so the plot reads as WHEN it lit.
   mil: { unit: "", domain: [0, 1], ticks: [0, 1], precision: 0, curve: "step" },
-  dtc_count: { unit: "", domain: [0, "auto"], precision: 0, curve: "step" },
+  // A count that is usually zero: a floor of five keeps a flat zero on a
+  // whole-number axis, and Recharts extends the ceiling if the car has more.
+  dtc_count: { unit: "", domain: [0, 5], precision: 0, curve: "step" },
 }
 
 /**
@@ -587,8 +589,18 @@ export function axisDomain(
     for (const snap of [step, step / 2]) {
       const low = fixedLo ? lo : Math.floor(wantMin / snap) * snap
       const high = low + 4 * step
-      if (high >= wantMax - 1e-12) return [low, high]
+      if (high >= wantMax - 1e-12) return [clean(low), clean(high)]
     }
   }
   return [wantMin, wantMax]
+}
+
+/**
+ * A bound without binary residue. `39 * 0.4` is 15.600000000000001, and the
+ * axis printed every tick of the ambient-temperature panel with that tail on
+ * it; twelve significant digits is far past anything a reading carries and
+ * well short of where a double starts to lie.
+ */
+function clean(n: number): number {
+  return Number(n.toPrecision(12))
 }

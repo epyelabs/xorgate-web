@@ -38,6 +38,9 @@ export const METRIC_LABELS: Record<string, string> = {
   "obd.speed": "OBD Speed",
   "obd.coolant_temp": "Coolant Temp",
   "obd.engine_load": "Engine Load",
+  "obd.engine_torque": "Engine Torque",
+  "obd.engine_torque_pct": "Actual Torque",
+  "obd.reference_torque": "Reference Torque",
   "obd.throttle": "Throttle",
   "obd.pedal": "Pedal",
   "obd.intake_temp": "Intake Temp",
@@ -156,6 +159,12 @@ export interface HistoryPoint {
   [metric: string]: number | undefined
 }
 
+/** `toFixed` that never renders a rounded-away negative as "-0.0". */
+function fixedNoNegativeZero(value: number, digits: number): string {
+  const text = value.toFixed(digits)
+  return Number(text) === 0 ? (0).toFixed(digits) : text
+}
+
 export function formatMetricValue(
   value: number | null | undefined,
   metric?: string
@@ -173,6 +182,13 @@ export function formatMetricValue(
   // Counters and the odometer are whole numbers whatever the decoder sent.
   if (metric === "obd.dtc_count" || metric === "obd.rpm" || metric === "obd.run_time")
     return String(Math.round(value))
+  // Torque: the PID 62 percentage and the PID 63 reference are whole numbers,
+  // the derived Nm keeps the device's one decimal. Both signed quantities go
+  // negative under engine braking; a reading that rounds to zero shows as 0,
+  // never "-0".
+  if (metric === "obd.engine_torque_pct" || metric === "obd.reference_torque")
+    return String(Math.round(value) || 0)
+  if (metric === "obd.engine_torque") return fixedNoNegativeZero(value, 1)
   // Coordinates need full precision — the default rounding mangles lat/lon.
   if (metric === "gps.lat" || metric === "gps.lon") return value.toFixed(6)
   // The 5V rail moves in millivolts (5.134 vs 5.089 is signal, not noise).

@@ -131,12 +131,15 @@ describe("the catalog", () => {
 describe("the OBD-II section", () => {
   const obd = TELEMETRY_GRAPH_GROUPS.filter((g) => g.section === "OBD-II")
 
-  it("lists all twenty OBD metrics, one panel each, in readout order", () => {
+  it("lists all twenty-three OBD metrics, one panel each, in readout order", () => {
     expect(obd.map((g) => g.metrics[0].metric)).toEqual([
       "obd.rpm",
       "obd.speed",
       "obd.coolant_temp",
       "obd.engine_load",
+      "obd.engine_torque",
+      "obd.engine_torque_pct",
+      "obd.reference_torque",
       "obd.throttle",
       "obd.pedal",
       "obd.intake_temp",
@@ -154,7 +157,7 @@ describe("the OBD-II section", () => {
       "obd.mil",
       "obd.dtc_count",
     ])
-    expect(OBD_CHART_FIELDS).toHaveLength(20)
+    expect(OBD_CHART_FIELDS).toHaveLength(23)
     expect(CHART_METRIC_NAMES).not.toContain("obd.link")
   })
 
@@ -192,6 +195,33 @@ describe("the OBD-II section", () => {
     expect(by("obd.mil").ticks).toEqual([0, 1])
     expect(by("obd.mil").curve).toBe("step")
     expect(by("obd.dtc_count").domain).toEqual([0, 5])
+  })
+
+  it("lets signed torque go below zero and keeps the reference on a zero floor", () => {
+    const by = (metric: string) => obd.find((g) => g.metrics[0].metric === metric)!
+    expect(by("obd.engine_torque")).toMatchObject({
+      id: "engine-torque",
+      title: "Engine Torque",
+      unit: "Nm",
+      domain: ["auto", "auto"],
+    })
+    expect(by("obd.engine_torque").metrics[0].precision).toBe(1)
+    expect(by("obd.engine_torque_pct")).toMatchObject({
+      id: "engine-torque-pct",
+      title: "Actual Torque",
+      unit: "%",
+      domain: ["auto", "auto"],
+    })
+    expect(by("obd.engine_torque_pct").metrics[0].precision).toBe(0)
+    expect(by("obd.reference_torque")).toMatchObject({
+      id: "reference-torque",
+      title: "Reference Torque",
+      unit: "Nm",
+      domain: [0, "auto"],
+    })
+    expect(by("obd.reference_torque").metrics[0].precision).toBe(0)
+    for (const m of ["obd.engine_torque", "obd.engine_torque_pct", "obd.reference_torque"])
+      expect(by(m).metrics, m).toHaveLength(1)
   })
 
   it("opens with RPM, speed, coolant and fuel level on", () => {

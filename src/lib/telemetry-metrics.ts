@@ -106,6 +106,9 @@ export const OBD_CHART_FIELDS = [
   "speed",
   "coolant_temp",
   "engine_load",
+  "engine_torque",
+  "engine_torque_pct",
+  "reference_torque",
   "throttle",
   "pedal",
   "intake_temp",
@@ -146,6 +149,12 @@ const OBD_SCALES: Record<
   speed: { unit: "km/h", domain: [0, "auto"], precision: 0, defaultOn: true },
   coolant_temp: { unit: "°C", domain: ["auto", "auto"], precision: 0, defaultOn: true },
   engine_load: { unit: "%", domain: [0, 100], precision: 0 },
+  // Torque is signed: engine braking drives it negative (PID 62 spans -125 to
+  // 130 %), so neither axis is pinned at zero. The reference is a per-engine
+  // constant, kept on a zero floor so a flat line reads as its true size.
+  engine_torque: { unit: "Nm", domain: ["auto", "auto"], precision: 1 },
+  engine_torque_pct: { unit: "%", domain: ["auto", "auto"], precision: 0 },
+  reference_torque: { unit: "Nm", domain: [0, "auto"], precision: 0 },
   throttle: { unit: "%", domain: [0, 100], precision: 0 },
   pedal: { unit: "%", domain: [0, 100], precision: 0 },
   intake_temp: { unit: "°C", domain: ["auto", "auto"], precision: 0 },

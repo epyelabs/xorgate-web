@@ -9,7 +9,7 @@ import {
 } from "@/lib/telemetry-meta"
 
 // The OBD group's own grid. The Map View's METRIC_GRID draws one column per
-// metric so a small group sits on one row; a model declares up to 21 OBD
+// metric so a small group sits on one row; a model declares up to 24 OBD
 // fields, so this card wraps tiles at a fixed minimum width instead and the
 // row count follows the container.
 const OBD_GRID =

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import contract from "@/lib/config-contract.json"
 import {
   formatMetricValue,
   METRIC_LABELS,
@@ -6,7 +7,11 @@ import {
   orderMetrics,
 } from "./telemetry-meta"
 
-/** The closed `obd.<field>` vocabulary (SDK ObdField), in the agent's order. */
+/**
+ * The closed `obd.<field>` vocabulary (the contract's `obd.fields` enum), in
+ * the agent's order. The torque trio is appended after `link` (PIDs 62/63 and
+ * the derived Nm), so it is listed here as the contract spells it.
+ */
 const OBD_FIELDS = [
   "rpm",
   "speed",
@@ -29,10 +34,19 @@ const OBD_FIELDS = [
   "mil",
   "dtc_count",
   "link",
+  "engine_torque_pct",
+  "reference_torque",
+  "engine_torque",
 ]
 
 describe("OBD-II (obd) metrics", () => {
-  it("labels all 21 fields, so no table header ever falls back to the raw key", () => {
+  it("matches the contract's closed field vocabulary", () => {
+    expect(OBD_FIELDS).toEqual(
+      contract.namespaces.obd.jsonSchema.properties.fields.items.enum
+    )
+  })
+
+  it("labels all 24 fields, so no table header ever falls back to the raw key", () => {
     for (const f of OBD_FIELDS) {
       expect(METRIC_LABELS[`obd.${f}`], f).toBeTruthy()
       expect(metricLabel(`obd.${f}`)).not.toBe(`obd.${f}`)
@@ -61,6 +75,36 @@ describe("OBD-II (obd) metrics", () => {
     expect(formatMetricValue(88.46, "obd.coolant_temp")).toBe("88.5")
     expect(formatMetricValue(13.84, "obd.module_voltage")).toBe("13.8")
     expect(formatMetricValue(null, "obd.rpm")).toBe("—")
+  })
+
+  it("labels the torque trio and places it right after engine load", () => {
+    expect(metricLabel("obd.engine_torque")).toBe("Engine Torque")
+    expect(metricLabel("obd.engine_torque_pct")).toBe("Actual Torque")
+    expect(metricLabel("obd.reference_torque")).toBe("Reference Torque")
+    const keys = Object.keys(METRIC_LABELS)
+    const at = keys.indexOf("obd.engine_load")
+    expect(keys.slice(at, at + 5)).toEqual([
+      "obd.engine_load",
+      "obd.engine_torque",
+      "obd.engine_torque_pct",
+      "obd.reference_torque",
+      "obd.throttle",
+    ])
+  })
+
+  it("formats torque: whole percent and reference, one-decimal Nm, signed", () => {
+    expect(formatMetricValue(42.6, "obd.engine_torque_pct")).toBe("43")
+    expect(formatMetricValue(-18.4, "obd.engine_torque_pct")).toBe("-18")
+    expect(formatMetricValue(-125, "obd.engine_torque_pct")).toBe("-125")
+    expect(formatMetricValue(-0.3, "obd.engine_torque_pct")).toBe("0")
+    expect(formatMetricValue(280, "obd.reference_torque")).toBe("280")
+    expect(formatMetricValue(279.6, "obd.reference_torque")).toBe("280")
+    expect(formatMetricValue(119.6, "obd.engine_torque")).toBe("119.6")
+    expect(formatMetricValue(5.25, "obd.engine_torque")).toBe("5.3")
+    expect(formatMetricValue(-50.4, "obd.engine_torque")).toBe("-50.4")
+    expect(formatMetricValue(-350, "obd.engine_torque")).toBe("-350.0")
+    expect(formatMetricValue(-0.02, "obd.engine_torque")).toBe("0.0")
+    expect(formatMetricValue(null, "obd.engine_torque")).toBe("—")
   })
 
   it("orders the OBD group after the device's own telemetry", () => {

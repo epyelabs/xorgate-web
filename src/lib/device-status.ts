@@ -92,9 +92,9 @@ export interface DeviceStatusDotModel {
 }
 
 /**
- * What the System card's status dot shows, or null when it shows nothing:
- * offline (a stale code says nothing about now) or no `system.led_state`
- * reading. Unlike the header chip it is shown while healthy too (green).
+ * The Device status dialog's model (and the System card dot's, which also
+ * hides it while healthy), or null: offline (a stale code says nothing about
+ * now) or no `system.led_state` reading.
  */
 export function deviceStatusDotModel({
   ledState,

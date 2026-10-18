@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import {
+  HEALTHY_STATUS_CODE,
   deviceStatusDotModel,
   type DeviceStatusDotModel,
 } from "@/lib/device-status"
@@ -39,8 +40,8 @@ export function DeviceStatusDialogContent({
 
 /**
  * The status LED as a coloured dot beside the System card's title (plan §7
- * R1b): the LED's colour for the current `system.led_state` (green while
- * healthy), no text. Click opens the state, its meaning and the reported
+ * R1b): the LED's colour for the current `system.led_state`, no text. Not
+ * rendered while healthy (R1f). Click opens the state, its meaning and the reported
  * faults and the colour key. Renders nothing while the device is offline or has no reading.
  * Live feeds it the live `latest`, replay the `latest` at the playhead.
  */
@@ -56,7 +57,9 @@ export function DeviceStatusDot({
   className?: string
 }) {
   const model = deviceStatusDotModel({ ledState, healthFlags, online })
-  if (!model) return null
+  // Healthy shows nothing (plan §7 R1f): the dot, like the header chip, is an
+  // exception marker.
+  if (!model || model.code === HEALTHY_STATUS_CODE) return null
   return (
     <Dialog>
       <Tooltip>

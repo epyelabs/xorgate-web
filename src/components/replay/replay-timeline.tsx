@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react"
 import {
-  ActivityIcon,
   PauseIcon,
   PlayIcon,
   SkipBackIcon,
@@ -93,10 +92,9 @@ export function ReplayTimelineBar({
       ? deviceStatusFor(statusRunAt(statusRuns, hoverTs)?.code)
       : null
 
-  const toggleOverlay = () => {
-    const next = !overlayPref
-    setOverlayPref(next)
-    writeStatusOverlayPref(next)
+  const setOverlay = (on: boolean) => {
+    setOverlayPref(on)
+    writeStatusOverlayPref(on)
   }
 
   const pct = (ts: number) => ((ts - timeline.from) / span) * 100
@@ -281,36 +279,52 @@ export function ReplayTimelineBar({
           </Label>
         </div>
 
-        {/* The overlay toggle is the only status control in the row: the
-            colour key lives in the Device status dialog (System card dot,
-            header chip), plan §7 R1d. */}
-        <div className="flex items-center">
+        {/* Device status overlay: the same switch + label as "Skip gaps"
+            (plan §7 R1f). The only status control in the row: the colour key
+            lives in the Device status dialog (System card dot, header chip).
+            Without runs it is disabled, with a tooltip on the wrapper (a
+            disabled switch fires no pointer events). */}
+        {hasStatus ? (
+          <div className="flex items-center gap-1.5">
+            <Switch
+              id="replay-device-status"
+              data-testid="device-status-toggle"
+              checked={overlayOn}
+              onCheckedChange={(v) => setOverlay(v === true)}
+            />
+            <Label
+              htmlFor="replay-device-status"
+              className="text-xs text-muted-foreground"
+              title="Paint the device status LED's state onto the timeline"
+            >
+              Device status
+            </Label>
+          </div>
+        ) : (
           <Tooltip>
             <TooltipTrigger asChild>
-              {/* Span wrapper: a disabled button fires no pointer events, so
-                  the tooltip explaining why would never open on it. */}
-              <span className="inline-flex" tabIndex={hasStatus ? -1 : 0}>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Device status"
-                  aria-pressed={overlayOn}
-                  disabled={!hasStatus}
+              <div
+                className="flex items-center gap-1.5"
+                tabIndex={0}
+                data-testid="device-status-toggle-wrapper"
+              >
+                <Switch
+                  id="replay-device-status"
                   data-testid="device-status-toggle"
-                  className="aria-pressed:bg-muted aria-pressed:text-foreground"
-                  onClick={toggleOverlay}
+                  checked={false}
+                  disabled
+                />
+                <Label
+                  htmlFor="replay-device-status"
+                  className="text-xs text-muted-foreground"
                 >
-                  <ActivityIcon
-                    className={cn("size-3.5", overlayOn && "text-primary")}
-                  />
-                </Button>
-              </span>
+                  Device status
+                </Label>
+              </div>
             </TooltipTrigger>
-            <TooltipContent>
-              {hasStatus ? "Device status" : "No device status in this session"}
-            </TooltipContent>
+            <TooltipContent>No device status in this session</TooltipContent>
           </Tooltip>
-        </div>
+        )}
 
         <div className="ml-auto flex items-baseline gap-2 text-xs tabular-nums">
           <span className="font-medium">{formatDateTime(player.playheadTs)}</span>

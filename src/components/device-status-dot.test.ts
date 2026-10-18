@@ -14,21 +14,32 @@ const wrap = (el: ReturnType<typeof createElement>) =>
   renderToStaticMarkup(createElement(TooltipProvider, null, el))
 
 describe("DeviceStatusDot", () => {
-  it("is a labelled button with the LED colour, green while healthy", () => {
+  it("is a labelled button with the LED colour, no text", () => {
     const html = wrap(
       createElement(DeviceStatusDot, {
-        ledState: 0,
-        healthFlags: 0,
+        ledState: 3,
+        healthFlags: 4,
         online: true,
       })
     )
     expect(html).toContain('aria-label="Device status"')
     expect(html).toContain('data-testid="device-status-dot"')
     expect(html).toContain("cursor-pointer")
-    expect(html).toContain("background-color:#22c55e")
+    expect(html).toContain("background-color:#a855f7")
     expect(html).toContain('aria-haspopup="dialog"')
-    // No text label beside the dot.
-    expect(html).not.toContain(">Healthy<")
+    expect(html).not.toContain(">Network recovering<")
+  })
+
+  it("is not rendered while healthy (R1f)", () => {
+    expect(
+      wrap(
+        createElement(DeviceStatusDot, {
+          ledState: 0,
+          healthFlags: 0,
+          online: true,
+        })
+      )
+    ).toBe("")
   })
 
   it("takes the current code's colour", () => {

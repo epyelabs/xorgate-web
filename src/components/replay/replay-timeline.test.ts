@@ -74,20 +74,27 @@ const segments = (html: string) =>
 describe("ReplayTimelineBar device status overlay", () => {
   it("is off by default: toggle unpressed, no track segments", () => {
     const html = render()
-    expect(tag(html, "device-status-toggle")).toContain('aria-pressed="false"')
+    const toggle = tag(html, "device-status-toggle")
+    expect(toggle).toContain('role="switch"')
+    expect(toggle).toContain('aria-checked="false"')
+    // Styled like "Skip gaps": a Switch with a "Device status" label.
+    expect(html).toMatch(
+      /for="replay-device-status"[^>]*>Device status<\/label>/
+    )
     expect(segments(html)).toBe(0)
   })
 
   it("restores a persisted 'on' and paints one segment per run", () => {
     store.set(STATUS_OVERLAY_STORAGE_KEY, "1")
     const html = render()
-    expect(tag(html, "device-status-toggle")).toContain('aria-pressed="true"')
+    expect(tag(html, "device-status-toggle")).toContain('aria-checked="true"')
     expect(segments(html)).toBe(3)
     expect(html).toContain('data-code="3"')
     expect(html).toContain("background-color:#a855f7")
     // R1d: no info / colour-key button in the row, on or off.
     expect(html).not.toContain("device-status-key-button")
     expect(html).not.toContain("lucide-info")
+    expect(html).not.toContain("lucide-activity")
   })
 
   it("keeps the panel's scrubber geometry whether on or off", () => {
@@ -105,8 +112,9 @@ describe("ReplayTimelineBar device status overlay", () => {
     store.set(STATUS_OVERLAY_STORAGE_KEY, "1")
     const html = render([])
     const toggle = tag(html, "device-status-toggle")
-    expect(toggle).toContain('aria-pressed="false"')
+    expect(toggle).toContain('aria-checked="false"')
     expect(toggle).toContain('disabled=""')
+    expect(html).toContain('data-testid="device-status-toggle-wrapper"')
     expect(segments(html)).toBe(0)
   })
 })

@@ -38,6 +38,12 @@ describe("DeviceStatusChip", () => {
     expect(html).toContain("(no flags set)")
   })
 
+  it("is a button that opens the shared Device status dialog", () => {
+    const html = render({ ledState: 3, healthFlags: 4, online: true })
+    expect(html).toMatch(/<button[^>]*data-testid="device-status-chip"/)
+    expect(html).toContain('aria-haspopup="dialog"')
+  })
+
   it("renders nothing while healthy or offline", () => {
     expect(render({ ledState: 0, healthFlags: 0, online: true })).toBe("")
     expect(render({ ledState: 5, healthFlags: 1, online: false })).toBe("")

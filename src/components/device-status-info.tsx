@@ -1,8 +1,8 @@
 import { deviceStatusKey, type DeviceStatusDotModel } from "@/lib/device-status"
 
-// Shared bodies of the two device-status dialogs: the replay scrubber's colour
-// key (every code) and the System card dot's detail (the current code). One
-// row component so both draw the swatch, label and meaning identically.
+// Body of the "Device status" dialog (opened from the System card dot and the
+// header chip): the current state, its faults, and the colour key of every
+// code (plan §7 R1d: the key lives here, not behind a replay info button).
 
 export const APPROXIMATE_STATUS_NOTE =
   "Approximate: built from overview buckets, not exact samples."
@@ -65,10 +65,17 @@ export function DeviceStatusKeyList({
 }
 
 /**
- * The System card dot's detail: the current state (swatch, label, meaning),
- * the faults the agent reports behind it, and where the reading comes from.
+ * The dialog body: the current state (swatch, label, meaning), the faults the
+ * agent reports behind it, where the reading comes from, and the colour key
+ * (with the approximation note when the replay's runs came from the overview).
  */
-export function DeviceStatusDetail({ model }: { model: DeviceStatusDotModel }) {
+export function DeviceStatusDetail({
+  model,
+  source = null,
+}: {
+  model: DeviceStatusDotModel
+  source?: "insight" | "overview" | null
+}) {
   return (
     <div className="flex flex-col gap-3" data-testid="device-status-detail">
       <DeviceStatusEntry {...model} />
@@ -89,6 +96,10 @@ export function DeviceStatusDetail({ model }: { model: DeviceStatusDotModel }) {
         as <code>system.led_state</code>, with the faults behind it as{" "}
         <code>system.health_flags</code>.
       </p>
+      <section className="flex flex-col gap-2 border-t pt-3">
+        <h3 className="font-medium text-foreground">Colour key</h3>
+        <DeviceStatusKeyList source={source} />
+      </section>
     </div>
   )
 }

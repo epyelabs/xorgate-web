@@ -29,6 +29,7 @@ import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
 import { TelemetryTrendsSheet } from "@/components/replay/telemetry-trends-sheet"
 import { DeviceStatusChip } from "@/components/device-status-chip"
+import { DeviceStatusSourceContext } from "@/lib/device-status-context"
 
 interface ReplaySearch {
   session?: string
@@ -200,163 +201,166 @@ function DeviceReplayPage() {
     )
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3",
-        viewType === "map" && "h-full min-h-0"
-      )}
-    >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Button size="icon-sm" variant="ghost" asChild>
-          <Link
-            to="/devices/$id/media"
-            params={{ id }}
-            title="Back to recordings"
-            aria-label="Back to recordings"
-          >
-            <ArrowLeftIcon className="size-4" />
-          </Link>
-        </Button>
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-          <h1 className="text-sm font-semibold tracking-tight">
-            Replay · <span className="font-mono">{title}</span>
-          </h1>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatDateTime(timeline.from)} —{" "}
-            {formatDateTime(timeline.to)} ·{" "}
-            {formatDuration(timeline.to - timeline.from)}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {unsynced ? (
-            <Badge
-              variant="outline"
-              title="The device clock was not synchronized when this was recorded — times may be wrong."
+    // The Device status dialog's colour key notes when this replay's status
+    // runs are approximate (built from overview buckets).
+    <DeviceStatusSourceContext.Provider value={telemetry.statusRunsSource}>
+      <div
+        className={cn(
+          "flex flex-col gap-3",
+          viewType === "map" && "h-full min-h-0"
+        )}
+      >
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Button size="icon-sm" variant="ghost" asChild>
+            <Link
+              to="/devices/$id/media"
+              params={{ id }}
+              title="Back to recordings"
+              aria-label="Back to recordings"
             >
-              clock unsynced
-            </Badge>
-          ) : null}
-          {anyOpen ? (
-            <Badge
-              variant="secondary"
-              title="Still uploading — this replay covers up to the last uploaded segment. Reload to extend."
-            >
-              <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
-              Receiving
-            </Badge>
-          ) : null}
-          {hasPartial ? (
-            <Badge
-              variant="outline"
-              title="Includes segments cut mid-recording (power loss or crash) — marked on the timeline."
-            >
-              partial
-            </Badge>
-          ) : null}
-          {/* The status LED at the playhead (hidden while healthy). A
-              reading older than the system group's staleness window is not
-              in `latest`, so a gap in the recording hides the chip too. */}
-          <DeviceStatusChip
-            ledState={telemetry.latest["system.led_state"]?.value}
-            healthFlags={telemetry.latest["system.health_flags"]?.value}
-            online
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {/* The same telemetry the readouts print one instant of, over the
-              whole window. The playhead rides into it and a click rides back
-              out, so a spike found on a chart seeks the footage that explains
-              it. */}
-          <TelemetryTrendsSheet
-            deviceId={id}
-            window={{ from: timeline.from, to: timeline.to }}
-            metrics={metrics ?? []}
-            // Whole seconds: the marker still tracks playback, without
-            // re-rendering every panel on each animation frame.
-            playheadTs={Math.round(player.playheadTs / 1000) * 1000}
-            onSeek={player.seek}
-          />
-          {/* Local (non-persisted) view toggle; the initial value follows the
-              device's saved Active Streams view. */}
-          <div className="flex items-center gap-1">
-            {(["card", "map"] as const).map((v) => (
-              <Button
-                key={v}
-                size="sm"
-                variant={viewType === v ? "secondary" : "ghost"}
-                onClick={() => setViewType(v)}
-              >
-                {v === "card" ? "Card" : "Map"}
-              </Button>
-            ))}
+              <ArrowLeftIcon className="size-4" />
+            </Link>
+          </Button>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h1 className="text-sm font-semibold tracking-tight">
+              Replay · <span className="font-mono">{title}</span>
+            </h1>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatDateTime(timeline.from)} —{" "}
+              {formatDateTime(timeline.to)} ·{" "}
+              {formatDuration(timeline.to - timeline.from)}
+            </span>
           </div>
+          <div className="flex items-center gap-2">
+            {unsynced ? (
+              <Badge
+                variant="outline"
+                title="The device clock was not synchronized when this was recorded — times may be wrong."
+              >
+                clock unsynced
+              </Badge>
+            ) : null}
+            {anyOpen ? (
+              <Badge
+                variant="secondary"
+                title="Still uploading — this replay covers up to the last uploaded segment. Reload to extend."
+              >
+                <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+                Receiving
+              </Badge>
+            ) : null}
+            {hasPartial ? (
+              <Badge
+                variant="outline"
+                title="Includes segments cut mid-recording (power loss or crash) — marked on the timeline."
+              >
+                partial
+              </Badge>
+            ) : null}
+            {/* The status LED at the playhead (hidden while healthy). A
+                reading older than the system group's staleness window is not
+                in `latest`, so a gap in the recording hides the chip too. */}
+            <DeviceStatusChip
+              ledState={telemetry.latest["system.led_state"]?.value}
+              healthFlags={telemetry.latest["system.health_flags"]?.value}
+              online
+            />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {/* The same telemetry the readouts print one instant of, over the
+                whole window. The playhead rides into it and a click rides back
+                out, so a spike found on a chart seeks the footage that explains
+                it. */}
+            <TelemetryTrendsSheet
+              deviceId={id}
+              window={{ from: timeline.from, to: timeline.to }}
+              metrics={metrics ?? []}
+              // Whole seconds: the marker still tracks playback, without
+              // re-rendering every panel on each animation frame.
+              playheadTs={Math.round(player.playheadTs / 1000) * 1000}
+              onSeek={player.seek}
+            />
+            {/* Local (non-persisted) view toggle; the initial value follows the
+                device's saved Active Streams view. */}
+            <div className="flex items-center gap-1">
+              {(["card", "map"] as const).map((v) => (
+                <Button
+                  key={v}
+                  size="sm"
+                  variant={viewType === v ? "secondary" : "ghost"}
+                  onClick={() => setViewType(v)}
+                >
+                  {v === "card" ? "Card" : "Map"}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </header>
+
+        {unsynced ? (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            This was recorded while the device clock was unsynchronized —
+            wall-clock times may be wrong, and telemetry alignment cannot be
+            trusted.
+          </p>
+        ) : null}
+        {anyOpen ? (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Still uploading — this replay covers up to the last uploaded segment.
+            Reload the page to extend it.
+          </p>
+        ) : null}
+        {videoExpired ? (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            This session&apos;s video has expired — recordings are kept for 90
+            days. Recorded telemetry is kept forever and still replays below.
+          </p>
+        ) : null}
+        {noVideoInRange ? (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            No video recorded in this time range (or it has expired — recordings
+            are kept for 90 days). Recorded telemetry still replays below.
+          </p>
+        ) : null}
+        {telemetry.error ? (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            Recorded telemetry failed to load ({xgMessage(telemetry.error)}) —
+            video still plays; reload the page to retry.
+          </p>
+        ) : null}
+
+        <div className={cn(viewType === "map" && "min-h-0 flex-1")}>
+          <StreamsView
+            viewType={viewType}
+            caps={caps}
+            latest={telemetry.latest}
+            imuView={imuView}
+            position={telemetry.position}
+            track={[]}
+            course={telemetry.course}
+            following={following}
+            onFollowingChange={setFollowing}
+            videoSlot={videoSlot}
+            replayTrace={{
+              route: telemetry.routeLines,
+              traveled: telemetry.traveledLines,
+            }}
+            gpsEmptyLabel={
+              telemetry.loading
+                ? "Loading recorded telemetry…"
+                : telemetry.hasGps
+                  ? "No GPS at this point in the recording"
+                  : "No GPS recorded in this replay"
+            }
+          />
         </div>
-      </header>
 
-      {unsynced ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          This was recorded while the device clock was unsynchronized —
-          wall-clock times may be wrong, and telemetry alignment cannot be
-          trusted.
-        </p>
-      ) : null}
-      {anyOpen ? (
-        <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          Still uploading — this replay covers up to the last uploaded segment.
-          Reload the page to extend it.
-        </p>
-      ) : null}
-      {videoExpired ? (
-        <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          This session&apos;s video has expired — recordings are kept for 90
-          days. Recorded telemetry is kept forever and still replays below.
-        </p>
-      ) : null}
-      {noVideoInRange ? (
-        <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          No video recorded in this time range (or it has expired — recordings
-          are kept for 90 days). Recorded telemetry still replays below.
-        </p>
-      ) : null}
-      {telemetry.error ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          Recorded telemetry failed to load ({xgMessage(telemetry.error)}) —
-          video still plays; reload the page to retry.
-        </p>
-      ) : null}
-
-      <div className={cn(viewType === "map" && "min-h-0 flex-1")}>
-        <StreamsView
-          viewType={viewType}
-          caps={caps}
-          latest={telemetry.latest}
-          imuView={imuView}
-          position={telemetry.position}
-          track={[]}
-          course={telemetry.course}
-          following={following}
-          onFollowingChange={setFollowing}
-          videoSlot={videoSlot}
-          replayTrace={{
-            route: telemetry.routeLines,
-            traveled: telemetry.traveledLines,
-          }}
-          gpsEmptyLabel={
-            telemetry.loading
-              ? "Loading recorded telemetry…"
-              : telemetry.hasGps
-                ? "No GPS at this point in the recording"
-                : "No GPS recorded in this replay"
-          }
+        <ReplayTimelineBar
+          player={player}
+          timeline={timeline}
+          statusRuns={telemetry.statusRuns}
         />
       </div>
-
-      <ReplayTimelineBar
-        player={player}
-        timeline={timeline}
-        statusRuns={telemetry.statusRuns}
-        statusRunsSource={telemetry.statusRunsSource}
-      />
-    </div>
+    </DeviceStatusSourceContext.Provider>
   )
 }

@@ -69,6 +69,28 @@ describe("DeviceStatusDetail", () => {
     expect(html).toContain("<li>Cloud link down</li>")
   })
 
+  it("ends with the colour key of every code", () => {
+    const model = deviceStatusDotModel({ ledState: 2, online: true })!
+    const html = renderToStaticMarkup(
+      createElement(DeviceStatusDetail, { model })
+    )
+    const key = html.slice(html.indexOf("Colour key"))
+    expect(html.indexOf("Colour key")).toBeGreaterThan(
+      html.indexOf("Reported faults")
+    )
+    for (const code of [0, 1, 2, 3, 4, 5, 6]) {
+      expect(key).toContain(`data-code="${code}"`)
+    }
+    expect(key).toContain("Agent down")
+    expect(html).not.toContain("Approximate:")
+    const approx = renderToStaticMarkup(
+      createElement(DeviceStatusDetail, { model, source: "overview" })
+    )
+    expect(approx).toContain(
+      "Approximate: built from overview buckets, not exact samples."
+    )
+  })
+
   it("says None when no faults are set", () => {
     const model = deviceStatusDotModel({
       ledState: 0,

@@ -29,7 +29,6 @@ import {
   statusRunAt,
   writeStatusOverlayPref,
 } from "@/lib/device-status"
-import { DeviceStatusKeyButton } from "./device-status-key"
 import {
   REPLAY_RATES,
   deviceStatusFor,
@@ -69,18 +68,17 @@ function coverageRuns(timeline: Timeline): { fromTs: number; toTs: number }[] {
  * a segment in the LED's colour over the coverage blocks (healthy is a faint
  * green tint), under the gap hatching and cut ticks. Off by default; the
  * viewer's choice is remembered in localStorage. The overlay never changes the
- * panel's height: no extra lane, no legend (the colour key is a dialog).
+ * panel's height: no extra lane, no legend; the colour key is a section of
+ * the Device status dialog (System card dot, header chip).
  */
 export function ReplayTimelineBar({
   player,
   timeline,
   statusRuns = [],
-  statusRunsSource = null,
 }: {
   player: UseReplayPlayer
   timeline: Timeline
   statusRuns?: StatusRun[]
-  statusRunsSource?: "insight" | "overview" | null
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [hoverTs, setHoverTs] = useState<number | null>(null)
@@ -283,7 +281,10 @@ export function ReplayTimelineBar({
           </Label>
         </div>
 
-        <div className="flex items-center gap-0.5">
+        {/* The overlay toggle is the only status control in the row: the
+            colour key lives in the Device status dialog (System card dot,
+            header chip), plan §7 R1d. */}
+        <div className="flex items-center">
           <Tooltip>
             <TooltipTrigger asChild>
               {/* Span wrapper: a disabled button fires no pointer events, so
@@ -309,10 +310,6 @@ export function ReplayTimelineBar({
               {hasStatus ? "Device status" : "No device status in this session"}
             </TooltipContent>
           </Tooltip>
-          <DeviceStatusKeyButton
-            visible={overlayOn}
-            source={statusRunsSource}
-          />
         </div>
 
         <div className="ml-auto flex items-baseline gap-2 text-xs tabular-nums">

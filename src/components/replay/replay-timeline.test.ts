@@ -59,7 +59,6 @@ function render(statusRuns: StatusRun[] = RUNS): string {
         player: PLAYER,
         timeline: TIMELINE,
         statusRuns,
-        statusRunsSource: "insight",
       })
     )
   )
@@ -77,10 +76,6 @@ describe("ReplayTimelineBar device status overlay", () => {
     const html = render()
     expect(tag(html, "device-status-toggle")).toContain('aria-pressed="false"')
     expect(segments(html)).toBe(0)
-    // The colour-key button is reserved but invisible while off.
-    const key = tag(html, "device-status-key-button")
-    expect(key).toContain('aria-hidden="true"')
-    expect(key).toMatch(/class="[^"]*\binvisible\b/)
   })
 
   it("restores a persisted 'on' and paints one segment per run", () => {
@@ -90,9 +85,9 @@ describe("ReplayTimelineBar device status overlay", () => {
     expect(segments(html)).toBe(3)
     expect(html).toContain('data-code="3"')
     expect(html).toContain("background-color:#a855f7")
-    expect(tag(html, "device-status-key-button")).not.toMatch(
-      /class="[^"]*\binvisible\b/
-    )
+    // R1d: no info / colour-key button in the row, on or off.
+    expect(html).not.toContain("device-status-key-button")
+    expect(html).not.toContain("lucide-info")
   })
 
   it("keeps the panel's scrubber geometry whether on or off", () => {

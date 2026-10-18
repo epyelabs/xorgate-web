@@ -7,6 +7,19 @@ export function systemMetrics(caps: IoCapabilities | null): string[] {
   return (caps?.system?.fields ?? []).map((f) => `system.${f}`)
 }
 
+// The status LED's telemetry (code + fault bitmask). Fetched, recorded and
+// pickable like any system field, but never a readout tile: the System card
+// shows it as a coloured dot beside its title (plan §7 R1b).
+export const DEVICE_STATUS_METRICS: ReadonlySet<string> = new Set([
+  "system.led_state",
+  "system.health_flags",
+])
+
+/** System fields as readout tiles: systemMetrics() minus the status LED pair. */
+export function systemReadoutMetrics(caps: IoCapabilities | null): string[] {
+  return systemMetrics(caps).filter((m) => !DEVICE_STATUS_METRICS.has(m))
+}
+
 export function signalMetrics(caps: IoCapabilities | null): string[] {
   return (caps?.comm?.signal?.fields ?? []).map((f) => `lte.${f}`)
 }

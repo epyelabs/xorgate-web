@@ -1,4 +1,4 @@
-import { Fragment } from "react"
+import { Fragment, type ReactNode } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { LatestReading } from "@xorgate/sdk"
@@ -33,19 +33,25 @@ function MetricRow({
 }
 
 // Titled key/value card that shows a subsystem's metrics as plain text.
+// `titleAdornment` sits right after the title (the System card's status dot).
 export function TelemetryReadout({
   title,
+  titleAdornment,
   latest,
   metrics,
 }: {
   title: string
+  titleAdornment?: ReactNode
   latest: Record<string, LatestReading>
   metrics: string[]
 }) {
   return (
     <Card size="sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{title}</CardTitle>
+        <CardTitle className="flex items-center gap-1 text-sm">
+          {title}
+          {titleAdornment}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col">
         {metrics.map((m, i) => (

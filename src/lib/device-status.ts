@@ -1,4 +1,5 @@
 import {
+  DEVICE_STATUS_CODES,
   decodeHealthFlags,
   deviceStatusFor,
   type StatusRun,
@@ -65,27 +66,115 @@ export function statusRunAt(runs: StatusRun[], ts: number): StatusRun | null {
   return null
 }
 
-export interface StatusLegendEntry {
+/** One-line meaning of each `system.led_state` code, for the colour key. */
+const STATUS_MEANINGS: Record<number, string> = {
+  0: "Everything is working: GPS fixed, network and cloud link up.",
+  1: "The agent is starting up and has not checked its subsystems yet.",
+  2: "GPS is waiting for a position fix.",
+  3: "The network is recovering: LTE or the cloud link is down.",
+  4: "The device is hot and the CPU is being throttled.",
+  5: "The power supply voltage is too low (undervoltage).",
+  6: "The device agent crashed or stopped and is not running.",
+}
+
+/** The one-line meaning of a code (its label for a code the table lacks). */
+export function deviceStatusMeaning(code: number): string {
+  return STATUS_MEANINGS[code] ?? deviceStatusFor(code)?.label ?? String(code)
+}
+
+export interface DeviceStatusDotModel {
   code: number
   label: string
   color: string
-  /** Total time spent in this code across the runs, ms. */
-  totalMs: number
+  meaning: string
+  /** Labels of the set health flags ("Reported faults"), lowest bit first. */
+  faults: string[]
 }
 
-/** One entry per code present in the runs, ascending by code (severity). */
-export function statusLegend(runs: StatusRun[]): StatusLegendEntry[] {
-  const totals = new Map<number, number>()
-  for (const r of runs) {
-    totals.set(
-      r.code,
-      (totals.get(r.code) ?? 0) + Math.max(0, r.toTs - r.fromTs)
-    )
+/**
+ * What the System card's status dot shows, or null when it shows nothing:
+ * offline (a stale code says nothing about now) or no `system.led_state`
+ * reading. Unlike the header chip it is shown while healthy too (green).
+ */
+export function deviceStatusDotModel({
+  ledState,
+  healthFlags,
+  online,
+}: {
+  ledState?: number | null
+  healthFlags?: number | null
+  online: boolean
+}): DeviceStatusDotModel | null {
+  if (!online) return null
+  const status = deviceStatusFor(ledState)
+  if (!status) return null
+  return {
+    code: status.code,
+    label: status.label,
+    color: status.color,
+    meaning: deviceStatusMeaning(status.code),
+    faults:
+      typeof healthFlags === "number"
+        ? decodeHealthFlags(healthFlags).map((f) => f.label)
+        : [],
   }
-  return [...totals.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([code, totalMs]) => {
-      const status = deviceStatusFor(code)!
-      return { code, label: status.label, color: status.color, totalMs }
-    })
+}
+
+export interface DeviceStatusKeyEntry {
+  code: number
+  label: string
+  color: string
+  meaning: string
+}
+
+/**
+ * The colour key: every code in DEVICE_STATUS_CODES (not only the ones a
+ * replay contains), by severity, with its LED colour and a one-line meaning.
+ */
+export function deviceStatusKey(): DeviceStatusKeyEntry[] {
+  return Object.entries(DEVICE_STATUS_CODES)
+    .map(([k, v]) => ({ code: Number(k), ...v }))
+    .sort((a, b) => a.code - b.code)
+    .map(({ code, label, color }) => ({
+      code,
+      label,
+      color,
+      meaning: deviceStatusMeaning(code),
+    }))
+}
+
+/** localStorage key of the replay scrubber's device-status overlay toggle. */
+export const STATUS_OVERLAY_STORAGE_KEY = "xg.replay.statusOverlay"
+
+type PrefStorage = Pick<Storage, "getItem" | "setItem">
+
+function defaultStorage(): PrefStorage | null {
+  try {
+    return globalThis.localStorage ?? null
+  } catch {
+    return null
+  }
+}
+
+/** The viewer's overlay choice; off by default and whenever storage fails. */
+export function readStatusOverlayPref(
+  storage: PrefStorage | null = defaultStorage()
+): boolean {
+  try {
+    return storage?.getItem(STATUS_OVERLAY_STORAGE_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+/** Remembers the overlay choice; a storage failure only loses the memory. */
+export function writeStatusOverlayPref(
+  on: boolean,
+  storage: PrefStorage | null = defaultStorage()
+): void {
+  try {
+    storage?.setItem(STATUS_OVERLAY_STORAGE_KEY, on ? "1" : "0")
+  } catch {
+    // Private window / blocked site data: the toggle still works this visit.
+  }
 }

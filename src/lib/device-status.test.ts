@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
 import type { StatusRun } from "@xorgate/react"
 import {
+  STATUS_OVERLAY_STORAGE_KEY,
   deviceStatusChipModel,
-  statusLegend,
+  deviceStatusDotModel,
+  deviceStatusKey,
+  readStatusOverlayPref,
   statusRunAt,
+  writeStatusOverlayPref,
 } from "./device-status"
 
 describe("deviceStatusChipModel", () => {
@@ -64,18 +68,81 @@ describe("statusRunAt", () => {
   })
 })
 
-describe("statusLegend", () => {
-  it("lists only the codes present, by severity, with their total time", () => {
-    expect(statusLegend(RUNS)).toEqual([
-      { code: 0, label: "Healthy", color: "#22c55e", totalMs: 20_000 },
-      {
-        code: 3,
-        label: "Network recovering",
-        color: "#a855f7",
-        totalMs: 15_000,
+describe("deviceStatusKey", () => {
+  it("lists every code by severity with its LED colour and a meaning", () => {
+    const key = deviceStatusKey()
+    expect(key.map((k) => k.code)).toEqual([0, 1, 2, 3, 4, 5, 6])
+    expect(key[0]).toMatchObject({ label: "Healthy", color: "#22c55e" })
+    expect(key[3]).toMatchObject({
+      label: "Network recovering",
+      color: "#a855f7",
+    })
+    expect(key[3].meaning).toMatch(/LTE or the cloud link is down/)
+    for (const k of key) expect(k.meaning.length).toBeGreaterThan(10)
+  })
+})
+
+function memoryStorage() {
+  const m = new Map<string, string>()
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+  }
+}
+
+describe("status overlay preference", () => {
+  it("defaults off, persists on, and survives a throwing storage", () => {
+    const store = memoryStorage()
+    expect(readStatusOverlayPref(store)).toBe(false)
+    writeStatusOverlayPref(true, store)
+    expect(store.getItem(STATUS_OVERLAY_STORAGE_KEY)).toBe("1")
+    expect(readStatusOverlayPref(store)).toBe(true)
+    writeStatusOverlayPref(false, store)
+    expect(readStatusOverlayPref(store)).toBe(false)
+
+    const broken = {
+      getItem: () => {
+        throw new Error("SecurityError")
       },
-      { code: 5, label: "Undervoltage", color: "#ef4444", totalMs: 2_000 },
-    ])
-    expect(statusLegend([])).toEqual([])
+      setItem: () => {
+        throw new Error("QuotaExceededError")
+      },
+    }
+    expect(readStatusOverlayPref(broken)).toBe(false)
+    expect(() => writeStatusOverlayPref(true, broken)).not.toThrow()
+    expect(readStatusOverlayPref(null)).toBe(false)
+  })
+})
+
+describe("deviceStatusDotModel", () => {
+  it("shows healthy as green, with no faults", () => {
+    expect(
+      deviceStatusDotModel({ ledState: 0, healthFlags: 0, online: true })
+    ).toMatchObject({
+      code: 0,
+      label: "Healthy",
+      color: "#22c55e",
+      faults: [],
+    })
+  })
+
+  it("carries the meaning and the decoded faults when unhealthy", () => {
+    const m = deviceStatusDotModel({
+      ledState: 3,
+      healthFlags: 4 | 8,
+      online: true,
+    })
+    expect(m).toMatchObject({
+      code: 3,
+      color: "#a855f7",
+      faults: ["LTE down", "Cloud link down"],
+    })
+    expect(m?.meaning).toMatch(/LTE or the cloud link is down/)
+  })
+
+  it("is hidden offline or without a reading", () => {
+    expect(deviceStatusDotModel({ ledState: 5, online: false })).toBeNull()
+    expect(deviceStatusDotModel({ ledState: null, online: true })).toBeNull()
+    expect(deviceStatusDotModel({ online: true })).toBeNull()
   })
 })

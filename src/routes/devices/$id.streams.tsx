@@ -4,6 +4,7 @@ import { requireWorkspace } from "@/lib/auth-guard"
 import { useLiveBlock, useLiveTelemetry } from "@xorgate/react"
 import { xgMessage } from "@/lib/xorgate"
 import { useDevice, useDeviceModel } from "@/queries/devices"
+import { useLiveDeviceStatus } from "@/store/presence"
 import {
   StreamsSkeleton,
   StreamsView,
@@ -24,6 +25,8 @@ function DeviceStreamsPage() {
   // no request and no skeleton; the poll keeps prefs/config current behind it.
   const deviceQuery = useDevice(id)
   const device = deviceQuery.data ?? null
+  // Presence-aware status (MQTT overlay on the 20 s poll), as in the header.
+  const online = useLiveDeviceStatus(device ?? undefined)?.status === "online"
   const modelQuery = useDeviceModel(device?.deviceModelId)
   const caps = modelQuery.data?.ioCapabilities ?? null
   // Per-camera enables from the device's recording config (keyed by stream key;
@@ -119,6 +122,7 @@ function DeviceStreamsPage() {
         following={following}
         onFollowingChange={setFollowing}
         videoSlot={videoSlot}
+        deviceOnline={online}
       />
     )
   }
@@ -146,6 +150,7 @@ function DeviceStreamsPage() {
           following={following}
           onFollowingChange={setFollowing}
           videoSlot={videoSlot}
+          deviceOnline={online}
         />
       )}
     </div>

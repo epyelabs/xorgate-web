@@ -11,7 +11,7 @@ import { useRecentTelemetry } from "@/hooks/use-recent-telemetry"
 import {
   obdMetrics,
   signalMetrics,
-  systemMetrics,
+  systemReadoutMetrics,
 } from "@/lib/capability-metrics"
 import {
   formatMetricValue,
@@ -65,7 +65,9 @@ function DeviceOverviewPage() {
   } = useRecentTelemetry(id)
 
   const isOnline = device?.status === "online"
-  const sysMetrics = systemMetrics(caps)
+  // The status LED pair is not a tile (plan §7 R1b): the header chip
+  // carries it while unhealthy, the Active Streams System card as a dot.
+  const sysMetrics = systemReadoutMetrics(caps)
   const sigMetrics = signalMetrics(caps)
   // Of the OBD group only the two health codes belong on the snapshot:
   // the OBD link state and the check-engine lamp. The readings themselves

@@ -4,6 +4,8 @@ import {
   missingCapabilities,
   obdMetrics,
   producibleMetricKeys,
+  systemMetrics,
+  systemReadoutMetrics,
   telemetryMetricOptions,
 } from "./capability-metrics"
 
@@ -74,5 +76,25 @@ describe("the pickers", () => {
     expect(missingCapabilities(["metric:obd.rpm"], v2Plain)).toEqual([
       "metric:obd.rpm",
     ])
+  })
+})
+
+describe("systemReadoutMetrics", () => {
+  const withLed: IoCapabilities = {
+    schemaVersion: 2,
+    system: {
+      platform: "rpi-cm5",
+      fields: ["cpu_usage", "throttled", "led_state", "health_flags"],
+    },
+  }
+
+  it("drops the status LED pair from the tiles but keeps it producible", () => {
+    expect(systemReadoutMetrics(withLed)).toEqual([
+      "system.cpu_usage",
+      "system.throttled",
+    ])
+    expect(systemMetrics(withLed)).toContain("system.led_state")
+    expect(producibleMetricKeys(withLed).has("system.health_flags")).toBe(true)
+    expect(systemReadoutMetrics(null)).toEqual([])
   })
 })

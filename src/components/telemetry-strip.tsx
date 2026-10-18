@@ -34,7 +34,7 @@ import {
   imuEulerMetrics,
   imuQuaternionMetrics,
   signalMetrics,
-  systemMetrics,
+  systemReadoutMetrics,
 } from "@/lib/capability-metrics"
 import {
   formatMetricValue,
@@ -200,7 +200,9 @@ export function TelemetryStrip({
     },
     {
       key: "system",
-      metrics: systemMetrics(caps).filter((m) => !STRIP_HIDDEN_SYSTEM.has(m)),
+      metrics: systemReadoutMetrics(caps).filter(
+        (m) => !STRIP_HIDDEN_SYSTEM.has(m)
+      ),
     },
     { key: "signal", metrics: signalMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)

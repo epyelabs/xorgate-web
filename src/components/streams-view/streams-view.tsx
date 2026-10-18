@@ -9,7 +9,7 @@ import {
   imuQuaternionMetrics,
   obdMetrics,
   signalMetrics,
-  systemMetrics,
+  systemReadoutMetrics,
 } from "@/lib/capability-metrics"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -23,6 +23,7 @@ import {
   type ReplayTrace,
 } from "@/components/live-location-map"
 import { TelemetryPanel } from "@/components/telemetry-panel"
+import { DeviceStatusDot } from "@/components/device-status-dot"
 import { ObdReadout } from "@/components/obd-readout"
 import { ImuPanel } from "@/components/imu-panel"
 import { GpsStrip } from "@/components/gps-strip"
@@ -51,6 +52,10 @@ export interface StreamsViewProps {
   // Copy for the map's no-position overlay; the live default reads as
   // "waiting", replay passes recording-truth wording instead.
   gpsEmptyLabel?: string
+  // Gates the System card's status dot: live passes the device's presence
+  // (a stale LED code says nothing about now); replay omits it (true), the
+  // dot following the playhead's `latest`.
+  deviceOnline?: boolean
 }
 
 /**
@@ -73,6 +78,7 @@ export function StreamsView({
   videoSlot,
   replayTrace,
   gpsEmptyLabel = "Waiting for GPS fix…",
+  deviceOnline = true,
 }: StreamsViewProps) {
   const imuGroups = [
     { label: "Orientation", metrics: imuQuaternionMetrics(caps) },
@@ -80,7 +86,7 @@ export function StreamsView({
     { label: "Acceleration", metrics: imuAccelMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
   const telemetryGroups = [
-    { title: "System", metrics: systemMetrics(caps) },
+    { title: "System", metrics: systemReadoutMetrics(caps) },
     { title: "Signal", metrics: signalMetrics(caps) },
     { title: "GPS / Location", metrics: gpsMetrics(caps) },
   ].filter((g) => g.metrics.length > 0)
@@ -130,7 +136,7 @@ export function StreamsView({
             the column fills the tab instead of trailing off into empty space. It
             only scrolls if that leftover runs out. */}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          <TelemetryPanel caps={caps} latest={latest} />
+          <TelemetryPanel caps={caps} latest={latest} online={deviceOnline} />
 
           <ObdReadout caps={caps} latest={latest} />
 
@@ -167,6 +173,15 @@ export function StreamsView({
                 <TelemetryReadout
                   key={g.title}
                   title={g.title}
+                  titleAdornment={
+                    g.title === "System" ? (
+                      <DeviceStatusDot
+                        ledState={latest["system.led_state"]?.value}
+                        healthFlags={latest["system.health_flags"]?.value}
+                        online={deviceOnline}
+                      />
+                    ) : undefined
+                  }
                   latest={latest}
                   metrics={g.metrics}
                 />

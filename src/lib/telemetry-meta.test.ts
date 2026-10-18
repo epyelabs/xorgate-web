@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import contract from "@/lib/config-contract.json"
+import { TELEMETRY_GRAPH_GROUPS } from "./telemetry-metrics"
 import {
+  formatHealthFlags,
   formatMetricValue,
   METRIC_LABELS,
   metricLabel,
@@ -122,5 +124,52 @@ describe("OBD-II (obd) metrics", () => {
       "obd.rpm",
       "obd.link",
     ])
+  })
+})
+
+describe("status LED (system.led_state / system.health_flags)", () => {
+  it("labels both fields", () => {
+    expect(metricLabel("system.led_state")).toBe("Device status")
+    expect(metricLabel("system.health_flags")).toBe("Health flags")
+  })
+
+  it("renders the code as its LED-ladder name", () => {
+    expect(formatMetricValue(0, "system.led_state")).toBe("Healthy")
+    expect(formatMetricValue(2, "system.led_state")).toBe(
+      "GPS: waiting for fix"
+    )
+    expect(formatMetricValue(3, "system.led_state")).toBe("Network recovering")
+    expect(formatMetricValue(5, "system.led_state")).toBe("Undervoltage")
+    expect(formatMetricValue(9, "system.led_state")).toBe("Unknown (9)")
+    expect(formatMetricValue(null, "system.led_state")).toBe("—")
+  })
+
+  it("renders the flags as the comma-joined names of the set bits", () => {
+    expect(formatMetricValue(0, "system.health_flags")).toBe("None")
+    expect(formatMetricValue(1, "system.health_flags")).toBe("Undervoltage")
+    // lte_down (4) + mqtt_down (8) + gps_no_fix (16)
+    expect(formatMetricValue(28, "system.health_flags")).toBe(
+      "LTE down, Cloud link down, GPS: no fix"
+    )
+    expect(formatHealthFlags(129)).toBe("Undervoltage, Power shed")
+    // An averaged bucket is not a mask: shown raw, never mis-decoded.
+    expect(formatMetricValue(2.5, "system.health_flags")).toBe("2.5")
+  })
+
+  it("orders both after the box's other system fields", () => {
+    const keys = Object.keys(METRIC_LABELS)
+    const at = keys.indexOf("system.psu_max_current")
+    expect(keys.slice(at + 1, at + 3)).toEqual([
+      "system.led_state",
+      "system.health_flags",
+    ])
+  })
+
+  it("keeps both out of the trends chart catalog (enum and bitmask)", () => {
+    const charted = TELEMETRY_GRAPH_GROUPS.flatMap((g) =>
+      g.metrics.map((m) => m.metric)
+    )
+    expect(charted).not.toContain("system.led_state")
+    expect(charted).not.toContain("system.health_flags")
   })
 })

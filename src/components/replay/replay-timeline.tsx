@@ -18,14 +18,25 @@ import { formatDuration } from "@/components/data-table"
 import { formatDateTime } from "@/lib/format-time"
 import { cn } from "@/lib/utils"
 import {
+  HEALTHY_STATUS_CODE,
+  statusLegend,
+  statusRunAt,
+} from "@/lib/device-status"
+import {
   REPLAY_RATES,
+  deviceStatusFor,
   segmentEnd,
   type ReplayRate,
+  type StatusRun,
   type ReplayTimeline as Timeline,
   type UseReplayPlayer,
 } from "@xorgate/react"
 
 const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" })
+
+// The status lane spans 22..28 px of the 36 px hit area; hovering from just
+// above it (the gap under the bar) down counts as "on the lane".
+const LANE_HOVER_FROM_PX = 19
 
 // Contiguous segments merge into single coverage blocks (a 1 h soak is one
 // run, not 61 divs). 50 ms slop absorbs ms-rounding at seams.
@@ -48,19 +59,38 @@ function coverageRuns(timeline: Timeline): { fromTs: number; toTs: number }[] {
  * wall-clock scrubber with video-coverage blocks, hatched gaps and partial
  * markers, plus play/pause, rate, boundary jumps, gap auto-skip and the
  * playhead's wall-clock readout. Pure follower/commander of the replay clock.
+ *
+ * With `statusRuns` (the status LED's `system.led_state` over the replay, from
+ * `useReplayTelemetry`) a thin device-status lane sits under the bar, inside
+ * the same hit area so a click on a problem stretch seeks to it, with a legend
+ * of the codes present. Healthy runs are drawn muted so the lane reads as
+ * "covered" and the coloured stretches stand out.
  */
 export function ReplayTimelineBar({
   player,
   timeline,
+  statusRuns = [],
+  statusRunsSource = null,
 }: {
   player: UseReplayPlayer
   timeline: Timeline
+  statusRuns?: StatusRun[]
+  statusRunsSource?: "insight" | "overview" | null
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [hoverTs, setHoverTs] = useState<number | null>(null)
+  // True while the pointer is over the status lane (its lower band): the
+  // hover tooltip then names the state under the cursor and its duration.
+  const [hoverLane, setHoverLane] = useState(false)
 
   const span = timeline.to - timeline.from
   const runs = useMemo(() => coverageRuns(timeline), [timeline])
+  const hasLane = statusRuns.length > 0
+  const legend = useMemo(() => statusLegend(statusRuns), [statusRuns])
+  const hoverRun =
+    hasLane && hoverLane && hoverTs !== null
+      ? statusRunAt(statusRuns, hoverTs)
+      : null
 
   const pct = (ts: number) => ((ts - timeline.from) / span) * 100
 
@@ -79,13 +109,20 @@ export function ReplayTimelineBar({
           the cursor leaves the track. */}
       <div
         ref={trackRef}
-        className="group relative h-6 cursor-pointer touch-none select-none"
+        className={cn(
+          "group relative cursor-pointer touch-none select-none",
+          hasLane ? "h-9" : "h-6"
+        )}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           player.seek(tsAtClientX(e.clientX))
         }}
         onPointerMove={(e) => {
           setHoverTs(tsAtClientX(e.clientX))
+          if (hasLane) {
+            const rect = e.currentTarget.getBoundingClientRect()
+            setHoverLane(e.clientY - rect.top >= LANE_HOVER_FROM_PX)
+          }
           if (e.currentTarget.hasPointerCapture(e.pointerId)) {
             player.seek(tsAtClientX(e.clientX))
           }
@@ -93,7 +130,12 @@ export function ReplayTimelineBar({
         onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
         onPointerLeave={() => setHoverTs(null)}
       >
-        <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "absolute inset-x-0 h-2 overflow-hidden rounded-full bg-muted",
+            hasLane ? "top-2.5" : "top-1/2 -translate-y-1/2"
+          )}
+        >
           {/* Video coverage */}
           {runs.map((r) => (
             <div
@@ -131,9 +173,34 @@ export function ReplayTimelineBar({
             />
           ))}
         </div>
+        {/* Device status lane: one block per led_state run, LED colours. */}
+        {hasLane ? (
+          <div
+            className="absolute inset-x-0 top-[22px] h-1.5 overflow-hidden rounded-full bg-muted"
+            data-testid="device-status-lane"
+            aria-label="Device status over the replay"
+          >
+            {statusRuns.map((r) => (
+              <div
+                key={`${r.fromTs}-${r.code}`}
+                data-code={r.code}
+                className="absolute inset-y-0"
+                style={{
+                  left: `${pct(r.fromTs)}%`,
+                  width: `${Math.max(pct(r.toTs) - pct(r.fromTs), 0.15)}%`,
+                  backgroundColor: deviceStatusFor(r.code)?.color,
+                  opacity: r.code === HEALTHY_STATUS_CODE ? 0.35 : 1,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
         {/* Playhead */}
         <div
-          className="pointer-events-none absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-primary"
+          className={cn(
+            "pointer-events-none absolute top-1/2 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-primary",
+            hasLane ? "h-[26px]" : "h-4"
+          )}
           style={{ left: `${pct(player.playheadTs)}%` }}
         >
           <div className="absolute -top-0.5 left-1/2 size-2 -translate-x-1/2 rounded-full bg-primary shadow" />
@@ -145,9 +212,50 @@ export function ReplayTimelineBar({
             style={{ left: `${pct(hoverTs)}%` }}
           >
             {timeFmt.format(hoverTs)}
+            {hoverRun ? (
+              <>
+                {" · "}
+                {deviceStatusFor(hoverRun.code)?.label} for{" "}
+                {formatDuration(hoverRun.toTs - hoverRun.fromTs)}
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
+
+      {/* Status lane legend: only the codes this replay contains. */}
+      {hasLane ? (
+        <div
+          className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground"
+          data-testid="device-status-legend"
+        >
+          <span className="font-medium text-foreground/80">Device status</span>
+          {legend.map((l) => (
+            <span key={l.code} className="inline-flex items-center gap-1">
+              <span
+                aria-hidden
+                className="inline-block size-2 rounded-full"
+                style={{
+                  backgroundColor: l.color,
+                  opacity: l.code === HEALTHY_STATUS_CODE ? 0.5 : 1,
+                }}
+              />
+              {l.label}
+              <span className="tabular-nums opacity-70">
+                {formatDuration(l.totalMs)}
+              </span>
+            </span>
+          ))}
+          {statusRunsSource === "overview" ? (
+            <span
+              className="rounded border px-1 text-[10px]"
+              title="Drawn from the bucketed session overview (each bucket shows its worst state). Exact intervals appear once the session closes."
+            >
+              approx.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Transport row */}
       <div className="flex flex-wrap items-center gap-2">

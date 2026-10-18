@@ -1,3 +1,5 @@
+import { decodeHealthFlags, deviceStatusFor } from "@xorgate/react"
+
 // Friendly labels for the `<group>.<field>` telemetry metric keys.
 export const METRIC_LABELS: Record<string, string> = {
   "imu.quat_r": "Quat R",
@@ -32,6 +34,10 @@ export const METRIC_LABELS: Record<string, string> = {
   "system.throttled": "Throttle",
   "system.rail_5v": "5V Rail",
   "system.psu_max_current": "PSU Max",
+  // The status LED, as telemetry: the severity-ascending code (what the LED is
+  // showing) and the bitmask of the ladder inputs behind it (why).
+  "system.led_state": "Device status",
+  "system.health_flags": "Health flags",
   // OBD-II peripheral (v2 `peripherals.obd`), in the agent's canonical field
   // order so orderMetrics() places the group after the box's own telemetry.
   "obd.rpm": "RPM",
@@ -76,6 +82,17 @@ const THROTTLE_BITS: Array<[number, string]> = [
 /** Human-readable names of the set bits in a throttle bitmask. */
 export function decodeThrottleBits(mask: number): string[] {
   return THROTTLE_BITS.filter(([bit]) => mask & bit).map(([, label]) => label)
+}
+
+/**
+ * `system.health_flags` as the comma-joined labels of its set bits ("None" for
+ * 0). A value that is not a non-negative integer (an averaged bucket) cannot
+ * be decoded and prints as the bare number.
+ */
+export function formatHealthFlags(mask: number): string {
+  if (mask === 0) return "None"
+  const flags = decodeHealthFlags(mask)
+  return flags.length ? flags.map((f) => f.label).join(", ") : String(mask)
 }
 
 const SUPERSCRIPT_DIGITS: Record<string, string> = {
@@ -174,6 +191,11 @@ export function formatMetricValue(
   if (value === null || value === undefined) return "—"
   // GNSS health is a coded state, not a quantity — show its name.
   if (metric === "lte.gnss_health") return GNSS_HEALTH_LABELS[value] ?? String(value)
+  // The status LED: the code by its LED-ladder name, the flags as the names of
+  // the set bits. Tables come from @xorgate/react (one table for every app).
+  if (metric === "system.led_state")
+    return deviceStatusFor(value)?.label ?? String(value)
+  if (metric === "system.health_flags") return formatHealthFlags(value)
   // OBD-II coded states: the link health code and the check-engine lamp.
   if (metric === "obd.link") return OBD_LINK_LABELS[value] ?? String(value)
   if (metric === "obd.mil") return OBD_MIL_LABELS[value] ?? String(value)

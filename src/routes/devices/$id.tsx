@@ -35,6 +35,7 @@ import {
 } from "@/queries/devices"
 import { useLiveDeviceStatus } from "@/store/presence"
 import { DevicePresence } from "@/components/device-presence"
+import { DeviceStatusChip } from "@/components/device-status-chip"
 import { DeviceModelDialog } from "./-components/device-model-dialog"
 import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
@@ -394,6 +395,14 @@ function DeviceLayout() {
                       pulse={(liveDevice ?? device).status === "online"}
                     />
                     <ThrottleIndicator latest={latest} />
+                    {/* The status LED's state while it is not healthy (read
+                        straight off the live feed, no caps gate, like the
+                        throttle bolt). */}
+                    <DeviceStatusChip
+                      ledState={latest["system.led_state"]?.value}
+                      healthFlags={latest["system.health_flags"]?.value}
+                      online={(liveDevice ?? device).status === "online"}
+                    />
                     {simulated && !canCommand && simulation ? (
                       <SimulationHostChip
                         state={simulation.hostState}

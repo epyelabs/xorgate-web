@@ -28,6 +28,7 @@ import { StreamsView } from "@/components/streams-view/streams-view"
 import { ReplayVideoTile } from "@/components/replay/replay-video-tile"
 import { ReplayTimelineBar } from "@/components/replay/replay-timeline"
 import { TelemetryTrendsSheet } from "@/components/replay/telemetry-trends-sheet"
+import { DeviceStatusChip } from "@/components/device-status-chip"
 
 interface ReplaySearch {
   session?: string
@@ -252,6 +253,14 @@ function DeviceReplayPage() {
               partial
             </Badge>
           ) : null}
+          {/* The status LED at the playhead (hidden while healthy). A
+              reading older than the system group's staleness window is not
+              in `latest`, so a gap in the recording hides the chip too. */}
+          <DeviceStatusChip
+            ledState={telemetry.latest["system.led_state"]?.value}
+            healthFlags={telemetry.latest["system.health_flags"]?.value}
+            online
+          />
         </div>
         <div className="ml-auto flex items-center gap-2">
           {/* The same telemetry the readouts print one instant of, over the
@@ -342,7 +351,12 @@ function DeviceReplayPage() {
         />
       </div>
 
-      <ReplayTimelineBar player={player} timeline={timeline} />
+      <ReplayTimelineBar
+        player={player}
+        timeline={timeline}
+        statusRuns={telemetry.statusRuns}
+        statusRunsSource={telemetry.statusRunsSource}
+      />
     </div>
   )
 }

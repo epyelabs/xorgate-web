@@ -481,7 +481,8 @@ export function SimulatorPanel({
   // Reopens a saved run's results on the Test tab: the run row alone drives
   // the Output (no live progress, no active run, so no polling or IoT). The
   // source bindings come back from the save's snapshot where that needs no
-  // fetch (see simulator-restore.ts); the rest keep whatever is bound now.
+  // fetch (see simulator-restore.ts); the rest keep whatever compatible
+  // binding is there now, and only the ones left unbound are reported.
   const loadSaved = async (saved: SavedSimulation) => {
     if (running || loadingSavedId) return
     setLoadingSavedId(saved.id)
@@ -498,7 +499,10 @@ export function SimulatorPanel({
       const restored = restoreBindings(
         saved.bindings,
         sources,
-        run.deviceId && run.deviceName ? { [run.deviceId]: run.deviceName } : {}
+        run.deviceId && run.deviceName
+          ? { [run.deviceId]: run.deviceName }
+          : {},
+        bindings
       )
       setBindings((prev) => {
         const next = { ...prev }

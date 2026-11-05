@@ -12,13 +12,22 @@ describe("restoreBindings", () => {
   it("rebuilds file, device-telemetry and webcam bindings", () => {
     const r = restoreBindings(
       {
-        vid: { kind: "video_file", uploadKey: "simulations/uploads/o/t/abc/clip.mp4" },
+        vid: {
+          kind: "video_file",
+          uploadKey: "simulations/uploads/o/t/abc/clip.mp4",
+        },
         vid2: { kind: "webcam", maxDurationSeconds: 30 },
-        tel: { kind: "telemetry_csv", uploadKey: "simulations/uploads/o/t/def/gps.csv" },
+        tel: {
+          kind: "telemetry_csv",
+          uploadKey: "simulations/uploads/o/t/def/gps.csv",
+        },
         tel2: {
           kind: "device_telemetry",
           deviceId: "22c38bf0-aaaa-bbbb-cccc-000000000000",
-          window: { from: "2026-11-05T10:00:00.000Z", to: "2026-11-05T10:05:00.000Z" },
+          window: {
+            from: "2026-11-05T10:00:00.000Z",
+            to: "2026-11-05T10:05:00.000Z",
+          },
           metrics: ["speed"],
         },
       },
@@ -87,6 +96,62 @@ describe("restoreBindings", () => {
     ])
   })
 
+  it("keeps an existing compatible binding and does not report it", () => {
+    const current = {
+      vid: {
+        kind: "video-webcam" as const,
+        name: "FaceTime HD Camera",
+      },
+      // A video binding on a telemetry source is not compatible.
+      tel: { kind: "video-webcam" as const, name: "Webcam" },
+      tel2: {
+        kind: "uploaded-file" as const,
+        media: "csv" as const,
+        uploadKey: "k/gps.csv",
+        name: "gps.csv",
+      },
+    }
+    const r = restoreBindings(
+      {
+        vid: { kind: "session", sessionId: "s1" },
+        tel: { kind: "recording", recordingId: "r1" },
+        tel2: { kind: "video_file", uploadKey: "k/clip.mp4" },
+      },
+      sources,
+      {},
+      current
+    )
+    expect(r.bindings).toEqual({})
+    expect(r.kept).toEqual(["vid", "tel2"])
+    expect(r.unrestored).toEqual([
+      { nodeId: "tel", kind: "recording", reason: "unknown" },
+    ])
+  })
+
+  it("still reports an unrestorable source on a fresh panel", () => {
+    const r = restoreBindings(
+      { vid: { kind: "session", sessionId: "s1" } },
+      sources,
+      {},
+      {}
+    )
+    expect(r.kept).toEqual([])
+    expect(r.unrestored).toEqual([
+      { nodeId: "vid", kind: "session", reason: "needs-fetch" },
+    ])
+  })
+
+  it("replaces an existing binding when the snapshot can be rebuilt", () => {
+    const r = restoreBindings(
+      { vid: { kind: "webcam" } },
+      sources,
+      {},
+      { vid: { kind: "video-webcam", name: "Other cam", deviceId: "x" } }
+    )
+    expect(r.bindings.vid).toEqual({ kind: "video-webcam", name: "Webcam" })
+    expect(r.kept).toEqual([])
+  })
+
   it("skips nodes that are no longer in the graph", () => {
     const r = restoreBindings(
       { gone: { kind: "webcam" }, vid: { kind: "webcam" } },
@@ -102,6 +167,7 @@ describe("restoreBindings", () => {
         bindings: {},
         unrestored: [],
         skipped: [],
+        kept: [],
       })
     }
   })

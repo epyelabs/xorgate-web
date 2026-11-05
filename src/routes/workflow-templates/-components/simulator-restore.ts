@@ -2,7 +2,12 @@ import {
   simulationBindingSchema,
   type SimulationApiBinding,
 } from "@/lib/workflow-sim-schemas"
-import { isVideoSource, type SourceBinding } from "./simulator-types"
+import {
+  isTelemetryBinding,
+  isVideoBinding,
+  isVideoSource,
+  type SourceBinding,
+} from "./simulator-types"
 
 // The reverse of resolveApiBindings, for Load of a saved run: rebuilds the
 // panel's source bindings from the run's API bindings snapshot (the union the
@@ -22,6 +27,19 @@ export interface RestoredBindings {
   unrestored: { nodeId: string; kind: string; reason: UnrestoredReason }[]
   // Snapshot entries whose node is no longer in the graph.
   skipped: string[]
+  // Sources the snapshot could not rebuild but that already hold a
+  // compatible binding in the panel: that binding stays, nothing to report.
+  kept: string[]
+}
+
+/** Whether a binding can feed a source of this kind (video vs telemetry). */
+export function isCompatibleBinding(
+  binding: SourceBinding,
+  video: boolean
+): boolean {
+  if (binding.kind === "uploaded-file")
+    return (binding.media === "video") === video
+  return video ? isVideoBinding(binding) : isTelemetryBinding(binding)
 }
 
 /** File name out of an upload key (its last path segment). */
@@ -76,9 +94,16 @@ function restoreOne(
 export function restoreBindings(
   snapshot: unknown,
   sources: { id: string; catalogType: string }[],
-  deviceNames: Record<string, string> = {}
+  deviceNames: Record<string, string> = {},
+  // What the panel has bound right now (kept where nothing can be rebuilt).
+  current: Record<string, SourceBinding> = {}
 ): RestoredBindings {
-  const out: RestoredBindings = { bindings: {}, unrestored: [], skipped: [] }
+  const out: RestoredBindings = {
+    bindings: {},
+    unrestored: [],
+    skipped: [],
+    kept: [],
+  }
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot))
     return out
   const byId = new Map(sources.map((s) => [s.id, s]))
@@ -88,22 +113,21 @@ export function restoreBindings(
       out.skipped.push(nodeId)
       continue
     }
+    const video = isVideoSource(source.catalogType)
+    const existing = current[nodeId]
+    const keepsExisting =
+      existing !== undefined && isCompatibleBinding(existing, video)
     const parsed = simulationBindingSchema.safeParse(raw)
     const kind =
       raw && typeof raw === "object" && "kind" in raw
         ? String((raw as { kind: unknown }).kind)
         : "unknown"
-    if (!parsed.success) {
-      out.unrestored.push({ nodeId, kind, reason: "unknown" })
-      continue
-    }
-    const result = restoreOne(
-      parsed.data,
-      isVideoSource(source.catalogType),
-      deviceNames
-    )
+    const result = parsed.success
+      ? restoreOne(parsed.data, video, deviceNames)
+      : ("unknown" as const)
     if (typeof result === "string") {
-      out.unrestored.push({ nodeId, kind, reason: result })
+      if (keepsExisting) out.kept.push(nodeId)
+      else out.unrestored.push({ nodeId, kind, reason: result })
     } else {
       out.bindings[nodeId] = result
     }

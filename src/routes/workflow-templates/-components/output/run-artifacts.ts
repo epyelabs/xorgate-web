@@ -148,6 +148,11 @@ export function buildArtifactGroups(args: {
   const { run, definition, nodeLabels, manifestInputs } = args
   const label = (nodeId: string) => nodeLabels.get(nodeId) ?? nodeId
   const groups: ArtifactGroup[] = []
+  // A cancelled run's row is closed before (and instead of) finalize, so the
+  // engine may never have written result.json or any output: list only what
+  // the row's `artifacts` actually names. manifest.json is written at
+  // dispatch, so it is always there.
+  const unfinalizedCancel = run.status === "cancelled" && run.artifacts === null
 
   const records: ArtifactEntry[] = []
   for (const [nodeId, out] of Object.entries(run.artifacts?.outputs ?? {})) {
@@ -184,7 +189,7 @@ export function buildArtifactGroups(args: {
   for (const viz of videoNodes(definition ?? run.definition, run)) {
     const video = run.artifacts?.videos?.[viz.id]
     const count = framesCountFor(run, viz.id)
-    if (count !== null && count > 0) {
+    if (count !== null && count > 0 && !unfinalizedCancel) {
       frames.push({
         id: `frames:${viz.id}`,
         key: `${runPrefix(run.id)}frames/${viz.id}/`,
@@ -226,26 +231,24 @@ export function buildArtifactGroups(args: {
     })
   }
 
-  groups.push({
-    id: "run",
-    title: "Run",
-    entries: [
-      {
-        id: "result",
-        key: resultKey(run.id),
-        label: "result.json",
-        meta: "engine result (steps, events, metrics, artifacts)",
-        format: "json",
-      },
-      {
-        id: "manifest",
-        key: manifestKey(run.id),
-        label: "manifest.json",
-        meta: "run manifest (definition, bindings, window, limits)",
-        format: "json",
-      },
-    ],
+  const runFiles: ArtifactEntry[] = []
+  if (!unfinalizedCancel) {
+    runFiles.push({
+      id: "result",
+      key: resultKey(run.id),
+      label: "result.json",
+      meta: "engine result (steps, events, metrics, artifacts)",
+      format: "json",
+    })
+  }
+  runFiles.push({
+    id: "manifest",
+    key: manifestKey(run.id),
+    label: "manifest.json",
+    meta: "run manifest (definition, bindings, window, limits)",
+    format: "json",
   })
+  groups.push({ id: "run", title: "Run", entries: runFiles })
 
   return groups
 }

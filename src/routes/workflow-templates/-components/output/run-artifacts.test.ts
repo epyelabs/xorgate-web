@@ -131,6 +131,43 @@ describe("buildArtifactGroups", () => {
   })
 })
 
+describe("buildArtifactGroups on a cancelled run", () => {
+  it("lists only manifest.json when the row was never finalized", () => {
+    const groups = buildArtifactGroups({
+      // The viz step summary would otherwise synthesize a frames entry.
+      run: run({ status: "cancelled", artifacts: null, error: "Cancelled by user" }),
+      definition: null,
+      nodeLabels: new Map(),
+      manifestInputs: null,
+    })
+    expect(groups.map((g) => g.id)).toEqual(["run"])
+    expect(groups[0].entries.map((e) => e.id)).toEqual(["manifest"])
+    expect(groups.reduce((n, g) => n + g.entries.length, 0)).toBe(1)
+  })
+
+  it("still lists what a cancelled row's artifacts name, plus result.json", () => {
+    const groups = buildArtifactGroups({
+      run: run({ status: "cancelled" }),
+      definition: null,
+      nodeLabels: new Map(),
+      manifestInputs: null,
+    })
+    expect(groups.map((g) => g.id)).toEqual(["records", "videos", "frames", "run"])
+    expect(groups.at(-1)?.entries.map((e) => e.id)).toEqual(["result", "manifest"])
+  })
+
+  it("keeps result.json for a failed run without artifacts", () => {
+    const groups = buildArtifactGroups({
+      run: run({ status: "failed", artifacts: null, steps: [] }),
+      definition: null,
+      nodeLabels: new Map(),
+      manifestInputs: null,
+    })
+    expect(groups.map((g) => g.id)).toEqual(["run"])
+    expect(groups[0].entries.map((e) => e.id)).toEqual(["result", "manifest"])
+  })
+})
+
 describe("videoNodes", () => {
   const depthRun = (config: Record<string, unknown>, videos: Record<string, { key: string; frames: number; fps: number }>) =>
     run({

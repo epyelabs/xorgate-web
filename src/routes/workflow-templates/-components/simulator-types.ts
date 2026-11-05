@@ -30,6 +30,15 @@ export type SourceBinding =
     }
   | { kind: "video-webcam"; name: string; deviceId?: string }
   | { kind: "csv-file"; file: File; name: string; uploadKey?: string }
+  // A file uploaded for an earlier run, restored from a saved run's bindings
+  // snapshot: only its S3 key survives (no local File, so no preview); the
+  // next run binds the key again without re-uploading.
+  | {
+      kind: "uploaded-file"
+      media: "video" | "csv"
+      uploadKey: string
+      name: string
+    }
   | {
       kind: "device-telemetry"
       deviceId: string
@@ -86,6 +95,8 @@ export function bindingLabel(b: SourceBinding): string {
     case "video-webcam":
       return b.name
     case "csv-file":
+      return b.name
+    case "uploaded-file":
       return b.name
     case "device-telemetry":
       return b.deviceName
@@ -162,6 +173,8 @@ export function bindingMeta(b: SourceBinding): string | null {
       return `Live · ${b.channel.region}`
     case "video-webcam":
       return "Local camera"
+    case "uploaded-file":
+      return "Uploaded for an earlier run"
     case "device-telemetry":
       if (!b.window) return null
       return b.window.mode === "lastN"

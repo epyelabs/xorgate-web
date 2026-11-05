@@ -5,6 +5,7 @@ import {
   BookmarkCheckIcon,
   BookmarkIcon,
   CheckIcon,
+  FlaskConicalIcon,
   Loader2Icon,
   PlayIcon,
   SquareIcon,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { isXorgateError } from "@xorgate/sdk"
 import { xgMessage } from "@/lib/xorgate"
 import {
@@ -71,6 +73,7 @@ import {
   phaseForRunStatus,
   type SimPhase,
 } from "./simulator-phase"
+import { restoreBindings } from "./simulator-restore"
 
 import {
   CANCELLED_BADGE_CLASS,
@@ -232,6 +235,8 @@ export function SimulatorPanel({
   const refreshSaved = useInvalidateSavedSimulations(templateId)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [loadingSavedId, setLoadingSavedId] = useState<string | null>(null)
+  // The panel's two tabs: the simulator itself, and the saved-runs list.
+  const [panelTab, setPanelTab] = useState<"test" | "saved">("test")
 
   // Both sections open initially; a started run collapses Sources so the
   // Output takes over (the user can re-open Sources anytime).
@@ -454,9 +459,6 @@ export function SimulatorPanel({
       await saveSimulation(templateId, runDetail.id, name)
       toast.success("Run saved")
       await refreshSaved()
-      setOpenSections((open) =>
-        open.includes("saved") ? open : [...open, "saved"]
-      )
       return true
     } catch (err) {
       toast.error(`Could not save the run: ${xgMessage(err)}`)
@@ -476,8 +478,10 @@ export function SimulatorPanel({
     }
   }
 
-  // Reopens a saved run's results: the run row alone drives the Output (no
-  // live progress, no active run, so no polling or IoT).
+  // Reopens a saved run's results on the Test tab: the run row alone drives
+  // the Output (no live progress, no active run, so no polling or IoT). The
+  // source bindings come back from the save's snapshot where that needs no
+  // fetch (see simulator-restore.ts); the rest keep whatever is bound now.
   const loadSaved = async (saved: SavedSimulation) => {
     if (running || loadingSavedId) return
     setLoadingSavedId(saved.id)
@@ -491,15 +495,39 @@ export function SimulatorPanel({
         toast.info("That run is still running")
         return
       }
+      const restored = restoreBindings(
+        saved.bindings,
+        sources,
+        run.deviceId && run.deviceName ? { [run.deviceId]: run.deviceName } : {}
+      )
+      setBindings((prev) => {
+        const next = { ...prev }
+        for (const [nodeId, b] of Object.entries(restored.bindings)) {
+          revoke(next[nodeId])
+          next[nodeId] = b
+        }
+        return next
+      })
+      setRowIssues({})
+      setGeneralIssues([])
       setActiveRun(null)
       setPrepMessage(null)
       setPollStalled(false)
       setRunDetail(run)
       setRanDefinition(run.definition)
       setPhase(phaseForRunStatus(run.status))
+      setPanelTab("test")
       setOpenSections((open) =>
         open.includes("output") ? open : ["output", ...open]
       )
+      if (restored.unrestored.length > 0) {
+        const labels = restored.unrestored.map(
+          (u) => sources.find((src) => src.id === u.nodeId)?.label ?? u.nodeId
+        )
+        toast.info(
+          `Bind ${labels.join(", ")} again to re-run: ${restored.unrestored.length === 1 ? "its input" : "those inputs"} could not be restored from the saved run.`
+        )
+      }
     } catch (err) {
       toast.error(`Could not load the run: ${xgMessage(err)}`)
     } finally {
@@ -632,192 +660,230 @@ export function SimulatorPanel({
         </div>
       </div>
 
-      {/* Sources + Output as an accordion so a running/finished run can hand
-          the space over to the Output. The whole body scrolls. */}
-      <Accordion
-        type="multiple"
-        value={openSections}
-        onValueChange={setOpenSections}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4"
+      {/* Two tabs: Test (the simulator) and Saved (this user's saved runs).
+          Test stays mounted while hidden so its Output (video, open tab)
+          survives a look at the saved list. */}
+      <Tabs
+        value={panelTab}
+        onValueChange={(v) => setPanelTab(v as "test" | "saved")}
+        className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <AccordionItem value="sources">
-          <AccordionTrigger className="py-3">Sources (Inputs)</AccordionTrigger>
-          <AccordionContent className="pb-3">
-            <div className="flex flex-col gap-2.5">
-              {generalIssues.map((msg, i) => (
-                <p
-                  key={i}
-                  className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
+        <div className="flex shrink-0 items-center border-b border-border px-4 py-1.5">
+          <TabsList className="h-auto rounded-md border border-border bg-transparent p-0.5 group-data-horizontal/tabs:h-auto">
+            <TabsTrigger
+              value="test"
+              className="h-6 px-2 data-[state=active]:bg-muted data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-muted"
+              data-testid="sim-tab-test"
+            >
+              <FlaskConicalIcon className="size-3.5" />
+              Test
+            </TabsTrigger>
+            <TabsTrigger
+              value="saved"
+              className="h-6 px-2 data-[state=active]:bg-muted data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-muted"
+              data-testid="sim-tab-saved"
+            >
+              <BookmarkIcon className="size-3.5" />
+              Saved
+              {savedList && savedList.length > 0 ? (
+                <Badge
+                  variant="secondary"
+                  className="ml-0.5"
+                  data-testid="sim-saved-count"
                 >
-                  {msg}
-                </p>
-              ))}
-              {sources.length === 0 ? (
-                <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                  Add a source node (Video, Telemetry) to the graph to test this
-                  workflow.
-                </p>
-              ) : (
-                sources.map((s) => (
-                  <SourceInputRow
-                    key={s.id}
-                    label={s.label}
-                    catalogType={s.catalogType}
-                    binding={bindings[s.id]}
-                    issue={rowIssues[s.id]}
-                    onBind={(b) => bind(s.id, b)}
-                    onUnbind={() => unbind(s.id)}
-                    onPreview={setPreview}
-                  />
-                ))
-              )}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+                  {savedList.length}
+                </Badge>
+              ) : null}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <AccordionItem value="output">
-          <AccordionTrigger className="py-3">
-            <span className="flex items-center gap-2">
-              Output
-              <RunStatusBadge
-                phase={phase}
-                durationMs={runDetail?.durationMs ?? null}
-              />
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="pb-3">
-            <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
-              {/* Keyed on the landed run so a Load of another saved run starts
+        <TabsContent
+          value="test"
+          forceMount
+          className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden"
+        >
+          {/* Sources + Output as an accordion so a running/finished run can hand
+          the space over to the Output. The whole body scrolls. */}
+          <Accordion
+            type="multiple"
+            value={openSections}
+            onValueChange={setOpenSections}
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4"
+          >
+            <AccordionItem value="sources">
+              <AccordionTrigger className="py-3">
+                Sources (Inputs)
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="flex flex-col gap-2.5">
+                  {generalIssues.map((msg, i) => (
+                    <p
+                      key={i}
+                      className="rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
+                    >
+                      {msg}
+                    </p>
+                  ))}
+                  {sources.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                      Add a source node (Video, Telemetry) to the graph to test
+                      this workflow.
+                    </p>
+                  ) : (
+                    sources.map((s) => (
+                      <SourceInputRow
+                        key={s.id}
+                        label={s.label}
+                        catalogType={s.catalogType}
+                        binding={bindings[s.id]}
+                        issue={rowIssues[s.id]}
+                        onBind={(b) => bind(s.id, b)}
+                        onUnbind={() => unbind(s.id)}
+                        onPreview={setPreview}
+                      />
+                    ))
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            <AccordionItem value="output">
+              <AccordionTrigger className="py-3">
+                <span className="flex items-center gap-2">
+                  Output
+                  <RunStatusBadge
+                    phase={phase}
+                    durationMs={runDetail?.durationMs ?? null}
+                  />
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="pb-3">
+                <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
+                  {/* Keyed on the landed run so a Load of another saved run starts
                   its tabs fresh. A loaded run has no activeRun: the row
                   itself supplies startedAt (engineTarget only matters for
                   the live cold-start line). */}
-              <SimulatorOutput
-                key={runDetail?.id ?? "live"}
-                phase={phase}
-                prepMessage={prepMessage}
-                engineTarget={activeRun?.run.engineTarget ?? null}
-                startedAt={
-                  activeRun?.run.startedAt ?? runDetail?.startedAt ?? null
+                  <SimulatorOutput
+                    key={runDetail?.id ?? "live"}
+                    phase={phase}
+                    prepMessage={prepMessage}
+                    engineTarget={activeRun?.run.engineTarget ?? null}
+                    startedAt={
+                      activeRun?.run.startedAt ?? runDetail?.startedAt ?? null
+                    }
+                    progress={progress}
+                    run={runDetail}
+                    ranDefinition={ranDefinition}
+                    webcam={webcamEntry ? webcamIngest : null}
+                  />
+                  {phase === "running" && pollStalled ? (
+                    <p
+                      className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900 dark:text-amber-200"
+                      data-testid="run-poll-stalled"
+                    >
+                      Still running? This page has had no answer about the run
+                      for over a minute
+                      {pollFailures > 0
+                        ? ` (${pollFailures} failed ${pollFailures === 1 ? "check" : "checks"})`
+                        : ""}
+                      .{" "}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2"
+                        onClick={() => void readRunRow()}
+                        data-testid="run-poll-check-now"
+                      >
+                        Check now
+                      </button>
+                      , or reload: the run keeps going on the platform and is
+                      listed under Workflow Instances.
+                    </p>
+                  ) : null}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <div className="flex shrink-0 gap-2 border-t border-border p-3">
+            <Button
+              type="button"
+              className="min-w-0 flex-1 gap-1.5"
+              onClick={runWorkflow}
+              disabled={running || cancelling}
+            >
+              {running ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <PlayIcon className="size-3.5" />
+              )}
+              <span className="truncate">
+                {phase === "preparing"
+                  ? (prepMessage ?? "Starting…")
+                  : phase === "running"
+                    ? "Running…"
+                    : "Run Workflow"}
+              </span>
+            </Button>
+            {phase === "running" && activeRun ? (
+              <Button
+                type="button"
+                variant="destructive"
+                className="gap-1.5"
+                onClick={() => void cancelRun()}
+                disabled={cancelling}
+                data-testid="sim-cancel"
+              >
+                {cancelling ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <SquareIcon className="size-3.5" />
+                )}
+                {cancelling ? "Cancelling…" : "Cancel"}
+              </Button>
+            ) : null}
+            {isTerminalPhase(phase) && runDetail ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setSaveDialogOpen(true)}
+                disabled={savedForShownRun !== null || savedQuery.isPending}
+                title={
+                  savedForShownRun
+                    ? `Saved as "${savedForShownRun.name}"`
+                    : "Save this run to reopen it later"
                 }
-                progress={progress}
-                run={runDetail}
-                ranDefinition={ranDefinition}
-                webcam={webcamEntry ? webcamIngest : null}
-              />
-              {phase === "running" && pollStalled ? (
-                <p
-                  className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-amber-900 dark:text-amber-200"
-                  data-testid="run-poll-stalled"
-                >
-                  Still running? This page has had no answer about the run for
-                  over a minute
-                  {pollFailures > 0
-                    ? ` (${pollFailures} failed ${pollFailures === 1 ? "check" : "checks"})`
-                    : ""}
-                  .{" "}
-                  <button
-                    type="button"
-                    className="underline underline-offset-2"
-                    onClick={() => void readRunRow()}
-                    data-testid="run-poll-check-now"
-                  >
-                    Check now
-                  </button>
-                  , or reload: the run keeps going on the platform and is listed
-                  under Workflow Instances.
-                </p>
-              ) : null}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+                data-testid="sim-save"
+                data-saved={savedForShownRun ? "true" : "false"}
+              >
+                {savedForShownRun ? (
+                  <BookmarkCheckIcon className="size-3.5" />
+                ) : (
+                  <BookmarkIcon className="size-3.5" />
+                )}
+                {savedForShownRun ? "Saved" : "Save run"}
+              </Button>
+            ) : null}
+          </div>
+        </TabsContent>
 
-        <AccordionItem value="saved">
-          <AccordionTrigger className="py-3" data-testid="sim-saved-section">
-            <span className="flex items-center gap-2">
-              Saved runs
-              {savedList && savedList.length > 0 ? (
-                <Badge variant="secondary">{savedList.length}</Badge>
-              ) : null}
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="pb-3">
-            <SavedRunsList
-              saved={savedList}
-              isPending={savedQuery.isPending}
-              error={
-                savedQuery.error ? xgMessage(savedQuery.error) : null
-              }
-              shownRunId={runDetail?.id ?? null}
-              loadingId={loadingSavedId}
-              loadDisabled={running}
-              onLoad={(s) => void loadSaved(s)}
-              onDelete={deleteSaved}
-            />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-
-      <div className="flex shrink-0 gap-2 border-t border-border p-3">
-        <Button
-          type="button"
-          className="min-w-0 flex-1 gap-1.5"
-          onClick={runWorkflow}
-          disabled={running || cancelling}
+        <TabsContent
+          value="saved"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3"
         >
-          {running ? (
-            <Loader2Icon className="size-3.5 animate-spin" />
-          ) : (
-            <PlayIcon className="size-3.5" />
-          )}
-          <span className="truncate">
-            {phase === "preparing"
-              ? (prepMessage ?? "Starting…")
-              : phase === "running"
-                ? "Running…"
-                : "Run Workflow"}
-          </span>
-        </Button>
-        {phase === "running" && activeRun ? (
-          <Button
-            type="button"
-            variant="destructive"
-            className="gap-1.5"
-            onClick={() => void cancelRun()}
-            disabled={cancelling}
-            data-testid="sim-cancel"
-          >
-            {cancelling ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
-            ) : (
-              <SquareIcon className="size-3.5" />
-            )}
-            {cancelling ? "Cancelling…" : "Cancel"}
-          </Button>
-        ) : null}
-        {isTerminalPhase(phase) && runDetail ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => setSaveDialogOpen(true)}
-            disabled={savedForShownRun !== null || savedQuery.isPending}
-            title={
-              savedForShownRun
-                ? `Saved as "${savedForShownRun.name}"`
-                : "Save this run to reopen it later"
-            }
-            data-testid="sim-save"
-            data-saved={savedForShownRun ? "true" : "false"}
-          >
-            {savedForShownRun ? (
-              <BookmarkCheckIcon className="size-3.5" />
-            ) : (
-              <BookmarkIcon className="size-3.5" />
-            )}
-            {savedForShownRun ? "Saved" : "Save run"}
-          </Button>
-        ) : null}
-      </div>
+          <SavedRunsList
+            saved={savedList}
+            isPending={savedQuery.isPending}
+            error={savedQuery.error ? xgMessage(savedQuery.error) : null}
+            shownRunId={runDetail?.id ?? null}
+            loadingId={loadingSavedId}
+            loadDisabled={running}
+            onLoad={(s) => void loadSaved(s)}
+            onDelete={deleteSaved}
+          />
+        </TabsContent>
+      </Tabs>
 
       {saveDialogOpen && runDetail ? (
         <SaveRunDialog

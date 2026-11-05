@@ -138,6 +138,13 @@ export async function resolveApiBindings(
         api[nodeId] = { kind: "telemetry_csv", uploadKey: key }
         break
       }
+      case "uploaded-file":
+        // Restored from a saved run: the earlier upload's key, re-bound as is.
+        api[nodeId] =
+          binding.media === "video"
+            ? { kind: "video_file", uploadKey: binding.uploadKey }
+            : { kind: "telemetry_csv", uploadKey: binding.uploadKey }
+        break
       case "video-session":
         // The backend resolves the session to its ordered segment list and
         // feeds the engine the same per-segment binding a triggered run gets.

@@ -38,6 +38,7 @@ const STATUS_OPTIONS: readonly (RunStatus | "any")[] = [
   "running",
   "succeeded",
   "failed",
+  "cancelled",
 ]
 
 const PAGE_SIZES = [25, 50, 100]

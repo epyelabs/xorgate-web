@@ -97,7 +97,9 @@ export function VideoTab({
           >
             {run.status === "failed"
               ? `The run failed before ${label} could be muxed into a video.`
-              : frames
+              : run.status === "cancelled"
+                ? `The run was cancelled before ${label} could be muxed into a video.`
+                : frames
                 ? `${label} wrote ${frames} annotated frame${frames === 1 ? "" : "s"} but no video was muxed for this run (see the Data tab for the frames).`
                 : `${label} produced no annotated frames on this run.`}
           </p>

@@ -1,9 +1,10 @@
 import { xg } from "./xorgate"
 import type { PageMeta as Page } from "@xorgate/sdk"
-import type {
-  WorkflowRunDetail,
-  WorkflowRunSummary,
-  WorkflowRunsListParams,
+import {
+  getWorkflowRunResponseSchema,
+  type WorkflowRunDetail,
+  type WorkflowRunSummary,
+  type WorkflowRunsListParams,
 } from "./workflow-run-schemas"
 import { runsListQuery } from "./device-workflows-api"
 
@@ -30,6 +31,22 @@ export async function getWorkflowInstance(
 // editor's simulator instead).
 export async function rerunWorkflowInstance(id: string): Promise<void> {
   await xg().request("POST", `/workflow-runs/${id}/rerun`)
+}
+
+// Cancels an in-flight run (today: simulation runs). The backend flips the row
+// to `cancelled` atomically, then stops the engine task when nothing else
+// shares it; the answer is the cancelled run, same shape as GET. A run that is
+// no longer running answers 409 RUN_NOT_RUNNING with the current row in
+// `details.run` (see runFromCancelConflict in the simulator).
+export async function cancelWorkflowInstance(
+  id: string,
+): Promise<{ run: WorkflowRunDetail }> {
+  const raw = await xg().request("POST", `/workflow-runs/${id}/cancel`)
+  const parsed = getWorkflowRunResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error("Unexpected /workflow-runs/:id/cancel response shape")
+  }
+  return parsed.data
 }
 
 // Presigned GET for any object under a v2 run's S3 prefix (Data Capture

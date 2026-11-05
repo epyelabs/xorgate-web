@@ -22,6 +22,7 @@ import {
   listWorkflowInstances,
 } from "@/lib/workflow-instances-api"
 import {
+  listSavedSimulations,
   listWorkflowTemplates,
   listWorkflowTemplateTags,
 } from "@/lib/workflow-templates-api"
@@ -209,4 +210,30 @@ export function useInvalidateWorkflowTemplates() {
       queryKey: qk.workflowTemplates(orgId, wsId),
     })
   }, [queryClient, orgId, wsId])
+}
+
+/**
+ * The current user's saved simulation runs on one template (the simulator's
+ * "Saved runs" section), newest first. Already validated by the API client.
+ */
+export function useSavedSimulations(templateId: string) {
+  const { orgId, wsId, ready } = useTenant()
+  return useQuery({
+    queryKey: qk.workflowSavedSimulations(orgId, wsId, templateId),
+    queryFn: () => listSavedSimulations(templateId),
+    enabled: ready,
+  })
+}
+
+/** Refresh one template's saved simulation runs after a save/delete. */
+export function useInvalidateSavedSimulations(templateId: string) {
+  const { orgId, wsId } = useTenant()
+  const queryClient = useQueryClient()
+  return useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: qk.workflowSavedSimulations(orgId, wsId, templateId),
+      }),
+    [queryClient, orgId, wsId, templateId]
+  )
 }

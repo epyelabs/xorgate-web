@@ -168,6 +168,10 @@ export const qk = {
     [...qk.workflowTemplates(orgId, wsId), "tags"] as const,
   workflowTemplate: (orgId: Id, wsId: Id, templateId: string) =>
     [...qk.ws(orgId, wsId), "workflow-template", templateId] as const,
+  // The CURRENT user's saved simulation runs on one template (user-scoped
+  // server-side; a sign-out clears the cache, so the user needs no key slot).
+  workflowSavedSimulations: (orgId: Id, wsId: Id, templateId: string) =>
+    [...qk.workflowTemplate(orgId, wsId, templateId), "saved-simulations"] as const,
   workflowInstances: (orgId: Id, wsId: Id, params: Record<string, unknown>) =>
     [...qk.ws(orgId, wsId), "workflow-instances", params] as const,
   workflowInstance: (orgId: Id, wsId: Id, instanceId: string) =>

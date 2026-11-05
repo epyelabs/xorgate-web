@@ -9,7 +9,14 @@ import { pageSchema } from "./schemas"
 // S3 artifacts map for Data Capture downloads via
 // GET /workflow-runs/{id}/artifact-url.
 
-export const runStatusSchema = z.enum(["running", "succeeded", "failed"])
+// "cancelled": a run the user stopped (POST /workflow-runs/{id}/cancel); today
+// only simulation runs can be cancelled. Terminal, like succeeded/failed.
+export const runStatusSchema = z.enum([
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+])
 // Raw trigger value from the run row: telemetry_condition | session_completed |
 // segment_uploaded |
 // schedule | manual | simulation (open set server-side, so keep it a string).

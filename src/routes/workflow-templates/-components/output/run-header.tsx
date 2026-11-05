@@ -1,8 +1,8 @@
-import { AlertTriangleIcon } from "lucide-react"
+import { AlertTriangleIcon, BanIcon } from "lucide-react"
 import type { WorkflowRunDetail } from "@/lib/workflow-run-schemas"
 
-// The landed run's error + failed node, for failed runs; nothing for a
-// succeeded one (the status badge with the duration sits beside the "Output"
+// The landed run's error + failed node, for failed runs; a short neutral
+// "Cancelled" line for a run the user stopped; nothing for a succeeded one (the status badge with the duration sits beside the "Output"
 // section label, and the tabs carry the step / event / file counts).
 // Deliberately says nothing about which engine target ran it: that is an
 // infrastructure detail, not part of the result.
@@ -32,12 +32,24 @@ export function RunHeader({
   nodeLabels: Map<string, string>
 }) {
   const failed = run.status === "failed"
+  const cancelled = run.status === "cancelled"
   // The wrapper stays mounted (hidden) so the landed state is addressable.
   return (
     <div
-      className={failed ? "flex flex-col gap-1.5" : "hidden"}
+      className={failed || cancelled ? "flex flex-col gap-1.5" : "hidden"}
       data-testid="run-header"
     >
+      {cancelled ? (
+        <div
+          className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 text-xs text-amber-800 dark:text-amber-300"
+          data-testid="run-cancelled"
+        >
+          <BanIcon className="mt-0.5 size-3.5 shrink-0" />
+          <p className="min-w-0 font-medium break-words">
+            {run.error ?? "Run cancelled"}
+          </p>
+        </div>
+      ) : null}
       {failed ? (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
           <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />

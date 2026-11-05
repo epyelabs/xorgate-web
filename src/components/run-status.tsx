@@ -8,6 +8,8 @@ const RUN_STATUS: Record<RunStatus, { color: string; pulse?: boolean }> = {
   succeeded: { color: "bg-emerald-500" },
   running: { color: "bg-sky-500", pulse: true },
   failed: { color: "bg-destructive" },
+  // Stopped by a user: neither a success nor a fault.
+  cancelled: { color: "bg-amber-500" },
 }
 
 export function RunStatusCell({ status }: { status: RunStatus }) {

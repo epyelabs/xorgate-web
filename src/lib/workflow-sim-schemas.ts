@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { runStatusSchema } from "./workflow-run-schemas"
 
 // Zod schemas for the simulator WIRE FORMAT only, mirroring the M3 session 1
 // frozen contracts (see plans/workflow_refactor/STATUS.md):
@@ -72,6 +73,48 @@ export type CreateSimulationResponse = z.infer<
   typeof createSimulationResponseSchema
 >
 
+// --- Saved simulation runs (per template + user) --------------------------------
+// GET    /workflow-templates/{id}/simulations/saved          -> { saved: [] }
+// POST   /workflow-templates/{id}/simulations/{runId}/save   -> { saved } (201 new, 200 upsert)
+// DELETE /workflow-templates/{id}/simulations/saved/{savedId} -> 204
+// A save is a bookmark on a terminal simulation run row for the CURRENT user;
+// the run itself is re-read via GET /workflow-runs/{id} on Load. `bindings` is
+// a display-only snapshot of the run's trigger bindings at save time.
+
+export const savedSimulationRunSchema = z.object({
+  id: z.string(),
+  status: runStatusSchema,
+  mode: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  durationMs: z.number().nullable(),
+  templateVersion: z.number().nullable(),
+  // The run row's executionMode ("lambda" | "fargate"); kept open (display only).
+  engineTarget: z.string().nullable(),
+  error: z.string().nullable(),
+  eventCount: z.number(),
+})
+
+export const savedSimulationSchema = z.object({
+  id: z.string(),
+  templateId: z.string(),
+  runId: z.string(),
+  name: z.string(),
+  bindings: z.unknown().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  run: savedSimulationRunSchema,
+})
+export type SavedSimulation = z.infer<typeof savedSimulationSchema>
+
+export const listSavedSimulationsResponseSchema = z.object({
+  saved: z.array(savedSimulationSchema),
+})
+
+export const saveSimulationResponseSchema = z.object({
+  saved: savedSimulationSchema,
+})
+
 // --- POST .../simulations/uploads response --------------------------------------
 
 export const simulationUploadSchema = z.object({
@@ -93,7 +136,8 @@ export const createSimulationUploadResponseSchema = z.object({
 
 export const simStatusPayloadSchema = z.object({
   runId: z.string(),
-  status: z.enum(["running", "succeeded", "failed"]),
+  // "cancelled" is published best-effort by POST /workflow-runs/{id}/cancel.
+  status: z.enum(["running", "succeeded", "failed", "cancelled"]),
   error: z.string().nullable(),
   failedNodeId: z.string().nullable(),
   at: z.string(),

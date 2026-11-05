@@ -26,7 +26,7 @@ import {
 import type { SimProgress } from "@/hooks/use-sim-progress"
 import type { WebcamIngest } from "@/hooks/use-webcam-ingest"
 import { DetectionBoxes } from "./detection-overlay"
-import type { SimPhase } from "./simulator-panel"
+import type { SimPhase } from "./simulator-phase"
 import { formatSeconds } from "./simulator-types"
 import { DataTab } from "./output/data-tab"
 import { EventsTab } from "./output/events-tab"
@@ -370,7 +370,7 @@ export function SimulatorOutput({
   const hasVideo = Object.keys(run.artifacts?.videos ?? {}).length > 0
   const showVideoTab =
     hasVideo || videoNodes(ranDefinition ?? run.definition, run).length > 0
-  const defaultTab = hasVideo && phase !== "failed" ? "video" : "trace"
+  const defaultTab = hasVideo && phase === "succeeded" ? "video" : "trace"
   const steps = stepCounts(run)
   // Files the Data tab lists (materialized inputs are only known once the tab
   // reads the manifest; they are rare and the badge catches up on open).

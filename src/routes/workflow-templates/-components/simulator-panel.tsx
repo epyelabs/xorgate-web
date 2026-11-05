@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { CheckIcon, Loader2Icon, PlayIcon, XIcon } from "lucide-react"
+import {
+  BanIcon,
+  BookmarkCheckIcon,
+  BookmarkIcon,
+  CheckIcon,
+  Loader2Icon,
+  PlayIcon,
+  SquareIcon,
+  XIcon,
+} from "lucide-react"
 import {
   Accordion,
   AccordionContent,
@@ -11,17 +20,29 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { isXorgateError } from "@xorgate/sdk"
 import { xgMessage } from "@/lib/xorgate"
-import { createSimulation } from "@/lib/workflow-templates-api"
-import { getWorkflowInstance } from "@/lib/workflow-instances-api"
+import {
+  createSimulation,
+  deleteSavedSimulation,
+  saveSimulation,
+} from "@/lib/workflow-templates-api"
+import {
+  cancelWorkflowInstance,
+  getWorkflowInstance,
+} from "@/lib/workflow-instances-api"
 import {
   getWorkflowRunResponseSchema,
   type WorkflowRunDetail,
 } from "@/lib/workflow-run-schemas"
+import {
+  useInvalidateSavedSimulations,
+  useSavedSimulations,
+} from "@/queries/workflows"
 import { parsePublishIssues } from "@/lib/workflow-catalog-schemas"
 import {
   parseBindingIssues,
   parseDispatchFailure,
   type CreateSimulationResponse,
+  type SavedSimulation,
 } from "@/lib/workflow-sim-schemas"
 import type { WorkflowDefinition } from "@/lib/workflow-schemas"
 import { useSimProgress } from "@/hooks/use-sim-progress"
@@ -43,11 +64,22 @@ import {
   isVideoBinding,
   type SourceBinding,
 } from "./simulator-types"
+import {
+  cancelConflict,
+  defaultSaveName,
+  isTerminalPhase,
+  phaseForRunStatus,
+  type SimPhase,
+} from "./simulator-phase"
 
-// idle -> preparing (uploads/window resolution + POST) -> running (live
-// progress over IoT + run-row polling) -> succeeded | failed. The run row is
-// the terminal source of truth; IoT topics are the live view only.
-export type SimPhase = "idle" | "preparing" | "running" | "succeeded" | "failed"
+import {
+  CANCELLED_BADGE_CLASS,
+  SUCCEEDED_BADGE_CLASS,
+  SaveRunDialog,
+  SavedRunsList,
+} from "./simulator-saved-runs"
+
+export type { SimPhase } from "./simulator-phase"
 
 const POLL_MS = 2500
 // Once the IoT status topic says terminal, finalize (S3 event -> Lambda -> DB)
@@ -65,8 +97,8 @@ const FALLBACK_POLL_TERMINAL_MS = 1500
 const POLL_STALL_MS = 60_000
 
 // The run's state beside the "Output" label: Running while in flight, then
-// "Succeeded in 2.8s" (green) or "Failed after 2.8s" (red); nothing before
-// the first run.
+// "Succeeded in 2.8s" (green), "Failed after 2.8s" (red) or "Cancelled after
+// 2.8s" (amber); nothing before the first run.
 function RunStatusBadge({
   phase,
   durationMs,
@@ -79,7 +111,7 @@ function RunStatusBadge({
     return (
       <Badge
         variant="secondary"
-        className="gap-1 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+        className={`gap-1 ${SUCCEEDED_BADGE_CLASS}`}
         data-testid="run-status-badge"
       >
         <CheckIcon />
@@ -96,6 +128,18 @@ function RunStatusBadge({
       >
         <XIcon />
         Failed{took ? ` after ${took}` : ""}
+      </Badge>
+    )
+  }
+  if (phase === "cancelled") {
+    return (
+      <Badge
+        variant="secondary"
+        className={`gap-1 ${CANCELLED_BADGE_CLASS}`}
+        data-testid="run-status-badge"
+      >
+        <BanIcon />
+        Cancelled{took ? ` after ${took}` : ""}
       </Badge>
     )
   }
@@ -179,6 +223,15 @@ export function SimulatorPanel({
     null
   )
   const [runDetail, setRunDetail] = useState<WorkflowRunDetail | null>(null)
+  // A cancel request in flight (the Cancel button disables; Run stays off
+  // until it answers so a late answer can never land on a newer run).
+  const [cancelling, setCancelling] = useState(false)
+
+  // Saved runs (per template + current user).
+  const savedQuery = useSavedSimulations(templateId)
+  const refreshSaved = useInvalidateSavedSimulations(templateId)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [loadingSavedId, setLoadingSavedId] = useState<string | null>(null)
 
   // Both sections open initially; a started run collapses Sources so the
   // Output takes over (the user can re-open Sources anytime).
@@ -275,7 +328,8 @@ export function SimulatorPanel({
   // (header, the engine's output video, trace, events, artifacts).
   const finishRun = useCallback((detail: WorkflowRunDetail) => {
     setRunDetail(detail)
-    setPhase(detail.status === "succeeded" ? "succeeded" : "failed")
+    // Only ever called with a terminal row (succeeded | failed | cancelled).
+    setPhase(phaseForRunStatus(detail.status))
   }, [])
 
   // One read of the run row: finishes the run when the row is terminal, and
@@ -357,6 +411,101 @@ export function SimulatorPanel({
     document.addEventListener("visibilitychange", onVisibility)
     return () => document.removeEventListener("visibilitychange", onVisibility)
   }, [phase, readRunRow])
+
+  // --- Cancel -------------------------------------------------------------------
+
+  // Stops the in-flight run. The backend flips the row to cancelled atomically
+  // and answers with it; the IoT subscription and webcam ingest stop by
+  // themselves once the phase leaves "running".
+  const cancelRun = async () => {
+    if (!activeRunId || cancelling) return
+    setCancelling(true)
+    try {
+      const { run } = await cancelWorkflowInstance(activeRunId)
+      finishRun(run)
+    } catch (err) {
+      // 409 RUN_NOT_RUNNING: it landed (or was cancelled) first; adopt the
+      // row the backend sent, else read it.
+      const conflict = cancelConflict(err)
+      if (conflict) {
+        if (conflict.run && conflict.run.status !== "running") {
+          finishRun(conflict.run)
+        } else {
+          await readRunRow()
+        }
+        return
+      }
+      toast.error(`Could not cancel the run: ${xgMessage(err)}`)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  // --- Saved runs -----------------------------------------------------------------
+
+  const savedList = savedQuery.data
+  const savedForShownRun = runDetail
+    ? (savedList?.find((s) => s.runId === runDetail.id) ?? null)
+    : null
+
+  const saveRun = async (name: string): Promise<boolean> => {
+    if (!runDetail) return false
+    try {
+      await saveSimulation(templateId, runDetail.id, name)
+      toast.success("Run saved")
+      await refreshSaved()
+      setOpenSections((open) =>
+        open.includes("saved") ? open : [...open, "saved"]
+      )
+      return true
+    } catch (err) {
+      toast.error(`Could not save the run: ${xgMessage(err)}`)
+      return false
+    }
+  }
+
+  const deleteSaved = async (saved: SavedSimulation) => {
+    try {
+      await deleteSavedSimulation(templateId, saved.id)
+      toast.success("Saved run deleted")
+    } catch (err) {
+      toast.error(`Could not delete the saved run: ${xgMessage(err)}`)
+    } finally {
+      // A 404 means it is already gone; refresh either way.
+      await refreshSaved()
+    }
+  }
+
+  // Reopens a saved run's results: the run row alone drives the Output (no
+  // live progress, no active run, so no polling or IoT).
+  const loadSaved = async (saved: SavedSimulation) => {
+    if (running || loadingSavedId) return
+    setLoadingSavedId(saved.id)
+    try {
+      const parsed = getWorkflowRunResponseSchema.safeParse(
+        await getWorkflowInstance(saved.runId)
+      )
+      if (!parsed.success) throw new Error("unexpected run detail shape")
+      const run = parsed.data.run
+      if (run.status === "running") {
+        toast.info("That run is still running")
+        return
+      }
+      setActiveRun(null)
+      setPrepMessage(null)
+      setPollStalled(false)
+      setRunDetail(run)
+      setRanDefinition(run.definition)
+      setPhase(phaseForRunStatus(run.status))
+      setOpenSections((open) =>
+        open.includes("output") ? open : ["output", ...open]
+      )
+    } catch (err) {
+      toast.error(`Could not load the run: ${xgMessage(err)}`)
+    } finally {
+      setLoadingSavedId(null)
+    }
+  }
 
   // --- Run ----------------------------------------------------------------------
 
@@ -538,11 +687,18 @@ export function SimulatorPanel({
           </AccordionTrigger>
           <AccordionContent className="pb-3">
             <div className="min-h-64 rounded-md border border-border bg-muted/30 p-3">
+              {/* Keyed on the landed run so a Load of another saved run starts
+                  its tabs fresh. A loaded run has no activeRun: the row
+                  itself supplies startedAt (engineTarget only matters for
+                  the live cold-start line). */}
               <SimulatorOutput
+                key={runDetail?.id ?? "live"}
                 phase={phase}
                 prepMessage={prepMessage}
                 engineTarget={activeRun?.run.engineTarget ?? null}
-                startedAt={activeRun?.run.startedAt ?? null}
+                startedAt={
+                  activeRun?.run.startedAt ?? runDetail?.startedAt ?? null
+                }
                 progress={progress}
                 run={runDetail}
                 ranDefinition={ranDefinition}
@@ -574,27 +730,102 @@ export function SimulatorPanel({
             </div>
           </AccordionContent>
         </AccordionItem>
+
+        <AccordionItem value="saved">
+          <AccordionTrigger className="py-3" data-testid="sim-saved-section">
+            <span className="flex items-center gap-2">
+              Saved runs
+              {savedList && savedList.length > 0 ? (
+                <Badge variant="secondary">{savedList.length}</Badge>
+              ) : null}
+            </span>
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+            <SavedRunsList
+              saved={savedList}
+              isPending={savedQuery.isPending}
+              error={
+                savedQuery.error ? xgMessage(savedQuery.error) : null
+              }
+              shownRunId={runDetail?.id ?? null}
+              loadingId={loadingSavedId}
+              loadDisabled={running}
+              onLoad={(s) => void loadSaved(s)}
+              onDelete={deleteSaved}
+            />
+          </AccordionContent>
+        </AccordionItem>
       </Accordion>
 
-      <div className="shrink-0 border-t border-border p-3">
+      <div className="flex shrink-0 gap-2 border-t border-border p-3">
         <Button
           type="button"
-          className="w-full gap-1.5"
+          className="min-w-0 flex-1 gap-1.5"
           onClick={runWorkflow}
-          disabled={running}
+          disabled={running || cancelling}
         >
           {running ? (
             <Loader2Icon className="size-3.5 animate-spin" />
           ) : (
             <PlayIcon className="size-3.5" />
           )}
-          {phase === "preparing"
-            ? (prepMessage ?? "Starting…")
-            : phase === "running"
-              ? "Running…"
-              : "Run Workflow"}
+          <span className="truncate">
+            {phase === "preparing"
+              ? (prepMessage ?? "Starting…")
+              : phase === "running"
+                ? "Running…"
+                : "Run Workflow"}
+          </span>
         </Button>
+        {phase === "running" && activeRun ? (
+          <Button
+            type="button"
+            variant="destructive"
+            className="gap-1.5"
+            onClick={() => void cancelRun()}
+            disabled={cancelling}
+            data-testid="sim-cancel"
+          >
+            {cancelling ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <SquareIcon className="size-3.5" />
+            )}
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </Button>
+        ) : null}
+        {isTerminalPhase(phase) && runDetail ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setSaveDialogOpen(true)}
+            disabled={savedForShownRun !== null || savedQuery.isPending}
+            title={
+              savedForShownRun
+                ? `Saved as "${savedForShownRun.name}"`
+                : "Save this run to reopen it later"
+            }
+            data-testid="sim-save"
+            data-saved={savedForShownRun ? "true" : "false"}
+          >
+            {savedForShownRun ? (
+              <BookmarkCheckIcon className="size-3.5" />
+            ) : (
+              <BookmarkIcon className="size-3.5" />
+            )}
+            {savedForShownRun ? "Saved" : "Save run"}
+          </Button>
+        ) : null}
       </div>
+
+      {saveDialogOpen && runDetail ? (
+        <SaveRunDialog
+          defaultName={defaultSaveName(new Date(runDetail.startedAt))}
+          onOpenChange={setSaveDialogOpen}
+          onSave={saveRun}
+        />
+      ) : null}
 
       <SourcePreviewDialog
         binding={preview && isVideoBinding(preview) ? preview : null}

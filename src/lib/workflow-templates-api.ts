@@ -11,7 +11,10 @@ import type {
 import {
   createSimulationResponseSchema,
   createSimulationUploadResponseSchema,
+  listSavedSimulationsResponseSchema,
+  saveSimulationResponseSchema,
   type CreateSimulationResponse,
+  type SavedSimulation,
   type SimulationApiBinding,
   type SimulationUpload,
 } from "./workflow-sim-schemas"
@@ -132,6 +135,54 @@ export async function createSimulation(
     throw new Error("Unexpected /simulations response shape")
   }
   return parsed.data
+}
+
+// --- Saved simulation runs (per template + current user) ------------------------
+
+// The current user's saved runs on this template, newest first.
+export async function listSavedSimulations(
+  templateId: string,
+): Promise<SavedSimulation[]> {
+  const raw = await xg().request(
+    "GET",
+    `/workflow-templates/${templateId}/simulations/saved`,
+  )
+  const parsed = listSavedSimulationsResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error("Unexpected /simulations/saved response shape")
+  }
+  return parsed.data.saved
+}
+
+// Bookmarks a terminal simulation run (409 RUN_NOT_TERMINAL while it still
+// runs). Saving the same run again renames it (upsert on template+user+run).
+// Without a name the backend picks `Simulation <YYYY-MM-DD HH:mm>`.
+export async function saveSimulation(
+  templateId: string,
+  runId: string,
+  name?: string,
+): Promise<SavedSimulation> {
+  const raw = await xg().request(
+    "POST",
+    `/workflow-templates/${templateId}/simulations/${runId}/save`,
+    { body: name !== undefined ? { name } : {} },
+  )
+  const parsed = saveSimulationResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error("Unexpected /simulations/:runId/save response shape")
+  }
+  return parsed.data.saved
+}
+
+// Removes a bookmark only; the run row itself stays (Workflow Instances).
+export async function deleteSavedSimulation(
+  templateId: string,
+  savedId: string,
+): Promise<void> {
+  await xg().request(
+    "DELETE",
+    `/workflow-templates/${templateId}/simulations/saved/${savedId}`,
+  )
 }
 
 // Mints a presigned S3 POST for a video/CSV simulation input. The caller then

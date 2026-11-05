@@ -2,7 +2,12 @@ import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
 import { requireWorkspace } from "@/lib/auth-guard"
 import { toast } from "sonner"
-import { AlertTriangleIcon, RadioIcon, RotateCwIcon } from "lucide-react"
+import {
+  AlertTriangleIcon,
+  BanIcon,
+  RadioIcon,
+  RotateCwIcon,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -46,6 +51,7 @@ function statusVariant(status: RunStatus): "secondary" | "destructive" {
 function statusColor(status: RunStatus): string {
   if (status === "succeeded") return "text-emerald-600"
   if (status === "running") return "text-sky-600"
+  if (status === "cancelled") return "text-amber-600"
   return ""
 }
 
@@ -280,6 +286,14 @@ function WorkflowInstanceDetailPage() {
               </p>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {/* Cancelled band: a user stopped the run (neutral, not an error). */}
+      {run.status === "cancelled" ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+          <BanIcon className="mt-0.5 size-3.5 shrink-0" />
+          <p className="font-medium">{run.error ?? "Run cancelled"}</p>
         </div>
       ) : null}
 

@@ -40,6 +40,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { getCachedDevice } from "@/queries/devices"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
+import { updaterUnit, type ReportedAgentKind } from "@/lib/agent-channel"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven
@@ -183,7 +184,10 @@ export interface DeviceSettings {
    * row until its reported build changes (or it comes back on the same one).
    * True for the whole round trip, which can run to several minutes.
    */
-  updateAgent: (expectedVersion?: string | null) => void
+  updateAgent: (
+    expectedVersion?: string | null,
+    agent?: ReportedAgentKind | null
+  ) => void
   updatingAgent: boolean
 }
 
@@ -566,7 +570,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
   // build, so that is exactly what this waits for.
   const [updatingAgent, setUpdatingAgent] = useState(false)
   const updatingAgentRef = useRef(false)
-  const updateAgent = useCallback((expectedVersion?: string | null) => {
+  const updateAgent = useCallback((expectedVersion?: string | null, agent?: ReportedAgentKind | null) => {
+    // The outcome hints name the updater unit of the agent being updated
+    // (D4): a Rust device's journal is `xorgate-updater-rs`.
+    const unit = updaterUnit(agent)
     if (updatingAgentRef.current || optimisticRef.current === null) return
     const before = reportedAgentBuild(optimisticRef.current)?.version ?? null
     updatingAgentRef.current = true
@@ -617,7 +624,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
               toast.info(
                 "The device came back on the same build. If you expected a new " +
                   "version, the update may have failed and rolled back — check " +
-                  "`journalctl -u xorgate-updater` on the device."
+                  `\`journalctl -u ${unit}\` on the device.`
               )
             }
             return
@@ -625,7 +632,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         }
         toast.error(
           "The device has not come back with a new build yet. Check the device " +
-            "(`journalctl -u xorgate-updater`) before retrying."
+            `(\`journalctl -u ${unit}\`) before retrying.`
         )
       } catch (err) {
         // xgMessage, not err.message: a XorgateError's message carries the

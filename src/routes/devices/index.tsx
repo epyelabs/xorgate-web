@@ -41,6 +41,8 @@ import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 import { RegisterSimulationDialog } from "./-components/register-simulation-dialog"
 import { SimulatedBadge } from "./-components/simulated-badge"
+import { AgentBadge } from "./-components/agent-badge"
+import { useFleetAgents } from "@/queries/device-agent"
 import { BulkTransferDialog } from "./-components/bulk-transfer-dialog"
 
 export const Route = createFileRoute("/devices/")({
@@ -124,6 +126,9 @@ function DevicesListPage() {
   // workspaces switches to (or starts) that workspace's own cache entry —
   // the old "stale workspace = loading" comparison is gone with the effect.
   const fleetQuery = useFleet({ poll: true })
+  // Which agent each device runs, read once (not polled): it changes only at a
+  // claim, and the claim's fleet invalidation refreshes this key too.
+  const fleetAgents = useFleetAgents().data
   const roster = fleetQuery.data ?? NO_DEVICES
   const isLoading = fleetQuery.isPending
   // A failed background poll keeps the last good fleet on screen; only a
@@ -313,7 +318,18 @@ function DevicesListPage() {
       // Mirrored cloud-side from the device's own report, so a device that has
       // never connected (or runs an agent older than the build manifest) reads
       // "—" rather than a value someone typed.
-      cell: (device) => device.agentVersion ?? "—",
+      // The agent badge rides the version: a JS sha and a Rust sha look
+      // alike, and which one a device runs decides what "latest" means for it.
+      // Nothing while the agent map loads, rather than a JS guess.
+      cell: (device) => {
+        const agent = fleetAgents?.[device.id]
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            {device.agentVersion ?? "—"}
+            {agent ? <AgentBadge agent={agent} /> : null}
+          </span>
+        )
+      },
       csvValue: (device) => device.agentVersion ?? "",
     },
     {

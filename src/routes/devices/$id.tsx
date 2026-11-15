@@ -41,6 +41,8 @@ import { PowerOffDeviceDialog } from "./-components/power-off-device-dialog"
 import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
 import { RebootSimulationDialog } from "./-components/reboot-simulation-dialog"
 import { SimulatedBadge } from "./-components/simulated-badge"
+import { AgentBadge } from "./-components/agent-badge"
+import { useDeviceAgent } from "@/queries/device-agent"
 import { useDeviceSimulation } from "@/queries/simulations"
 import {
   buildSimulationConfig,
@@ -200,6 +202,9 @@ function DeviceLayout() {
   // the fleet cache, so arriving from the list paints the header instantly.
   const deviceQuery = useDevice(id, { poll: true })
   const device = deviceQuery.data ?? null
+  // JS or Rust, beside the name (dual-agent registration D6.4). Shares its
+  // query with the General tab's Agent row.
+  const deviceAgent = useDeviceAgent(id).data ?? null
   // The model feeds the header subtitle and the model dialog. Best-effort: a
   // failure here must not block the header.
   const deviceModel = useDeviceModel(device?.deviceModelId).data ?? null
@@ -361,6 +366,7 @@ function DeviceLayout() {
                   {device?.name ?? device?.serial ?? "Device"}
                 </h1>
                 {simulated ? <SimulatedBadge config={device?.config ?? null} /> : null}
+                {deviceAgent ? <AgentBadge agent={deviceAgent} /> : null}
                 {device ? (
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {deviceModel ? (

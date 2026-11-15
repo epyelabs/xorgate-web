@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CheckIcon, CopyIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -93,6 +93,9 @@ export function ProvisionDeviceDialog({
   const rust = rustOption(rustChannel, rustRefused)
   // What to mint next. Bumping `n` mints again (after expiry / error, or for a
   // different agent) without closing the dialog.
+  // Bumped by every mint and every model re-pin: a re-pin answer applies only
+  // if nothing replaced the code on screen while it was in flight.
+  const regSeq = useRef(0)
   const [mintReq, setMintReq] = useState<{
     agent: AgentKind
     modelId?: string
@@ -119,6 +122,7 @@ export function ProvisionDeviceDialog({
   // away, instead of first minting for whatever agent the last session left.
   function handleOpenChange(next: boolean) {
     if (!next) {
+      regSeq.current++
       setPick("js")
       setModelPick("auto")
       setPinned(false)
@@ -149,10 +153,15 @@ export function ProvisionDeviceDialog({
   async function handleModelPick(value: string) {
     setModelPick(value)
     if (value === "auto" || phase !== "pending") return
+    const seq = ++regSeq.current
     try {
       // The endpoint is idempotent and RE-PINS the pending code in place —
       // the code for the agent on screen, so the agent travels with the pin.
       const r = await createRegistration({ agent: pick, deviceModelId: value })
+      // An agent switch (or a later pin, or a close) since this was sent makes
+      // the answer stale: it is the OLD agent's code, and applying it would
+      // put that code on screen under the new pick (review-wp-c S2).
+      if (seq !== regSeq.current) return
       setReg(r)
       setPinned(true)
     } catch (err) {
@@ -183,6 +192,8 @@ export function ProvisionDeviceDialog({
   // dialog opens, the operator switches agent, or asks for a new one.
   useEffect(() => {
     if (!open) return
+    // Supersedes any model re-pin still in flight for the previous code.
+    regSeq.current++
     let cancelled = false
     setPhase("creating")
     setReg(null)
@@ -218,10 +229,16 @@ export function ProvisionDeviceDialog({
     }
   }, [open, mintReq])
 
+  // The M1 echo guard (D6.2): the command only when the code serves the agent
+  // picked. A missing `agent` (an old backend) counts as JS, so the default
+  // flow is exactly today's; a Rust pick there never matches and shows none.
+  const commandMatchesPick = registrationMatchesPick(reg, pick)
+
   // Poll until the device claims the code (or it expires). reg.code is stable
-  // across polls, so this effect isn't torn down on every status update.
+  // across polls, so this effect isn't torn down on every status update. No
+  // poll while no command is shown: nothing can claim a code nobody was given.
   useEffect(() => {
-    if (!open || phase !== "pending" || !reg) return
+    if (!open || phase !== "pending" || !reg || !commandMatchesPick) return
     const code = reg.code
     let cancelled = false
     const id = setInterval(async () => {
@@ -243,7 +260,7 @@ export function ProvisionDeviceDialog({
       cancelled = true
       clearInterval(id)
     }
-  }, [open, phase, reg?.code, onClaimed])
+  }, [open, phase, reg?.code, commandMatchesPick, onClaimed])
 
   // 1s countdown tick, only while waiting.
   useEffect(() => {
@@ -258,10 +275,6 @@ export function ProvisionDeviceDialog({
     return () => clearTimeout(timer)
   }, [copied])
 
-  // The M1 echo guard (D6.2): the command only when the code serves the agent
-  // picked. A missing `agent` (an old backend) counts as JS, so the default
-  // flow is exactly today's; a Rust pick there never matches and shows none.
-  const commandMatchesPick = registrationMatchesPick(reg, pick)
   const installCommand =
     reg && commandMatchesPick
       ? `curl -s ${reg.installUrl} -o install.sh\nsudo bash install.sh`
@@ -481,6 +494,43 @@ function AgentPicker({
               : undefined,
     },
   ]
+  // Roving focus (WAI-ARIA radio group): only the checked option is in the tab
+  // order, and the arrow keys move AND select, skipping unavailable options.
+  // Unavailable / busy options are aria-disabled rather than natively disabled
+  // so focus is never dropped mid-mint and the reason stays describable.
+  const buttons = useRef<Partial<Record<AgentKind, HTMLButtonElement | null>>>(
+    {}
+  )
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const dir =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0
+    if (dir === 0) return
+    e.preventDefault()
+    if (busy) return
+    const from = options.findIndex((o) => o.value === pick)
+    for (let k = 1; k <= options.length; k++) {
+      const next =
+        options[
+          (((from + dir * k) % options.length) + options.length) %
+            options.length
+        ]
+      if (next.disabled) continue
+      if (next.value !== pick) onPick(next.value)
+      buttons.current[next.value]?.focus()
+      return
+    }
+  }
+  const reasonId = "register-agent-rust-reason"
+  const cm4Id = "register-agent-rust-cm4"
+  const showCm4 = pick === "rust" && cm4Picked
+  const rustDescribedBy =
+    [rust.state === "disabled" ? reasonId : null, showCm4 ? cm4Id : null]
+      .filter(Boolean)
+      .join(" ") || undefined
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
@@ -493,6 +543,8 @@ function AgentPicker({
         <div
           role="radiogroup"
           aria-labelledby="register-agent-pick-label"
+          aria-describedby={rustDescribedBy}
+          onKeyDown={handleKeyDown}
           className="inline-flex items-center rounded-md border border-border p-0.5"
         >
           {options.map((opt) => (
@@ -501,12 +553,22 @@ function AgentPicker({
               type="button"
               role="radio"
               aria-checked={pick === opt.value}
+              aria-disabled={opt.disabled || busy || undefined}
+              aria-describedby={
+                opt.value === "rust" ? rustDescribedBy : undefined
+              }
+              tabIndex={pick === opt.value ? 0 : -1}
+              ref={(el) => {
+                buttons.current[opt.value] = el
+              }}
               data-testid={`agent-pick-${opt.value}`}
-              disabled={opt.disabled || busy}
               title={opt.title}
-              onClick={() => onPick(opt.value)}
+              onClick={() => {
+                if (opt.disabled || busy) return
+                onPick(opt.value)
+              }}
               className={cn(
-                "rounded px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                "rounded px-3 py-1 text-xs transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
                 pick === opt.value
                   ? "bg-muted font-medium text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -519,14 +581,16 @@ function AgentPicker({
       </div>
       {rust.state === "disabled" ? (
         <p
+          id={reasonId}
           className="text-xs text-muted-foreground"
           data-testid="rust-unavailable-reason"
         >
           Rust: {rust.reason}.
         </p>
       ) : null}
-      {pick === "rust" && cm4Picked ? (
+      {showCm4 ? (
         <p
+          id={cm4Id}
           className="text-xs text-amber-600 dark:text-amber-400"
           data-testid="rust-cm4-hint"
         >

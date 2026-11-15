@@ -3,7 +3,8 @@ import { XorgateError, type AgentBuild, type DeviceModel } from "@xorgate/sdk"
 
 // The raw-request seam: every network helper goes through xg().request().
 const request = vi.fn()
-vi.mock("@/lib/xorgate", () => ({ xg: () => ({ request }) }))
+let workspaceId: string | undefined = "ws-1"
+vi.mock("@/lib/xorgate", () => ({ xg: () => ({ request, workspaceId }) }))
 
 const {
   agentOrJs,
@@ -23,6 +24,7 @@ const {
   updaterUnit,
   RUST_REASON_FLAG_OFF,
   RUST_REASON_NO_RELEASE,
+  RUST_REASON_CHECK_FAILED,
   RUST_REASON_OLD_API,
   UNSUPPORTED_CHANNEL,
 } = await import("./agent-channel")
@@ -50,7 +52,10 @@ const REG_OLD = {
   installUrl: "https://api.example/get/ABCD1234",
 }
 
-beforeEach(() => request.mockReset())
+beforeEach(() => {
+  request.mockReset()
+  workspaceId = "ws-1"
+})
 
 describe("agent kinds", () => {
   it("narrows only js and rust", () => {
@@ -107,6 +112,14 @@ describe("registrations", () => {
     )
   })
 
+  it("N3: refuses locally without a workspace, sending nothing", async () => {
+    workspaceId = undefined
+    await expect(createRegistration({ agent: "js" })).rejects.toMatchObject({
+      code: "INVALID_CONFIG",
+    })
+    expect(request).not.toHaveBeenCalled()
+  })
+
   it("fills agent=js when the backend omits it (create and get)", async () => {
     request.mockResolvedValueOnce(REG_OLD)
     expect((await createRegistration({ agent: "js" })).agent).toBe("js")
@@ -153,26 +166,83 @@ describe("registrations", () => {
 describe("the agent channel", () => {
   it("reads a self-describing answer", () => {
     expect(
-      channelFromBody({
-        agent: "rust",
-        latest: BUILD_RS,
-        registrationEnabled: true,
-      })
+      channelFromBody(
+        { agent: "rust", latest: BUILD_RS, registrationEnabled: true },
+        "rust"
+      )
     ).toEqual({ agent: "rust", latest: BUILD_RS, registrationEnabled: true })
     expect(
-      channelFromBody({
-        agent: "rust",
-        latest: null,
-        registrationEnabled: false,
-      })
+      channelFromBody(
+        { agent: "rust", latest: null, registrationEnabled: false },
+        "rust"
+      )
     ).toEqual({ agent: "rust", latest: null, registrationEnabled: false })
   })
 
-  it("treats today's no-echo shape (an old backend ignoring ?agent=) as unsupported", () => {
-    expect(channelFromBody({ latest: BUILD_JS })).toEqual(UNSUPPORTED_CHANNEL)
-    expect(channelFromBody(null)).toEqual(UNSUPPORTED_CHANNEL)
-    expect(channelFromBody([])).toEqual(UNSUPPORTED_CHANNEL)
-    expect(channelFromBody({ agent: "" })).toEqual(UNSUPPORTED_CHANNEL)
+  it("S1: an un-echoed body (old backend) is NEVER the Rust channel", () => {
+    expect(channelFromBody({ latest: BUILD_JS }, "rust")).toEqual(
+      UNSUPPORTED_CHANNEL
+    )
+    expect(channelFromBody(null, "rust")).toEqual(UNSUPPORTED_CHANNEL)
+    expect(channelFromBody([], "rust")).toEqual(UNSUPPORTED_CHANNEL)
+    expect(channelFromBody({ agent: "" }, "rust")).toEqual(UNSUPPORTED_CHANNEL)
+  })
+
+  it("S1: an un-echoed body (old backend) IS the JS manifest when JS was asked", () => {
+    expect(channelFromBody({ latest: BUILD_JS }, "js")).toEqual({
+      agent: "js",
+      latest: BUILD_JS,
+      registrationEnabled: true,
+    })
+    // No manifest field at all: nothing to compare against.
+    expect(channelFromBody({}, "js")).toEqual({
+      agent: "js",
+      latest: null,
+      registrationEnabled: true,
+    })
+    // An echo always wins over the fallback.
+    expect(
+      channelFromBody(
+        { agent: "js", latest: null, registrationEnabled: true },
+        "js"
+      ).latest
+    ).toBeNull()
+  })
+
+  it("S1: a JS device on an old backend keeps today's update check and target version", async () => {
+    // Old backend: ignores ?agent= and answers today's { latest } shape.
+    request.mockResolvedValue({ latest: BUILD_JS })
+    const jsChannel = await fetchAgentChannel("js")
+    const rustChannel = await fetchAgentChannel("rust")
+    expect(
+      agentUpdateState({
+        deviceAgent: "js",
+        channel: jsChannel,
+        installedVersion: "aaaaaaa",
+      })
+    ).toEqual({ kind: "update-available", latest: BUILD_JS })
+    // Same version installed: up to date, so the dialog offers a reinstall of
+    // BUILD_JS and passes it as expectedVersion, exactly as before Phase 8.
+    expect(
+      agentUpdateState({
+        deviceAgent: "js",
+        channel: jsChannel,
+        installedVersion: BUILD_JS.version,
+      })
+    ).toEqual({ kind: "up-to-date", latest: BUILD_JS })
+    // The same body never reaches a Rust device.
+    expect(
+      agentUpdateState({
+        deviceAgent: "rust",
+        channel: rustChannel,
+        installedVersion: "aaaaaaa",
+      })
+    ).toEqual({ kind: "unknown" })
+    // An old backend with no manifest 404s: no dot, as today.
+    request.mockRejectedValueOnce(
+      new XorgateError({ code: "NOT_FOUND", message: "x", status: 404 })
+    )
+    expect(await fetchAgentChannel("js")).toEqual(UNSUPPORTED_CHANNEL)
   })
 
   it("asks ?agent= and reads a 404 as unsupported, other errors throw", async () => {
@@ -212,10 +282,6 @@ describe("the Rust option", () => {
       state: "disabled",
       reason: RUST_REASON_OLD_API,
     })
-    expect(rustOption(null)).toEqual({
-      state: "disabled",
-      reason: RUST_REASON_OLD_API,
-    })
     // An old backend's JS manifest must never read as the Rust one.
     expect(
       rustOption({ agent: "js", latest: BUILD_JS, registrationEnabled: true })
@@ -223,6 +289,13 @@ describe("the Rust option", () => {
       state: "disabled",
       reason: RUST_REASON_OLD_API,
     })
+  })
+  it("N1: a failed check gets its own reason, not the old-API one", () => {
+    expect(rustOption(null)).toEqual({
+      state: "disabled",
+      reason: RUST_REASON_CHECK_FAILED,
+    })
+    expect(RUST_REASON_CHECK_FAILED).not.toBe(RUST_REASON_OLD_API)
   })
   it("names the stage flag (registrationEnabled:false, or a 409 from create)", () => {
     expect(rustOption({ ...ok, registrationEnabled: false })).toEqual({

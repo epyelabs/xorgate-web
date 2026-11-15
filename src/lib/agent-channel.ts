@@ -26,9 +26,12 @@
  *    device and code it knows is the JS agent (plan M1).
  * 2. A channel counts only when the backend ECHOES the agent asked for. An old
  *    backend ignores `?agent=` and answers with the JS manifest, which must
- *    never be read as the Rust one (review-plan S2).
+ *    never be read as the Rust one (review-plan S2). The one exception is the
+ *    JS channel: that un-echoed 200 body IS the JS manifest, so a JS device
+ *    keeps today's update check on an old backend (review-wp-c S1).
  */
 import {
+  XorgateError,
   isXorgateError,
   type AgentBuild,
   type DeviceModel,
@@ -107,8 +110,17 @@ export async function createRegistration(input: {
   agent: AgentKind
   deviceModelId?: string
 }): Promise<AgentRegistration> {
+  const client = xg()
+  // The SDK's own create refuses locally without a workspace; keep that, so a
+  // missing workspace never reaches the API as a header-less request.
+  if (!client.workspaceId) {
+    throw new XorgateError({
+      code: "INVALID_CONFIG",
+      message: "Registering a device needs a workspace. Select one first.",
+    })
+  }
   const body = registrationBody(input)
-  const raw = await xg().request(
+  const raw = await client.request(
     "POST",
     "/device-registrations",
     body ? { body } : {}
@@ -166,14 +178,28 @@ export const UNSUPPORTED_CHANNEL: AgentChannel = {
   registrationEnabled: false,
 }
 
-/** Reads a `?agent=` body. No echoed agent (today's JS-only shape) = unsupported. */
-export function channelFromBody(body: unknown): AgentChannel {
+/**
+ * Reads a 200 `?agent=` body for the agent that was asked about. No echoed
+ * agent is today's JS-only shape from an old backend that ignored `?agent=`:
+ * unsupported for Rust (that body is the JS manifest, never the Rust one), but
+ * exactly the JS manifest when JS was asked (review-wp-c S1), so a JS device
+ * keeps its update check and the update dialog's target version.
+ */
+export function channelFromBody(body: unknown, asked: AgentKind): AgentChannel {
   const row =
     typeof body === "object" && body !== null && !Array.isArray(body)
       ? (body as Record<string, unknown>)
       : {}
   const echoed = row["agent"]
-  if (typeof echoed !== "string" || echoed === "") return UNSUPPORTED_CHANNEL
+  if (typeof echoed !== "string" || echoed === "") {
+    if (asked !== "js") return UNSUPPORTED_CHANNEL
+    return {
+      agent: "js",
+      latest: (row["latest"] as AgentBuild | null | undefined) ?? null,
+      // An old backend has no stage flag; JS registration is always open.
+      registrationEnabled: true,
+    }
+  }
   return {
     agent: echoed,
     latest: (row["latest"] as AgentBuild | null | undefined) ?? null,
@@ -198,13 +224,15 @@ export async function fetchAgentChannel(
     if (isXorgateError(e) && e.code === "NOT_FOUND") return UNSUPPORTED_CHANNEL
     throw e
   }
-  return channelFromBody(body)
+  return channelFromBody(body, agent)
 }
 
 // ---------------------------------------------------------------------------
 // The Rust option in Register device (D5, D7, Q-8.5, Q-8.6)
 // ---------------------------------------------------------------------------
 
+export const RUST_REASON_CHECK_FAILED =
+  "Could not check whether this stage offers the Rust agent"
 export const RUST_REASON_OLD_API =
   "This API version does not support the Rust installer"
 export const RUST_REASON_FLAG_OFF =
@@ -232,7 +260,10 @@ export function rustOption(
   if (refusedByCreate)
     return { state: "disabled", reason: RUST_REASON_FLAG_OFF }
   if (channel === undefined) return { state: "checking" }
-  if (channel === null || channel.agent !== "rust") {
+  if (channel === null) {
+    return { state: "disabled", reason: RUST_REASON_CHECK_FAILED }
+  }
+  if (channel.agent !== "rust") {
     return { state: "disabled", reason: RUST_REASON_OLD_API }
   }
   if (!channel.registrationEnabled)

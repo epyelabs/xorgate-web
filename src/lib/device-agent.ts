@@ -16,6 +16,7 @@
  * this console). Narrow them with `isAgentKind()` before asking a channel.
  */
 import {
+  XorgateError,
   isAgentKind,
   isXorgateError,
   type AgentBuild,
@@ -67,11 +68,20 @@ export function registrationInput(input: {
  * `AGENT_NOT_ENABLED` (409) when the stage's Rust flag says no for this
  * workspace, `INVALID_AGENT` (400) for an unknown agent.
  */
-export function createRegistration(input: {
+export async function createRegistration(input: {
   agent: AgentKind
   deviceModelId?: string
 }): Promise<DeviceRegistration> {
-  return xg().deviceRegistrations.create(registrationInput(input))
+  const client = xg()
+  // The SDK refuses this too, but with a developer-facing message; the
+  // operator gets the console's own wording.
+  if (!client.workspaceId) {
+    throw new XorgateError({
+      code: "INVALID_CONFIG",
+      message: "Registering a device needs a workspace. Select one first.",
+    })
+  }
+  return client.deviceRegistrations.create(registrationInput(input))
 }
 
 /**

@@ -175,6 +175,7 @@ describe("registrations", () => {
     current = client(undefined)
     await expect(createRegistration({ agent: "js" })).rejects.toMatchObject({
       code: "INVALID_CONFIG",
+      message: expect.stringContaining("Select one first"),
     })
     expect(fakeFetch).not.toHaveBeenCalled()
   })

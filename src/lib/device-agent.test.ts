@@ -47,13 +47,19 @@ const {
   agentUpdateState,
   createRegistration,
   currentDeviceAgent,
+  defaultRegistrationAgent,
   fetchAgentChannel,
   isAgentNotEnabled,
   isCm4Model,
+  registerPickOptions,
   registrationInput,
   registrationMatchesPick,
   rustOption,
   updaterUnit,
+  REGISTER_PICK_LABEL,
+  REGISTER_PICK_ORDER,
+  RUST_CHECK_DEADLINE_MS,
+  RUST_HINT_CM4,
   RUST_REASON_FLAG_OFF,
   RUST_REASON_NO_RELEASE,
   RUST_REASON_CHECK_FAILED,
@@ -441,6 +447,80 @@ describe("the Rust option", () => {
     expect(isCm4Model(model("rpi-cm5"))).toBe(false)
     expect(isCm4Model(model(null))).toBe(false)
     expect(isCm4Model(null)).toBe(false)
+  })
+})
+
+describe("the Language picker (Rust first, Rust by default where offered)", () => {
+  const ok = { agent: "rust", latest: BUILD_RS, registrationEnabled: true }
+  // Every way Rust can be unavailable, each with its own reason.
+  const disabled: [string, ReturnType<typeof rustOption>, string][] = [
+    [
+      "flag off",
+      rustOption({ ...ok, registrationEnabled: false }),
+      RUST_REASON_FLAG_OFF,
+    ],
+    ["409 from create", rustOption(ok, true), RUST_REASON_FLAG_OFF],
+    ["old API (no echo)", rustOption(UNSUPPORTED_CHANNEL), RUST_REASON_OLD_API],
+    [
+      "old API (the JS manifest)",
+      rustOption({ agent: "js", latest: BUILD_JS, registrationEnabled: true }),
+      RUST_REASON_OLD_API,
+    ],
+    ["check failed", rustOption(null), RUST_REASON_CHECK_FAILED],
+    ["no release", rustOption({ ...ok, latest: null }), RUST_REASON_NO_RELEASE],
+  ]
+
+  it('is labelled "Language" and lists Rust first, then JS', () => {
+    expect(REGISTER_PICK_LABEL).toBe("Language")
+    expect(REGISTER_PICK_ORDER).toEqual(["rust", "js"])
+    expect(
+      registerPickOptions({ state: "enabled" }, false).map((o) => o.label)
+    ).toEqual(["Rust", "JS"])
+  })
+
+  it("defaults to Rust when the workspace can register it", () => {
+    expect(defaultRegistrationAgent(rustOption(ok))).toBe("rust")
+    const [rust, js] = registerPickOptions(rustOption(ok), false)
+    expect(rust).toEqual({
+      value: "rust",
+      label: "Rust",
+      disabled: false,
+      title: undefined,
+    })
+    expect(js).toEqual({ value: "js", label: "JS", disabled: false })
+  })
+
+  it.each(disabled)(
+    "defaults to JS when Rust is disabled (%s), and shows Rust disabled with its reason",
+    (_, option, reason) => {
+      expect(option).toEqual({ state: "disabled", reason })
+      expect(defaultRegistrationAgent(option)).toBe("js")
+      const [rust, js] = registerPickOptions(option, false)
+      expect(rust).toMatchObject({
+        value: "rust",
+        disabled: true,
+        title: reason,
+      })
+      expect(js).toMatchObject({ value: "js", disabled: false })
+    }
+  )
+
+  it("decides nothing while the check is in flight (so nothing is minted yet)", () => {
+    expect(defaultRegistrationAgent({ state: "checking" })).toBeNull()
+    const [rust] = registerPickOptions({ state: "checking" }, false)
+    expect(rust.disabled).toBe(true)
+    expect(rust.title).toMatch(/^Checking whether/)
+    // The deadline that then opens on JS anyway sits well under the SDK's 30 s.
+    expect(RUST_CHECK_DEADLINE_MS).toBeGreaterThanOrEqual(3000)
+    expect(RUST_CHECK_DEADLINE_MS).toBeLessThan(30_000)
+  })
+
+  it("CM4 only hints: Rust stays enabled and the default is unaffected", () => {
+    const [rust] = registerPickOptions({ state: "enabled" }, true)
+    expect(rust).toMatchObject({ disabled: false, title: RUST_HINT_CM4 })
+    // A disabled reason still wins over the hint.
+    const [off] = registerPickOptions(disabled[0][1], true)
+    expect(off.title).toBe(RUST_REASON_FLAG_OFF)
   })
 })
 

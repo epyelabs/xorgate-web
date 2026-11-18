@@ -33,6 +33,7 @@ import type { Device, DeviceStatus } from "@xorgate/sdk"
 import { formatRelative } from "@/lib/relative-time"
 import { useWorkspaceStore } from "@/store/workspace"
 import { useDeviceModels, useFleet, useInvalidateDevices } from "@/queries/devices"
+import { usePrefetchRustChannel } from "@/queries/device-agent"
 import { useHasPermission } from "@/lib/permissions"
 import { presenceDeviceIds, useLiveDeviceStatuses } from "@/store/presence"
 import { DevicePresence } from "@/components/device-presence"
@@ -117,6 +118,9 @@ function DevicesListPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [order, setOrder] = useState<"asc" | "desc">("desc")
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId)
+  // Re-warm Register device's Rust check on intent, in case the page has been
+  // open longer than its 60 s cache (a no-op while it is fresh).
+  const prefetchRust = usePrefetchRustChannel()
 
   // Same freshness contract as the device layout: polled while visible,
   // refetched on return, and every row on the page watched over MQTT so the
@@ -452,7 +456,13 @@ function DevicesListPage() {
                 Register simulation
               </Button>
             ) : null}
-            <Button variant="brand" size="lg" onClick={handleProvision}>
+            <Button
+              variant="brand"
+              size="lg"
+              onClick={handleProvision}
+              onPointerEnter={prefetchRust}
+              onFocus={prefetchRust}
+            >
               <PlusIcon />
               Register device
             </Button>
@@ -544,7 +554,13 @@ function DevicesListPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button variant="brand" size="sm" onClick={handleProvision}>
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={handleProvision}
+                  onPointerEnter={prefetchRust}
+                  onFocus={prefetchRust}
+                >
                   <PlusIcon />
                   Register device
                 </Button>

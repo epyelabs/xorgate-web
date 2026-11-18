@@ -1,24 +1,54 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { XorgateError, type AgentBuild, type DeviceModel } from "@xorgate/sdk"
+import {
+  XorgateError,
+  createClient,
+  isAgentKind,
+  type AgentBuild,
+  type DeviceModel,
+  type XorgateClient,
+} from "@xorgate/sdk"
 
-// The raw-request seam: every network helper goes through xg().request().
-const request = vi.fn()
-let workspaceId: string | undefined = "ws-1"
-vi.mock("@/lib/xorgate", () => ({ xg: () => ({ request, workspaceId }) }))
+// A REAL SDK 0.17.0 client over a fake fetch, so every test below pins what
+// actually goes over the wire (method, path, query, body) and what the SDK's
+// own normalisation hands the console — not a mock of the SDK.
+type Reply = { status: number; body?: unknown }
+const replies: Reply[] = []
+const calls: { method: string; url: URL; body: string | undefined }[] = []
+
+const fakeFetch = vi.fn(async (input: string, init?: RequestInit) => {
+  calls.push({
+    method: init?.method ?? "GET",
+    url: new URL(input),
+    body: typeof init?.body === "string" ? init.body : undefined,
+  })
+  const r = replies.shift()
+  if (!r) throw new Error(`unexpected request ${init?.method} ${input}`)
+  return new Response(r.body === undefined ? null : JSON.stringify(r.body), {
+    status: r.status,
+    headers: { "content-type": "application/json" },
+  })
+})
+
+function client(workspaceId: string | undefined): XorgateClient {
+  return createClient({
+    baseUrl: "https://api.example",
+    auth: { getToken: async () => "t" },
+    organizationId: "org-1",
+    ...(workspaceId ? { workspaceId } : {}),
+    fetch: fakeFetch,
+  })
+}
+
+let current: XorgateClient = client("ws-1")
+vi.mock("@/lib/xorgate", () => ({ xg: () => current }))
 
 const {
-  agentOrJs,
   agentUpdateState,
-  channelFromBody,
   createRegistration,
   fetchAgentChannel,
-  fetchDeviceAgent,
-  fetchFleetAgents,
-  getRegistration,
-  isAgentKind,
   isAgentNotEnabled,
   isCm4Model,
-  registrationBody,
+  registrationInput,
   registrationMatchesPick,
   rustOption,
   updaterUnit,
@@ -27,7 +57,7 @@ const {
   RUST_REASON_CHECK_FAILED,
   RUST_REASON_OLD_API,
   UNSUPPORTED_CHANNEL,
-} = await import("./agent-channel")
+} = await import("./device-agent")
 
 const BUILD_RS: AgentBuild = {
   version: "14413e0",
@@ -44,6 +74,7 @@ const BUILD_JS: AgentBuild = {
   tarball: "xorgate-agent-09da38d.tar.gz",
 } as AgentBuild
 
+/** The registration row an old backend returns: no `agent` at all. */
 const REG_OLD = {
   code: "ABCD1234",
   status: "pending",
@@ -52,9 +83,17 @@ const REG_OLD = {
   installUrl: "https://api.example/get/ABCD1234",
 }
 
+const NOT_FOUND = { status: 404, body: { message: "Not Found" } }
+
+function reply(...r: Reply[]) {
+  replies.push(...r)
+}
+
 beforeEach(() => {
-  request.mockReset()
-  workspaceId = "ws-1"
+  replies.length = 0
+  calls.length = 0
+  fakeFetch.mockClear()
+  current = client("ws-1")
 })
 
 describe("agent kinds", () => {
@@ -66,12 +105,28 @@ describe("agent kinds", () => {
     expect(isAgentKind(null)).toBe(false)
   })
 
-  it("reads a missing agent as js (old backend) and passes unknown values through", () => {
-    expect(agentOrJs(undefined)).toBe("js")
-    expect(agentOrJs(null)).toBe("js")
-    expect(agentOrJs("")).toBe("js")
-    expect(agentOrJs("rust")).toBe("rust")
-    expect(agentOrJs("go")).toBe("go")
+  it("reads device.agent off the device itself: js when absent (old backend), unknown values passed through", async () => {
+    // The fields the extra raw GET /devices and GET /devices/{id} reads used
+    // to fetch now arrive on the SDK's own reads.
+    reply({
+      status: 200,
+      body: {
+        devices: [
+          { id: "d0", agent: "rust" },
+          { id: "d1" },
+          { id: "d2", agent: "go" },
+        ],
+        page: { total: 3, limit: 50, offset: 0 },
+      },
+    })
+    const { items } = await current.devices.list()
+    expect(items.map((d) => d.agent)).toEqual(["rust", "js", "go"])
+    expect(isAgentKind(items[2].agent)).toBe(false)
+
+    reply({ status: 200, body: { device: { id: "d1" } } })
+    expect((await current.devices.get("d1")).agent).toBe("js")
+    reply({ status: 200, body: { device: { id: "d0", agent: "rust" } } })
+    expect((await current.devices.get("d0")).agent).toBe("rust")
   })
 
   it("names the updater unit per agent", () => {
@@ -83,56 +138,63 @@ describe("agent kinds", () => {
 })
 
 describe("registrations", () => {
-  it("sends no body for a plain JS registration, exactly as before Phase 8", () => {
-    expect(registrationBody({ agent: "js" })).toBeUndefined()
-    expect(registrationBody({ agent: "js", deviceModelId: "m1" })).toEqual({
+  it("leaves agent out for JS, so a plain JS registration sends no body, exactly as before Phase 8", () => {
+    expect(registrationInput({ agent: "js" })).toEqual({})
+    expect(registrationInput({ agent: "js", deviceModelId: "m1" })).toEqual({
       deviceModelId: "m1",
     })
-    expect(registrationBody({ agent: "rust" })).toEqual({ agent: "rust" })
-    expect(registrationBody({ agent: "rust", deviceModelId: "m1" })).toEqual({
+    expect(registrationInput({ agent: "rust" })).toEqual({ agent: "rust" })
+    expect(registrationInput({ agent: "rust", deviceModelId: "m1" })).toEqual({
       agent: "rust",
       deviceModelId: "m1",
     })
   })
 
-  it("POSTs through the raw request with the right body", async () => {
-    request.mockResolvedValueOnce({ ...REG_OLD, agent: "rust" })
+  it("POSTs through the SDK with the right body (none at all for plain JS)", async () => {
+    reply({ status: 200, body: { ...REG_OLD, agent: "rust" } })
     const r = await createRegistration({ agent: "rust", deviceModelId: "m1" })
-    expect(request).toHaveBeenCalledWith("POST", "/device-registrations", {
-      body: { agent: "rust", deviceModelId: "m1" },
+    expect(calls[0].method).toBe("POST")
+    expect(calls[0].url.pathname).toBe("/v1/device-registrations")
+    expect(JSON.parse(calls[0].body ?? "null")).toEqual({
+      deviceModelId: "m1",
+      agent: "rust",
     })
     expect(r.agent).toBe("rust")
 
-    request.mockResolvedValueOnce(REG_OLD)
+    reply({ status: 200, body: { ...REG_OLD, agent: "js" } })
     await createRegistration({ agent: "js" })
-    expect(request).toHaveBeenLastCalledWith(
-      "POST",
-      "/device-registrations",
-      {}
-    )
+    expect(calls[1].method).toBe("POST")
+    expect(calls[1].body).toBeUndefined()
+
+    reply({ status: 200, body: { ...REG_OLD, agent: "js" } })
+    await createRegistration({ agent: "js", deviceModelId: "m1" })
+    expect(JSON.parse(calls[2].body ?? "null")).toEqual({ deviceModelId: "m1" })
   })
 
   it("N3: refuses locally without a workspace, sending nothing", async () => {
-    workspaceId = undefined
+    current = client(undefined)
     await expect(createRegistration({ agent: "js" })).rejects.toMatchObject({
       code: "INVALID_CONFIG",
     })
-    expect(request).not.toHaveBeenCalled()
+    expect(fakeFetch).not.toHaveBeenCalled()
   })
 
   it("fills agent=js when the backend omits it (create and get)", async () => {
-    request.mockResolvedValueOnce(REG_OLD)
+    reply({ status: 200, body: REG_OLD })
     expect((await createRegistration({ agent: "js" })).agent).toBe("js")
-    request.mockResolvedValueOnce(REG_OLD)
-    expect((await getRegistration("ABCD1234")).agent).toBe("js")
-    expect(request).toHaveBeenLastCalledWith(
-      "GET",
-      "/device-registrations/ABCD1234"
-    )
+    reply({ status: 200, body: REG_OLD })
+    expect((await current.deviceRegistrations.get("ABCD1234")).agent).toBe("js")
+    expect(calls[1].method).toBe("GET")
+    expect(calls[1].url.pathname).toBe("/v1/device-registrations/ABCD1234")
   })
 
-  it("M1 echo guard: old backend + JS pick shows the command; Rust pick does not", () => {
-    // The raw row an old backend returns has no `agent` at all.
+  it("M1 echo guard: old backend + JS pick shows the command; Rust pick does not", async () => {
+    // An old backend ignores `agent` and hands back a JS code with no field.
+    reply({ status: 200, body: REG_OLD })
+    const old = await createRegistration({ agent: "rust" })
+    expect(registrationMatchesPick(old, "js")).toBe(true)
+    expect(registrationMatchesPick(old, "rust")).toBe(false)
+    // The raw row too (the guard's own `?? 'js'`).
     expect(registrationMatchesPick(REG_OLD as { agent?: string }, "js")).toBe(
       true
     )
@@ -147,13 +209,16 @@ describe("registrations", () => {
     expect(registrationMatchesPick(null, "js")).toBe(false)
   })
 
-  it("recognises AGENT_NOT_ENABLED", () => {
-    const e = new XorgateError({
-      code: "AGENT_NOT_ENABLED" as never,
-      message: "no",
+  it("recognises AGENT_NOT_ENABLED, including a real 409 from create", async () => {
+    reply({
       status: 409,
+      body: {
+        error: { code: "AGENT_NOT_ENABLED", message: "Rust is off here" },
+      },
     })
-    expect(isAgentNotEnabled(e)).toBe(true)
+    const err = await createRegistration({ agent: "rust" }).catch((e) => e)
+    expect(isAgentNotEnabled(err)).toBe(true)
+    expect(err).toMatchObject({ status: 409 })
     expect(
       isAgentNotEnabled(
         new XorgateError({ code: "CONFLICT", message: "x", status: 409 })
@@ -164,55 +229,72 @@ describe("registrations", () => {
 })
 
 describe("the agent channel", () => {
-  it("reads a self-describing answer", () => {
-    expect(
-      channelFromBody(
-        { agent: "rust", latest: BUILD_RS, registrationEnabled: true },
-        "rust"
-      )
-    ).toEqual({ agent: "rust", latest: BUILD_RS, registrationEnabled: true })
-    expect(
-      channelFromBody(
-        { agent: "rust", latest: null, registrationEnabled: false },
-        "rust"
-      )
-    ).toEqual({ agent: "rust", latest: null, registrationEnabled: false })
+  it("asks ?agent= and reads a self-describing answer", async () => {
+    reply({
+      status: 200,
+      body: { agent: "rust", latest: BUILD_RS, registrationEnabled: true },
+    })
+    expect(await fetchAgentChannel("rust")).toEqual({
+      agent: "rust",
+      latest: BUILD_RS,
+      registrationEnabled: true,
+    })
+    expect(calls[0].url.pathname).toBe("/v1/device-dist/latest")
+    expect(calls[0].url.searchParams.get("agent")).toBe("rust")
+
+    reply({
+      status: 200,
+      body: { agent: "rust", latest: null, registrationEnabled: false },
+    })
+    expect(await fetchAgentChannel("rust")).toEqual({
+      agent: "rust",
+      latest: null,
+      registrationEnabled: false,
+    })
   })
 
-  it("S1: an un-echoed body (old backend) is NEVER the Rust channel", () => {
-    expect(channelFromBody({ latest: BUILD_JS }, "rust")).toEqual(
-      UNSUPPORTED_CHANNEL
+  it("S1: an un-echoed body (old backend) is NEVER the Rust channel, and asks nothing else", async () => {
+    for (const body of [{ latest: BUILD_JS }, null, [], { agent: "" }]) {
+      reply({ status: 200, body })
+      expect(await fetchAgentChannel("rust")).toEqual(UNSUPPORTED_CHANNEL)
+    }
+    // One request per check: Rust never falls back to the no-parameter route.
+    expect(calls).toHaveLength(4)
+    expect(calls.every((c) => c.url.searchParams.get("agent") === "rust")).toBe(
+      true
     )
-    expect(channelFromBody(null, "rust")).toEqual(UNSUPPORTED_CHANNEL)
-    expect(channelFromBody([], "rust")).toEqual(UNSUPPORTED_CHANNEL)
-    expect(channelFromBody({ agent: "" }, "rust")).toEqual(UNSUPPORTED_CHANNEL)
   })
 
-  it("S1: an un-echoed body (old backend) IS the JS manifest when JS was asked", () => {
-    expect(channelFromBody({ latest: BUILD_JS }, "js")).toEqual({
+  it("S1: an un-echoed body (old backend) IS the JS manifest when JS was asked", async () => {
+    // Old backend: ignores ?agent= and answers today's { latest } shape, so
+    // the console reads the JS manifest off the no-parameter route.
+    reply({ status: 200, body: { latest: BUILD_JS } })
+    reply({ status: 200, body: { latest: BUILD_JS } })
+    expect(await fetchAgentChannel("js")).toEqual({
       agent: "js",
       latest: BUILD_JS,
       registrationEnabled: true,
     })
-    // No manifest field at all: nothing to compare against.
-    expect(channelFromBody({}, "js")).toEqual({
-      agent: "js",
-      latest: null,
-      registrationEnabled: true,
+    expect(calls[0].url.searchParams.get("agent")).toBe("js")
+    expect(calls[1].url.pathname).toBe("/v1/device-dist/latest")
+    expect(calls[1].url.search).toBe("")
+
+    // An echo always wins: no second request, and `latest: null` stands.
+    reply({
+      status: 200,
+      body: { agent: "js", latest: null, registrationEnabled: true },
     })
-    // An echo always wins over the fallback.
-    expect(
-      channelFromBody(
-        { agent: "js", latest: null, registrationEnabled: true },
-        "js"
-      ).latest
-    ).toBeNull()
+    const echoed = await fetchAgentChannel("js")
+    expect(echoed.latest).toBeNull()
+    expect(echoed.agent).toBe("js")
+    expect(calls).toHaveLength(3)
   })
 
   it("S1: a JS device on an old backend keeps today's update check and target version", async () => {
-    // Old backend: ignores ?agent= and answers today's { latest } shape.
-    request.mockResolvedValue({ latest: BUILD_JS })
+    reply({ status: 200, body: { latest: BUILD_JS } })
+    reply({ status: 200, body: { latest: BUILD_JS } })
     const jsChannel = await fetchAgentChannel("js")
+    reply({ status: 200, body: { latest: BUILD_JS } })
     const rustChannel = await fetchAgentChannel("rust")
     expect(
       agentUpdateState({
@@ -238,33 +320,22 @@ describe("the agent channel", () => {
         installedVersion: "aaaaaaa",
       })
     ).toEqual({ kind: "unknown" })
-    // An old backend with no manifest 404s: no dot, as today.
-    request.mockRejectedValueOnce(
-      new XorgateError({ code: "NOT_FOUND", message: "x", status: 404 })
-    )
+    // An old backend with no manifest 404s (both routes): no dot, as today.
+    reply(NOT_FOUND, NOT_FOUND)
     expect(await fetchAgentChannel("js")).toEqual(UNSUPPORTED_CHANNEL)
   })
 
-  it("asks ?agent= and reads a 404 as unsupported, other errors throw", async () => {
-    request.mockResolvedValueOnce({
-      agent: "rust",
-      latest: BUILD_RS,
-      registrationEnabled: true,
-    })
-    expect((await fetchAgentChannel("rust")).agent).toBe("rust")
-    expect(request).toHaveBeenCalledWith("GET", "/device-dist/latest", {
-      query: { agent: "rust" },
-    })
-
-    request.mockRejectedValueOnce(
-      new XorgateError({ code: "NOT_FOUND", message: "x", status: 404 })
-    )
+  it("reads a 404 (old backend or bare gateway) as unsupported; other errors throw", async () => {
+    reply(NOT_FOUND)
     expect(await fetchAgentChannel("rust")).toEqual(UNSUPPORTED_CHANNEL)
 
-    request.mockRejectedValueOnce(
-      new XorgateError({ code: "SERVER_ERROR", message: "x", status: 500 })
-    )
+    reply({ status: 500, body: { error: { code: "INTERNAL", message: "x" } } })
     await expect(fetchAgentChannel("rust")).rejects.toThrow()
+
+    // The JS fallback's own failures throw too.
+    reply({ status: 200, body: { latest: BUILD_JS } })
+    reply({ status: 500, body: { error: { code: "INTERNAL", message: "x" } } })
+    await expect(fetchAgentChannel("js")).rejects.toThrow()
   })
 })
 
@@ -329,39 +400,6 @@ describe("the Rust option", () => {
     expect(isCm4Model(model("rpi-cm5"))).toBe(false)
     expect(isCm4Model(model(null))).toBe(false)
     expect(isCm4Model(null)).toBe(false)
-  })
-})
-
-describe("device agents", () => {
-  it("reads devices.agent off the raw device, js when absent", async () => {
-    request.mockResolvedValueOnce({ device: { id: "d1", agent: "rust" } })
-    expect(await fetchDeviceAgent("d1")).toBe("rust")
-    expect(request).toHaveBeenLastCalledWith("GET", "/devices/d1")
-    request.mockResolvedValueOnce({ device: { id: "d1" } })
-    expect(await fetchDeviceAgent("d1")).toBe("js")
-  })
-
-  it("maps the whole fleet, paging", async () => {
-    request
-      .mockResolvedValueOnce({
-        devices: Array.from({ length: 500 }, (_, i) => ({
-          id: `d${i}`,
-          agent: i === 0 ? "rust" : undefined,
-        })),
-        page: { total: 501 },
-      })
-      .mockResolvedValueOnce({
-        devices: [{ id: "last", agent: "rust" }],
-        page: { total: 501 },
-      })
-    const map = await fetchFleetAgents()
-    expect(Object.keys(map)).toHaveLength(501)
-    expect(map["d0"]).toBe("rust")
-    expect(map["d1"]).toBe("js")
-    expect(map["last"]).toBe("rust")
-    expect(request).toHaveBeenNthCalledWith(2, "GET", "/devices", {
-      query: { limit: 500, offset: 500 },
-    })
   })
 })
 

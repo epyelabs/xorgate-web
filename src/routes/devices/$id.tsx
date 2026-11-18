@@ -42,7 +42,6 @@ import { RebootDeviceDialog } from "./-components/reboot-device-dialog"
 import { RebootSimulationDialog } from "./-components/reboot-simulation-dialog"
 import { SimulatedBadge } from "./-components/simulated-badge"
 import { AgentBadge } from "./-components/agent-badge"
-import { useDeviceAgent } from "@/queries/device-agent"
 import { useDeviceSimulation } from "@/queries/simulations"
 import {
   buildSimulationConfig,
@@ -202,9 +201,9 @@ function DeviceLayout() {
   // the fleet cache, so arriving from the list paints the header instantly.
   const deviceQuery = useDevice(id, { poll: true })
   const device = deviceQuery.data ?? null
-  // JS or Rust, beside the name (dual-agent registration D6.4). Shares its
-  // query with the General tab's Agent row.
-  const deviceAgent = useDeviceAgent(id).data ?? null
+  // JS or Rust, beside the name (dual-agent registration D6.4): on the device
+  // itself (`js` on a backend that predates the field).
+  const deviceAgent = device?.agent ?? null
   // The model feeds the header subtitle and the model dialog. Best-effort: a
   // failure here must not block the header.
   const deviceModel = useDeviceModel(device?.deviceModelId).data ?? null

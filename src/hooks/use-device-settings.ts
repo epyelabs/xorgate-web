@@ -11,6 +11,7 @@ import {
   type LteRecoveryConfig,
   type ObdConfig,
   type RecordingConfig,
+  type ReportedAgentKind,
   type TimeSyncConfig,
 } from "@xorgate/sdk"
 import {
@@ -40,7 +41,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { getCachedDevice } from "@/queries/devices"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
-import { updaterUnit, type ReportedAgentKind } from "@/lib/agent-channel"
+import { updaterUnit } from "@/lib/device-agent"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven

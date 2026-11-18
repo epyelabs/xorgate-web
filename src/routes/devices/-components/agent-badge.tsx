@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
-import { agentLabel, type ReportedAgentKind } from "@/lib/agent-channel"
+import type { ReportedAgentKind } from "@xorgate/sdk"
+import { agentLabel } from "@/lib/device-agent"
 import { cn } from "@/lib/utils"
 
 /**

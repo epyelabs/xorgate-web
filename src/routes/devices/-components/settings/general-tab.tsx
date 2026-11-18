@@ -21,13 +21,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { xg, xgMessage } from "@/lib/xorgate"
 import { useInvalidateDevices } from "@/queries/devices"
-import { useAgentChannel, useDeviceAgent } from "@/queries/device-agent"
-import {
-  agentLabel,
-  agentUpdateState,
-  type ReportedAgentKind,
-} from "@/lib/agent-channel"
-import type { Device, DeviceIdentity } from "@xorgate/sdk"
+import { useAgentChannel } from "@/queries/device-agent"
+import { agentLabel, agentUpdateState } from "@/lib/device-agent"
+import type { Device, DeviceIdentity, ReportedAgentKind } from "@xorgate/sdk"
 import {
   reportedAgentBuild,
   reportedAgentMode,
@@ -104,10 +100,11 @@ export function GeneralTab({
   // update would install: THAT agent's channel (`?agent=`), never the JS
   // manifest for a Rust device. The channel counts only when it echoes the
   // device's agent — an old backend ignores `?agent=` and answers with the JS
-  // manifest — and an agent this console does not know asks no channel at
+  // manifest, which a JS device still gets (fetchAgentChannel) and a Rust one
+  // never does — and an agent this console does not know asks no channel at
   // all, so neither shows an "update available" dot. Decoration, not the
   // action: the update stays available, since a reinstall is always valid.
-  const deviceAgent = useDeviceAgent(device.id).data ?? null
+  const deviceAgent = device.agent ?? null
   const channel = useAgentChannel(deviceAgent).data ?? null
 
   const installedVersion = installedBuild?.version ?? device.agentVersion ?? null

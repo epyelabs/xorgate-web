@@ -18,12 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { DeviceModel, DeviceRegistration } from "@xorgate/sdk"
+import type {
+  AgentChannel,
+  AgentKind,
+  DeviceModel,
+  DeviceRegistration,
+} from "@xorgate/sdk"
 import { xg, xgMessage } from "@/lib/xorgate"
 import {
   createRegistration,
   fetchAgentChannel,
-  getRegistration,
   isAgentNotEnabled,
   isCm4Model,
   registrationMatchesPick,
@@ -31,11 +35,8 @@ import {
   RUST_HINT_CM4,
   RUST_REASON_FLAG_OFF,
   RUST_REASON_OLD_API,
-  type AgentChannel,
-  type AgentKind,
-  type AgentRegistration,
   type RustOption,
-} from "@/lib/agent-channel"
+} from "@/lib/device-agent"
 import { cn } from "@/lib/utils"
 
 type Phase = "creating" | "pending" | "claimed" | "expired" | "error"
@@ -66,7 +67,7 @@ export function ProvisionDeviceDialog({
   onClaimed?: () => void
 }) {
   const [phase, setPhase] = useState<Phase>("creating")
-  const [reg, setReg] = useState<AgentRegistration | null>(null)
+  const [reg, setReg] = useState<DeviceRegistration | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -243,7 +244,7 @@ export function ProvisionDeviceDialog({
     let cancelled = false
     const id = setInterval(async () => {
       try {
-        const r = await getRegistration(code)
+        const r = await xg().deviceRegistrations.get(code)
         if (cancelled) return
         setReg(r)
         if (r.status === "claimed" && r.deviceId) {

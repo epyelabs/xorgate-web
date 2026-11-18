@@ -41,6 +41,7 @@ import { DevicesKpi, DevicesKpiSkeleton } from "./-components/devices-kpi"
 import { ProvisionDeviceDialog } from "./-components/provision-device-dialog"
 import { RegisterSimulationDialog } from "./-components/register-simulation-dialog"
 import { SimulatedBadge } from "./-components/simulated-badge"
+import { AgentBadge } from "./-components/agent-badge"
 import { BulkTransferDialog } from "./-components/bulk-transfer-dialog"
 
 export const Route = createFileRoute("/devices/")({
@@ -313,7 +314,14 @@ function DevicesListPage() {
       // Mirrored cloud-side from the device's own report, so a device that has
       // never connected (or runs an agent older than the build manifest) reads
       // "—" rather than a value someone typed.
-      cell: (device) => device.agentVersion ?? "—",
+      // The agent badge rides the version: a JS sha and a Rust sha look
+      // alike, and which one a device runs decides what "latest" means for it.
+      cell: (device) => (
+        <span className="inline-flex items-center gap-1.5">
+          {device.agentVersion ?? "—"}
+          {device.agent ? <AgentBadge agent={device.agent} /> : null}
+        </span>
+      ),
       csvValue: (device) => device.agentVersion ?? "",
     },
     {

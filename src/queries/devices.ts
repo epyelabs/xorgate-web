@@ -51,17 +51,25 @@ export function useFleet({ poll = false }: { poll?: boolean } = {}) {
  * One device. Seeded from the fleet cache when the row is already there, so
  * opening a device from the list paints the header with the row that was
  * clicked while the authoritative fetch runs behind it.
+ *
+ * `observeOnly` subscribes to the cache entry without ever fetching it: for a
+ * component inside the device layout, whose own `useDevice(id, { poll: true })`
+ * already keeps the entry fresh. A second fetching observer would add a read on
+ * every mount (the default staleTime is 0).
  */
 export function useDevice(
   deviceId: string,
-  { poll = false }: { poll?: boolean } = {}
+  {
+    poll = false,
+    observeOnly = false,
+  }: { poll?: boolean; observeOnly?: boolean } = {}
 ) {
   const { orgId, wsId, ready } = useTenant()
   const queryClient = useQueryClient()
   return useQuery({
     queryKey: qk.device(orgId, wsId, deviceId),
     queryFn: () => xg().devices.get(deviceId),
-    enabled: ready,
+    enabled: ready && !observeOnly,
     refetchInterval: poll ? FLEET_POLL_MS : false,
     placeholderData: () =>
       queryClient

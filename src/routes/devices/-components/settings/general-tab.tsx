@@ -20,12 +20,14 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { xg, xgMessage } from "@/lib/xorgate"
-import { useInvalidateDevices } from "@/queries/devices"
-import type {
-  AgentBuild as LatestAgentBuild,
-  Device,
-  DeviceIdentity,
-} from "@xorgate/sdk"
+import { useDevice, useInvalidateDevices } from "@/queries/devices"
+import { useAgentChannel } from "@/queries/device-agent"
+import {
+  agentLabel,
+  agentUpdateState,
+  currentDeviceAgent,
+} from "@/lib/device-agent"
+import type { Device, DeviceIdentity, ReportedAgentKind } from "@xorgate/sdk"
 import {
   reportedAgentBuild,
   reportedAgentMode,
@@ -34,6 +36,7 @@ import {
 } from "@/lib/device-config-status"
 import { updateDeviceSchema } from "@/lib/schemas"
 import { useHasPermission } from "@/lib/permissions"
+import { AgentBadge } from "../agent-badge"
 import { DeleteDeviceDialog } from "../delete-device-dialog"
 import { InfoRow } from "../info-row"
 import { DangerRow } from "./danger-row"
@@ -75,9 +78,13 @@ export function GeneralTab({
   /**
    * Ask the device to install the latest published agent build. The version
    * we expect afterwards (when known) lets the hook tell a deliberate
-   * reinstall apart from an update that silently rolled back.
+   * reinstall apart from an update that silently rolled back. `agent` picks
+   * the updater the outcome hints name.
    */
-  updateAgent: (expectedVersion?: string | null) => void
+  updateAgent: (
+    expectedVersion?: string | null,
+    agent?: ReportedAgentKind | null
+  ) => void
   updatingAgent: boolean
 }) {
   const navigate = useNavigate()
@@ -93,32 +100,29 @@ export function GeneralTab({
   const localBuild =
     installedBuild?.channel === "local" || installedBuild?.channel === "bench"
 
-  // What a device update would install. Fetched once per mount; a stage with no
-  // published manifest (404 -> null) simply shows no "update available" dot —
-  // the action stays available, since a reinstall is always valid.
-  const [latestBuild, setLatestBuild] = useState<LatestAgentBuild | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const latest = await xg().devices.latestAgentBuild()
-        if (!cancelled) setLatestBuild(latest)
-      } catch {
-        // Leave it unknown — this is decoration, not the action itself.
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // Which agent the device runs (dual-agent registration D6.4), and what an
+  // update would install: THAT agent's channel (`?agent=`), never the JS
+  // manifest for a Rust device. The channel counts only when it echoes the
+  // device's agent — an old backend ignores `?agent=` and answers with the JS
+  // manifest, which a JS device still gets (fetchAgentChannel) and a Rust one
+  // never does — and an agent this console does not know asks no channel at
+  // all, so neither shows an "update available" dot. Decoration, not the
+  // action: the update stays available, since a reinstall is always valid.
+  //
+  // The agent comes from the SHARED device query (the header's source, kept
+  // fresh by the layout's 20 s poll), not from `device`: that is the settings
+  // hook's snapshot, which merges only form-relevant fields on its polls, so a
+  // D9 promotion to Rust would otherwise leave this tab comparing a Rust build
+  // against the JS channel (review-wp-c2 S1).
+  const sharedDevice = useDevice(device.id, { observeOnly: true }).data
+  const deviceAgent = currentDeviceAgent(sharedDevice, device)
+  const channel = useAgentChannel(deviceAgent).data ?? null
 
-  // String equality only: shas have no order, and a dev sha and a prod release
-  // tag are not comparable at all.
   const installedVersion = installedBuild?.version ?? device.agentVersion ?? null
-  const updateAvailable =
-    latestBuild !== null &&
-    installedVersion !== null &&
-    latestBuild.version !== installedVersion
+  const update = agentUpdateState({ deviceAgent, channel, installedVersion })
+  const latestBuild = "latest" in update ? update.latest : null
+  const updateAvailable = update.kind === "update-available"
+  const agentName = deviceAgent ? agentLabel(deviceAgent) : null
 
   // A simulated device's agent is the simulator host's image: it rejects the
   // update command ("managed by host image"), so don't offer it.
@@ -132,7 +136,9 @@ export function GeneralTab({
       ? "The device must be online to be updated"
       : updateAvailable
         ? `Update available: ${latestBuild?.version}`
-        : "Install the latest agent build"
+        : update.kind === "no-build"
+          ? `No ${agentName} agent build is published yet`
+          : "Install the latest agent build"
 
   // Kept as a string so partial input never fights the user; re-seeded whenever
   // the device object changes, which is also how a failed save snaps back.
@@ -299,11 +305,30 @@ export function GeneralTab({
                     {updateAvailable && (
                       <span
                         aria-label="Update available"
+                        data-testid="agent-update-available"
                         title={`Update available: ${latestBuild?.version}`}
                         className="bg-primary inline-block size-1.5 rounded-full align-top"
                       />
                     )}
+                    {update.kind === "no-build" && (
+                      <span
+                        data-testid="agent-no-build"
+                        className="text-muted-foreground align-top font-sans text-[0.65rem]"
+                        title={updateHint}
+                      >
+                        no build yet
+                      </span>
+                    )}
                   </span>
+                }
+              />
+              {/* Which agent the device runs: set at the claim by the code's
+                  agent, and promoted to Rust when a converted device's Rust
+                  build reports its marker (D9). Read-only. */}
+              <InfoRow
+                label="Agent"
+                value={
+                  deviceAgent === null ? "—" : <AgentBadge agent={deviceAgent} />
                 }
               />
               {/* Reported by the device, never set from here: a box left in
@@ -463,7 +488,7 @@ export function GeneralTab({
         installed={installedBuild}
         latest={latestBuild}
         onConfirm={() => {
-          updateAgent(latestBuild?.version ?? null)
+          updateAgent(latestBuild?.version ?? null, deviceAgent)
           setUpdateOpen(false)
         }}
       />

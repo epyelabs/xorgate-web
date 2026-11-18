@@ -11,6 +11,7 @@ import {
   type LteRecoveryConfig,
   type ObdConfig,
   type RecordingConfig,
+  type ReportedAgentKind,
   type TimeSyncConfig,
 } from "@xorgate/sdk"
 import {
@@ -40,6 +41,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { getCachedDevice } from "@/queries/devices"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
+import { updaterUnit } from "@/lib/device-agent"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
 
 // The one save layer for the device Settings tab. Replaces the seven
@@ -183,7 +185,10 @@ export interface DeviceSettings {
    * row until its reported build changes (or it comes back on the same one).
    * True for the whole round trip, which can run to several minutes.
    */
-  updateAgent: (expectedVersion?: string | null) => void
+  updateAgent: (
+    expectedVersion?: string | null,
+    agent?: ReportedAgentKind | null
+  ) => void
   updatingAgent: boolean
 }
 
@@ -501,6 +506,9 @@ export function useDeviceSettings(id: string): DeviceSettings {
           lastSeen = fetched.reportedAt
           advances += 1
           serverRef.current = fetched
+          // The shared device entry moves with the snapshot (the header and
+          // the General tab's agent read it), as in the pending poll.
+          writeThrough(fetched)
           // Merge only the server-owned reported fields — same rule as the
           // pending poll above; the rest is live form state.
           applyDevice({
@@ -525,7 +533,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         setRefreshing(false)
       }
     })()
-  }, [id, applyDevice])
+  }, [id, applyDevice, writeThrough])
 
   // Generic report watcher (obd2-bluetooth-integration P3): the OBD scan is
   // a command whose answer arrives on the config report (`effective.obd.scan`)
@@ -539,6 +547,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         if (optimisticRef.current === null) return false
         const fetched = await xg().devices.get(id)
         serverRef.current = fetched
+        writeThrough(fetched)
         applyDevice({
           ...(optimisticRef.current ?? fetched),
           status: fetched.status,
@@ -552,7 +561,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       }
       return false
     },
-    [id, applyDevice]
+    [id, applyDevice, writeThrough]
   )
 
   // Remote agent update (device_update_management, Phase 4). Lives here rather
@@ -566,7 +575,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
   // build, so that is exactly what this waits for.
   const [updatingAgent, setUpdatingAgent] = useState(false)
   const updatingAgentRef = useRef(false)
-  const updateAgent = useCallback((expectedVersion?: string | null) => {
+  const updateAgent = useCallback((expectedVersion?: string | null, agent?: ReportedAgentKind | null) => {
+    // The outcome hints name the updater unit of the agent being updated
+    // (D4): a Rust device's journal is `xorgate-updater-rs`.
+    const unit = updaterUnit(agent)
     if (updatingAgentRef.current || optimisticRef.current === null) return
     const before = reportedAgentBuild(optimisticRef.current)?.version ?? null
     updatingAgentRef.current = true
@@ -583,6 +595,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
           await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
           const fetched = await xg().devices.get(id)
           serverRef.current = fetched
+          // The shared entry too, so the General tab's agent (read from it)
+          // flips in the same frame as the reported build after a D9
+          // promotion, not at the layout's next poll (review-wp-c2 N5).
+          writeThrough(fetched)
           // Same merge rule as every other poll here: server-owned fields
           // only, never the live form state.
           applyDevice({
@@ -617,7 +633,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
               toast.info(
                 "The device came back on the same build. If you expected a new " +
                   "version, the update may have failed and rolled back — check " +
-                  "`journalctl -u xorgate-updater` on the device."
+                  `\`journalctl -u ${unit}\` on the device.`
               )
             }
             return
@@ -625,7 +641,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         }
         toast.error(
           "The device has not come back with a new build yet. Check the device " +
-            "(`journalctl -u xorgate-updater`) before retrying."
+            `(\`journalctl -u ${unit}\`) before retrying.`
         )
       } catch (err) {
         // xgMessage, not err.message: a XorgateError's message carries the
@@ -637,7 +653,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         setUpdatingAgent(false)
       }
     })()
-  }, [id, applyDevice])
+  }, [id, applyDevice, writeThrough])
 
   return {
     device,

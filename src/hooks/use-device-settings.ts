@@ -506,6 +506,9 @@ export function useDeviceSettings(id: string): DeviceSettings {
           lastSeen = fetched.reportedAt
           advances += 1
           serverRef.current = fetched
+          // The shared device entry moves with the snapshot (the header and
+          // the General tab's agent read it), as in the pending poll.
+          writeThrough(fetched)
           // Merge only the server-owned reported fields — same rule as the
           // pending poll above; the rest is live form state.
           applyDevice({
@@ -530,7 +533,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         setRefreshing(false)
       }
     })()
-  }, [id, applyDevice])
+  }, [id, applyDevice, writeThrough])
 
   // Generic report watcher (obd2-bluetooth-integration P3): the OBD scan is
   // a command whose answer arrives on the config report (`effective.obd.scan`)
@@ -544,6 +547,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         if (optimisticRef.current === null) return false
         const fetched = await xg().devices.get(id)
         serverRef.current = fetched
+        writeThrough(fetched)
         applyDevice({
           ...(optimisticRef.current ?? fetched),
           status: fetched.status,
@@ -557,7 +561,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       }
       return false
     },
-    [id, applyDevice]
+    [id, applyDevice, writeThrough]
   )
 
   // Remote agent update (device_update_management, Phase 4). Lives here rather
@@ -591,6 +595,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
           await new Promise((r) => setTimeout(r, REPORT_POLL_MS))
           const fetched = await xg().devices.get(id)
           serverRef.current = fetched
+          // The shared entry too, so the General tab's agent (read from it)
+          // flips in the same frame as the reported build after a D9
+          // promotion, not at the layout's next poll (review-wp-c2 N5).
+          writeThrough(fetched)
           // Same merge rule as every other poll here: server-owned fields
           // only, never the live form state.
           applyDevice({
@@ -645,7 +653,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
         setUpdatingAgent(false)
       }
     })()
-  }, [id, applyDevice])
+  }, [id, applyDevice, writeThrough])
 
   return {
     device,

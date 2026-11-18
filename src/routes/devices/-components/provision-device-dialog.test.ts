@@ -473,6 +473,51 @@ describe("Register device: the cached Rust check (review S2)", () => {
   })
 })
 
+describe("Register device: fix-check (review N7, N8)", () => {
+  it("N8: a 409 flip to JS never steals focus from outside the group", async () => {
+    let answer!: (r: Reply) => void
+    route = (call) => {
+      if (
+        call.url.pathname === "/v1/device-registrations" &&
+        call.method === "POST" &&
+        call.body !== undefined
+      )
+        return new Promise<Reply>((r) => (answer = r))
+      return defaultRoute(call)
+    }
+    render()
+    await settle()
+    const close = $("[data-slot=dialog-close]")!
+    act(() => close.focus())
+    expect(document.activeElement).toBe(close)
+    answer({
+      status: 409,
+      body: { error: { code: "AGENT_NOT_ENABLED", message: "off" } },
+    })
+    await settle()
+    expect(checked()).toEqual(["JS"])
+    expect(document.activeElement).toBe(close)
+  })
+
+  it("N7: a tenant change while open never re-sends the last create; the new tenant decides afresh", async () => {
+    // Not reachable from the UI (the dialog is modal), pinned anyway.
+    channel = (call) => ({
+      status: 200,
+      body: call.ws === "ws-2" ? CHANNEL_OFF : CHANNEL_ON,
+    })
+    render()
+    await settle()
+    tenant.ws = "ws-2"
+    render()
+    await settle()
+    expect(posts().map((c) => [c.ws, c.body])).toEqual([
+      ["ws-1", '{"agent":"rust"}'],
+      ["ws-2", undefined],
+    ])
+    expect(checked()).toEqual(["JS"])
+  })
+})
+
 // Adopted from the review's race tests (review N3), adapted to the cache.
 describe("Register device: races", () => {
   it("R-strict: StrictMode, mounted already open: ONE channel request, ONE create", async () => {

@@ -134,12 +134,19 @@ export function ProvisionDeviceDialog({
   useEffect(() => {
     prefetchRust()
   }, [prefetchRust])
-  // A 409 proves the cached "enabled" wrong: the next open asks again.
+  // A 409 proves the cached "enabled" wrong: the next open asks again. Read
+  // through a ref so the create effect depends only on `[open, mintReq]`: a
+  // tenant change must not re-send the last create (review N7); the channel
+  // effect decides afresh for the new tenant instead.
   const forgetRustChannel = useCallback(() => {
     void queryClient.invalidateQueries({
       queryKey: agentChannelKey(orgId, wsId, "rust"),
     })
   }, [queryClient, orgId, wsId])
+  const forgetRustChannelRef = useRef(forgetRustChannel)
+  useEffect(() => {
+    forgetRustChannelRef.current = forgetRustChannel
+  }, [forgetRustChannel])
 
   useEffect(() => {
     if (!open || models !== null) return
@@ -279,7 +286,7 @@ export function ProvisionDeviceDialog({
           // The stage flag said no for this workspace: disable Rust with the
           // reason and fall back to the default, so the dialog stays usable.
           setRustRefused(true)
-          forgetRustChannel()
+          forgetRustChannelRef.current()
           toast.error(`${RUST_REASON_FLAG_OFF}. Showing the JS installer.`)
           setPick("js")
           setMintReq((m) => ({
@@ -296,7 +303,7 @@ export function ProvisionDeviceDialog({
     return () => {
       cancelled = true
     }
-  }, [open, mintReq, forgetRustChannel])
+  }, [open, mintReq])
 
   // The M1 echo guard (D6.2): the command only when the code serves the agent
   // picked. A missing `agent` (an old backend) counts as JS, so the default

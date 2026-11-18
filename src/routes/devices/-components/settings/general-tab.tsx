@@ -20,9 +20,13 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { xg, xgMessage } from "@/lib/xorgate"
-import { useInvalidateDevices } from "@/queries/devices"
+import { useDevice, useInvalidateDevices } from "@/queries/devices"
 import { useAgentChannel } from "@/queries/device-agent"
-import { agentLabel, agentUpdateState } from "@/lib/device-agent"
+import {
+  agentLabel,
+  agentUpdateState,
+  currentDeviceAgent,
+} from "@/lib/device-agent"
 import type { Device, DeviceIdentity, ReportedAgentKind } from "@xorgate/sdk"
 import {
   reportedAgentBuild,
@@ -104,7 +108,14 @@ export function GeneralTab({
   // never does — and an agent this console does not know asks no channel at
   // all, so neither shows an "update available" dot. Decoration, not the
   // action: the update stays available, since a reinstall is always valid.
-  const deviceAgent = device.agent ?? null
+  //
+  // The agent comes from the SHARED device query (the header's source, kept
+  // fresh by the layout's 20 s poll), not from `device`: that is the settings
+  // hook's snapshot, which merges only form-relevant fields on its polls, so a
+  // D9 promotion to Rust would otherwise leave this tab comparing a Rust build
+  // against the JS channel (review-wp-c2 S1).
+  const sharedDevice = useDevice(device.id, { observeOnly: true }).data
+  const deviceAgent = currentDeviceAgent(sharedDevice, device)
   const channel = useAgentChannel(deviceAgent).data ?? null
 
   const installedVersion = installedBuild?.version ?? device.agentVersion ?? null

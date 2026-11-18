@@ -103,6 +103,20 @@ export function isAgentNotEnabled(err: unknown): boolean {
   return isXorgateError(err) && err.code === "AGENT_NOT_ENABLED"
 }
 
+/**
+ * The agent a device runs right now, for a screen that holds its own snapshot
+ * of the device (the settings hook's copy, refreshed only field by field).
+ * The shared device query is the live source — the header reads it, and the
+ * device layout polls it — so it wins; the snapshot is only a fallback while
+ * that entry is empty. Null when neither knows.
+ */
+export function currentDeviceAgent(
+  shared: { agent?: ReportedAgentKind | null } | null | undefined,
+  snapshot: { agent?: ReportedAgentKind | null } | null | undefined
+): ReportedAgentKind | null {
+  return shared?.agent ?? snapshot?.agent ?? null
+}
+
 // ---------------------------------------------------------------------------
 // The dist channel (GET /device-dist/latest?agent=)
 // ---------------------------------------------------------------------------
@@ -137,6 +151,30 @@ export async function fetchAgentChannel(
   if (latest === null) return UNSUPPORTED_CHANNEL
   // An old backend has no stage flag; JS registration is always open.
   return { agent: "js", latest, registrationEnabled: true }
+}
+
+/**
+ * The channel query for a device's agent, minus the tenant key. An agent this
+ * console does not know (a value newer than it) is never asked about: the
+ * query is disabled, and even a forced run answers "unsupported" without a
+ * request, so no "update available" dot can appear for it.
+ */
+export function agentChannelQuery(
+  agent: ReportedAgentKind | null | undefined
+): {
+  known: AgentKind | null
+  enabled: boolean
+  queryFn: () => Promise<AgentChannel>
+} {
+  const known = isAgentKind(agent) ? agent : null
+  return {
+    known,
+    enabled: known !== null,
+    queryFn: () =>
+      known === null
+        ? Promise.resolve(UNSUPPORTED_CHANNEL)
+        : fetchAgentChannel(known),
+  }
 }
 
 // ---------------------------------------------------------------------------

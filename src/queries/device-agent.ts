@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
-import { isAgentKind, type ReportedAgentKind } from "@xorgate/sdk"
-import { fetchAgentChannel, UNSUPPORTED_CHANNEL } from "@/lib/device-agent"
+import type { ReportedAgentKind } from "@xorgate/sdk"
+import { agentChannelQuery } from "@/lib/device-agent"
 import { qk } from "@/queries/keys"
 import { useTenant } from "@/queries/tenant"
 
@@ -15,14 +15,11 @@ const AGENT_STALE_MS = 60_000
  */
 export function useAgentChannel(agent: ReportedAgentKind | null | undefined) {
   const { orgId, wsId, ready } = useTenant()
-  const known = isAgentKind(agent) ? agent : null
+  const q = agentChannelQuery(agent)
   return useQuery({
-    queryKey: [...qk.ws(orgId, wsId), "agent-channel", known ?? ""] as const,
-    queryFn: () =>
-      known === null
-        ? Promise.resolve(UNSUPPORTED_CHANNEL)
-        : fetchAgentChannel(known),
-    enabled: ready && known !== null,
+    queryKey: [...qk.ws(orgId, wsId), "agent-channel", q.known ?? ""] as const,
+    queryFn: q.queryFn,
+    enabled: ready && q.enabled,
     staleTime: AGENT_STALE_MS,
     retry: 1,
   })

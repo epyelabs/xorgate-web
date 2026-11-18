@@ -43,8 +43,10 @@ let current: XorgateClient = client("ws-1")
 vi.mock("@/lib/xorgate", () => ({ xg: () => current }))
 
 const {
+  agentChannelQuery,
   agentUpdateState,
   createRegistration,
+  currentDeviceAgent,
   fetchAgentChannel,
   isAgentNotEnabled,
   isCm4Model,
@@ -330,13 +332,51 @@ describe("the agent channel", () => {
     reply(NOT_FOUND)
     expect(await fetchAgentChannel("rust")).toEqual(UNSUPPORTED_CHANNEL)
 
-    reply({ status: 500, body: { error: { code: "INTERNAL", message: "x" } } })
-    await expect(fetchAgentChannel("rust")).rejects.toThrow()
+    expect(calls).toHaveLength(1)
 
-    // The JS fallback's own failures throw too.
+    // A gateway 5xx: the SDK's SERVER_ERROR, after exactly one request (an
+    // extra, unexpected request would fail differently: "unexpected request").
+    reply({ status: 500, body: { message: "Internal Server Error" } })
+    await expect(fetchAgentChannel("rust")).rejects.toMatchObject({
+      code: "SERVER_ERROR",
+      status: 500,
+    })
+    expect(calls).toHaveLength(2)
+
+    // The JS fallback's own failures throw too: ?agent=js, then the
+    // no-parameter route, and nothing after it.
     reply({ status: 200, body: { latest: BUILD_JS } })
-    reply({ status: 500, body: { error: { code: "INTERNAL", message: "x" } } })
-    await expect(fetchAgentChannel("js")).rejects.toThrow()
+    reply({ status: 500, body: { message: "Internal Server Error" } })
+    await expect(fetchAgentChannel("js")).rejects.toMatchObject({
+      code: "SERVER_ERROR",
+      status: 500,
+    })
+    expect(calls).toHaveLength(4)
+    expect(calls[2].url.searchParams.get("agent")).toBe("js")
+    expect(calls[3].url.search).toBe("")
+  })
+
+  it("N2: an unknown agent asks no channel and gets no dot", async () => {
+    for (const agent of ["go", "", null, undefined] as const) {
+      const q = agentChannelQuery(agent)
+      expect(q.known).toBeNull()
+      expect(q.enabled).toBe(false)
+      // Even a forced run of the query answers without a request.
+      expect(await q.queryFn()).toEqual(UNSUPPORTED_CHANNEL)
+    }
+    expect(fakeFetch).not.toHaveBeenCalled()
+    expect(
+      agentUpdateState({
+        deviceAgent: "go",
+        channel: undefined,
+        installedVersion: "aaaaaaa",
+      })
+    ).toEqual({ kind: "unknown" })
+    // A known agent is asked about, per agent.
+    expect(agentChannelQuery("rust")).toMatchObject({
+      known: "rust",
+      enabled: true,
+    })
   })
 })
 
@@ -487,6 +527,67 @@ describe("agent-aware update check", () => {
         installedVersion: "aaaaaaa",
       })
     ).toEqual({ kind: "no-build" })
+  })
+
+  it("S1: a mid-session js -> rust flip (D9) moves the General tab to the Rust channel, never the JS manifest", async () => {
+    // The settings hook's snapshot was taken at mount, while the device still
+    // read js; its polls do not carry `agent`. The shared device query (the
+    // header's, polled by the layout) then sees the D9 promotion.
+    const snapshot = { agent: "js" }
+    let shared: { agent: string } | undefined = { agent: "js" }
+    expect(currentDeviceAgent(shared, snapshot)).toBe("js")
+
+    // Before the flip: the JS channel, JS dot, JS updater.
+    reply({
+      status: 200,
+      body: { agent: "js", latest: BUILD_JS, registrationEnabled: true },
+    })
+    const before = currentDeviceAgent(shared, snapshot)
+    const jsQ = agentChannelQuery(before)
+    expect(
+      agentUpdateState({
+        deviceAgent: before,
+        channel: await jsQ.queryFn(),
+        installedVersion: "aaaaaaa",
+      })
+    ).toEqual({ kind: "update-available", latest: BUILD_JS })
+    expect(updaterUnit(before)).toBe("xorgate-updater")
+
+    // The update installs a marker-carrying Rust build: the device now
+    // reports the Rust sha, and the shared query reads agent=rust.
+    shared = { agent: "rust" }
+    const after = currentDeviceAgent(shared, snapshot)
+    expect(after).toBe("rust")
+    const rsQ = agentChannelQuery(after)
+    expect(rsQ.known).toBe("rust")
+    reply({
+      status: 200,
+      body: { agent: "rust", latest: BUILD_RS, registrationEnabled: true },
+    })
+    const rsChannel = await rsQ.queryFn()
+    expect(calls.at(-1)?.url.searchParams.get("agent")).toBe("rust")
+    // Up to date against the RUST channel, not "Update available: 09da38d".
+    const state = agentUpdateState({
+      deviceAgent: after,
+      channel: rsChannel,
+      installedVersion: BUILD_RS.version,
+    })
+    expect(state).toEqual({ kind: "up-to-date", latest: BUILD_RS })
+    expect(JSON.stringify(state)).not.toContain(BUILD_JS.version)
+    // And the JS channel, still cached for the old key, is never used for it.
+    expect(
+      agentUpdateState({
+        deviceAgent: after,
+        channel: { agent: "js", latest: BUILD_JS, registrationEnabled: true },
+        installedVersion: BUILD_RS.version,
+      })
+    ).toEqual({ kind: "unknown" })
+    // The update outcome hints name the Rust updater.
+    expect(updaterUnit(after)).toBe("xorgate-updater-rs")
+
+    // The snapshot is only the fallback while the shared entry is empty.
+    expect(currentDeviceAgent(undefined, snapshot)).toBe("js")
+    expect(currentDeviceAgent(undefined, undefined)).toBeNull()
   })
 
   it("does not flag a device that never reported a build", () => {

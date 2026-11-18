@@ -7,7 +7,7 @@
  * `devices.agentChannel()`. What stays here is policy:
  *
  * - the M1 echo guard (show a command only for the agent picked);
- * - which reason disables Rust in Register device;
+ * - which reason disables Rust in Register device, and which agent it opens on;
  * - the agent-aware update check (never the JS manifest for a Rust device);
  * - the one place the console is more lenient than the SDK: an old backend's
  *   un-echoed answer IS the JS manifest when JS was asked (review-wp-c S1).
@@ -221,6 +221,71 @@ export function rustOption(
   if (channel.latest === null)
     return { state: "disabled", reason: RUST_REASON_NO_RELEASE }
   return { state: "enabled" }
+}
+
+// ---------------------------------------------------------------------------
+// The Language picker in Register device (2026-11-18: Rust first and the
+// default where it is offered; supersedes Q-8.15's "JS until the cutover")
+// ---------------------------------------------------------------------------
+
+/** The picker's label. It said "Agent" in Phase 8. */
+export const REGISTER_PICK_LABEL = "Language"
+
+/** Rust first, then JS. The keyboard order follows it. */
+export const REGISTER_PICK_ORDER: readonly AgentKind[] = ["rust", "js"]
+
+/**
+ * How long the dialog waits for the Rust check before it opens on JS anyway.
+ * The check normally answers in well under a second; this only bounds a slow
+ * one (the SDK's own deadline is 30 s). A late answer still updates the Rust
+ * option, but never moves the pick: the default is decided once per open.
+ */
+export const RUST_CHECK_DEADLINE_MS = 8000
+
+export type RegisterPickOption = {
+  value: AgentKind
+  label: string
+  disabled: boolean
+  title?: string
+}
+
+/** The picker's options, in `REGISTER_PICK_ORDER`. JS is never disabled. */
+export function registerPickOptions(
+  rust: RustOption,
+  cm4Picked: boolean
+): RegisterPickOption[] {
+  return REGISTER_PICK_ORDER.map((value) =>
+    value === "js"
+      ? { value, label: agentLabel(value), disabled: false }
+      : {
+          value,
+          label: agentLabel(value),
+          disabled: rust.state !== "enabled",
+          title:
+            rust.state === "disabled"
+              ? rust.reason
+              : rust.state === "checking"
+                ? "Checking whether this stage offers the Rust agent…"
+                : cm4Picked
+                  ? RUST_HINT_CM4
+                  : undefined,
+        }
+  )
+}
+
+/**
+ * The agent the dialog opens on, decided once per open: Rust when this
+ * workspace can register it, JS for every reason it cannot, so registration
+ * never starts on a disabled option. Null while the check is in flight — the
+ * dialog mints nothing until then, so no JS code is created only to be
+ * replaced by a Rust one.
+ *
+ * The CM4 hint plays no part: it only follows a model pin, which comes after
+ * the first code, and it warns rather than disables.
+ */
+export function defaultRegistrationAgent(rust: RustOption): AgentKind | null {
+  if (rust.state === "checking") return null
+  return rust.state === "enabled" ? "rust" : "js"
 }
 
 /** A CM4 model (cm4-support schema-v2 `system.platform`), for the D7 hint. */

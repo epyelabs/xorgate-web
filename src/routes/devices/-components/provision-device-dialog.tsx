@@ -27,11 +27,15 @@ import type {
 import { xg, xgMessage } from "@/lib/xorgate"
 import {
   createRegistration,
+  defaultRegistrationAgent,
   fetchAgentChannel,
   isAgentNotEnabled,
   isCm4Model,
+  registerPickOptions,
   registrationMatchesPick,
   rustOption,
+  REGISTER_PICK_LABEL,
+  RUST_CHECK_DEADLINE_MS,
   RUST_HINT_CM4,
   RUST_REASON_FLAG_OFF,
   RUST_REASON_OLD_API,
@@ -79,11 +83,13 @@ export function ProvisionDeviceDialog({
   const [modelPick, setModelPick] = useState("auto")
   const [pinned, setPinned] = useState(false)
 
-  // Which agent the code installs (dual-agent registration D6). JS is the
-  // default until the cutover (Q-8.15). Each agent gets its OWN code: the
-  // endpoint reuses a pending code only for the same agent (Q-8.2), so going
-  // back to JS hands back the JS code that was already on screen.
-  const [pick, setPick] = useState<AgentKind>("js")
+  // Which agent the code installs (dual-agent registration D6), shown as
+  // "Language". Null until the Rust check decides the default for this open:
+  // Rust where this workspace can register it, JS otherwise (2026-11-18,
+  // superseding Q-8.15). Each agent gets its OWN code: the endpoint reuses a
+  // pending code only for the same agent (Q-8.2), so going back to an agent
+  // hands back the code that was already on screen for it.
+  const [pick, setPick] = useState<AgentKind | null>(null)
   // The Rust channel (`?agent=rust`): undefined while checking, null when the
   // check failed. Rust is offered only when it echoes `agent: 'rust'`.
   const [rustChannel, setRustChannel] = useState<
@@ -92,16 +98,17 @@ export function ProvisionDeviceDialog({
   // A create that came back AGENT_NOT_ENABLED is the authoritative "no".
   const [rustRefused, setRustRefused] = useState(false)
   const rust = rustOption(rustChannel, rustRefused)
-  // What to mint next. Bumping `n` mints again (after expiry / error, or for a
-  // different agent) without closing the dialog.
   // Bumped by every mint and every model re-pin: a re-pin answer applies only
   // if nothing replaced the code on screen while it was in flight.
   const regSeq = useRef(0)
+  // What to mint next; null until the default is decided, so nothing is
+  // minted on open before the Rust check answers. Bumping `n` mints again
+  // (after expiry / error, or for a different agent) without closing.
   const [mintReq, setMintReq] = useState<{
     agent: AgentKind
     modelId?: string
     n: number
-  }>({ agent: "js", n: 0 })
+  } | null>(null)
 
   useEffect(() => {
     if (!open || models !== null) return
@@ -119,41 +126,60 @@ export function ProvisionDeviceDialog({
     }
   }, [open, models])
 
-  // Reset on CLOSE, not on open: the next open then mints for JS straight
-  // away, instead of first minting for whatever agent the last session left.
+  // Reset on CLOSE, not on open: the next open then decides its default
+  // afresh, instead of first minting for whatever agent the last session left.
   function handleOpenChange(next: boolean) {
     if (!next) {
       regSeq.current++
-      setPick("js")
+      setPick(null)
       setModelPick("auto")
       setPinned(false)
       setRustRefused(false)
       setRustChannel(undefined)
-      setMintReq((m) => ({ agent: "js", n: m.n + 1 }))
+      setMintReq(null)
     }
     onOpenChange(next)
   }
 
-  // Ask once per open whether this stage and workspace can register Rust.
+  // Ask once per open whether this stage and workspace can register Rust, and
+  // decide the default from the answer: exactly one first mint, for the right
+  // agent. A failed check decides JS at once. A slow one decides JS at the
+  // deadline, so the dialog is never stuck; its late answer still updates the
+  // Rust option, but the pick stays where it is.
   useEffect(() => {
     if (!open) return
     let cancelled = false
+    let decided = false
+    function decide(agent: AgentKind) {
+      if (cancelled || decided) return
+      decided = true
+      setPick(agent)
+      setPhase("creating")
+      setReg(null)
+      setMintReq((m) => ({ agent, n: (m?.n ?? 0) + 1 }))
+    }
+    const deadline = setTimeout(() => decide("js"), RUST_CHECK_DEADLINE_MS)
     ;(async () => {
+      let channel: AgentChannel | null
       try {
-        const channel = await fetchAgentChannel("rust")
-        if (!cancelled) setRustChannel(channel)
+        channel = await fetchAgentChannel("rust")
       } catch {
-        if (!cancelled) setRustChannel(null)
+        channel = null
       }
+      if (cancelled) return
+      clearTimeout(deadline)
+      setRustChannel(channel)
+      decide(defaultRegistrationAgent(rustOption(channel)) ?? "js")
     })()
     return () => {
       cancelled = true
+      clearTimeout(deadline)
     }
   }, [open])
 
   async function handleModelPick(value: string) {
     setModelPick(value)
-    if (value === "auto" || phase !== "pending") return
+    if (value === "auto" || phase !== "pending" || pick === null) return
     const seq = ++regSeq.current
     try {
       // The endpoint is idempotent and RE-PINS the pending code in place —
@@ -172,27 +198,29 @@ export function ProvisionDeviceDialog({
 
   const handleAgentPick = useCallback(
     (agent: AgentKind) => {
-      if (agent === pick) return
+      // Nothing to switch from until the default is decided.
+      if (pick === null || agent === pick) return
       setPick(agent)
       setMintReq((m) => ({
         agent,
         modelId: modelPick === "auto" ? undefined : modelPick,
-        n: m.n + 1,
+        n: (m?.n ?? 0) + 1,
       }))
     },
     [pick, modelPick]
   )
 
   function handleRegenerate() {
+    if (pick === null) return
     setModelPick("auto")
     setPinned(false)
-    setMintReq((m) => ({ agent: pick, n: m.n + 1 }))
+    setMintReq((m) => ({ agent: pick, n: (m?.n ?? 0) + 1 }))
   }
 
-  // Mint (or reuse — the endpoint is idempotent per agent) a code whenever the
-  // dialog opens, the operator switches agent, or asks for a new one.
+  // Mint (or reuse — the endpoint is idempotent per agent) a code once the
+  // default is decided, when the operator switches agent, or asks for a new one.
   useEffect(() => {
-    if (!open) return
+    if (!open || mintReq === null) return
     // Supersedes any model re-pin still in flight for the previous code.
     regSeq.current++
     let cancelled = false
@@ -218,7 +246,11 @@ export function ProvisionDeviceDialog({
           setRustRefused(true)
           toast.error(`${RUST_REASON_FLAG_OFF}. Showing the JS installer.`)
           setPick("js")
-          setMintReq((m) => ({ agent: "js", modelId: m.modelId, n: m.n + 1 }))
+          setMintReq((m) => ({
+            agent: "js",
+            modelId: m?.modelId,
+            n: (m?.n ?? 0) + 1,
+          }))
           return
         }
         setErrorMsg(xgMessage(err) || "Failed to create registration")
@@ -233,7 +265,7 @@ export function ProvisionDeviceDialog({
   // The M1 echo guard (D6.2): the command only when the code serves the agent
   // picked. A missing `agent` (an old backend) counts as JS, so the default
   // flow is exactly today's; a Rust pick there never matches and shows none.
-  const commandMatchesPick = registrationMatchesPick(reg, pick)
+  const commandMatchesPick = pick !== null && registrationMatchesPick(reg, pick)
 
   // Poll until the device claims the code (or it expires). reg.code is stable
   // across polls, so this effect isn't torn down on every status update. No
@@ -312,13 +344,13 @@ export function ProvisionDeviceDialog({
           <AgentPicker
             pick={pick}
             onPick={handleAgentPick}
-            busy={phase === "creating"}
+            busy={pick === null || phase === "creating"}
             rust={rust}
             cm4Picked={cm4Picked}
           />
         ) : null}
 
-        {phase === "creating" ? (
+        {pick === null || phase === "creating" ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <Loader2Icon className="size-4 animate-spin" />
             Generating a one-time install command…
@@ -457,8 +489,10 @@ export function ProvisionDeviceDialog({
 }
 
 /**
- * JS or Rust (D6.1). A two-option radio group rather than a select: both
- * options and the reason one is unavailable should be visible at a glance.
+ * "Language": Rust or JS (D6.1), Rust first. A two-option radio group rather
+ * than a select: both options and the reason one is unavailable should be
+ * visible at a glance. `pick` is null (nothing checked) until the dialog has
+ * decided its default.
  */
 function AgentPicker({
   pick,
@@ -467,34 +501,13 @@ function AgentPicker({
   rust,
   cm4Picked,
 }: {
-  pick: AgentKind
+  pick: AgentKind | null
   onPick: (agent: AgentKind) => void
   busy: boolean
   rust: RustOption
   cm4Picked: boolean
 }) {
-  const rustDisabled = rust.state !== "enabled"
-  const options: {
-    value: AgentKind
-    label: string
-    disabled: boolean
-    title?: string
-  }[] = [
-    { value: "js", label: "JS", disabled: false },
-    {
-      value: "rust",
-      label: "Rust",
-      disabled: rustDisabled,
-      title:
-        rust.state === "disabled"
-          ? rust.reason
-          : rust.state === "checking"
-            ? "Checking whether this stage offers the Rust agent…"
-            : cm4Picked
-              ? RUST_HINT_CM4
-              : undefined,
-    },
-  ]
+  const options = registerPickOptions(rust, cm4Picked)
   // Roving focus (WAI-ARIA radio group): only the checked option is in the tab
   // order, and the arrow keys move AND select, skipping unavailable options.
   // Unavailable / busy options are aria-disabled rather than natively disabled
@@ -511,7 +524,7 @@ function AgentPicker({
           : 0
     if (dir === 0) return
     e.preventDefault()
-    if (busy) return
+    if (busy || pick === null) return
     const from = options.findIndex((o) => o.value === pick)
     for (let k = 1; k <= options.length; k++) {
       const next =
@@ -536,19 +549,19 @@ function AgentPicker({
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         <span
-          id="register-agent-pick-label"
+          id="register-language-pick-label"
           className="shrink-0 text-xs text-muted-foreground"
         >
-          Agent
+          {REGISTER_PICK_LABEL}
         </span>
         <div
           role="radiogroup"
-          aria-labelledby="register-agent-pick-label"
+          aria-labelledby="register-language-pick-label"
           aria-describedby={rustDescribedBy}
           onKeyDown={handleKeyDown}
           className="inline-flex items-center rounded-md border border-border p-0.5"
         >
-          {options.map((opt) => (
+          {options.map((opt, i) => (
             <button
               key={opt.value}
               type="button"
@@ -558,7 +571,9 @@ function AgentPicker({
               aria-describedby={
                 opt.value === "rust" ? rustDescribedBy : undefined
               }
-              tabIndex={pick === opt.value ? 0 : -1}
+              tabIndex={
+                pick === opt.value || (pick === null && i === 0) ? 0 : -1
+              }
               ref={(el) => {
                 buttons.current[opt.value] = el
               }}

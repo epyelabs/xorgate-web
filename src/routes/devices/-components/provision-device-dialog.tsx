@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { CheckIcon, CopyIcon, Loader2Icon, RefreshCwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,6 @@ import { xg, xgMessage } from "@/lib/xorgate"
 import {
   createRegistration,
   defaultRegistrationAgent,
-  fetchAgentChannel,
   isAgentNotEnabled,
   isCm4Model,
   registerPickOptions,
@@ -42,6 +42,12 @@ import {
   type RustOption,
 } from "@/lib/device-agent"
 import { cn } from "@/lib/utils"
+import {
+  agentChannelKey,
+  rustChannelOptions,
+  usePrefetchRustChannel,
+} from "@/queries/device-agent"
+import { useTenant } from "@/queries/tenant"
 
 type Phase = "creating" | "pending" | "claimed" | "expired" | "error"
 
@@ -97,7 +103,16 @@ export function ProvisionDeviceDialog({
   >(undefined)
   // A create that came back AGENT_NOT_ENABLED is the authoritative "no".
   const [rustRefused, setRustRefused] = useState(false)
-  const rust = rustOption(rustChannel, rustRefused)
+  const liveRust = rustOption(rustChannel, rustRefused)
+  // What the picker showed when the dialog was closed. Close resets the live
+  // state for the next open, and this keeps the exit animation showing the
+  // last session instead of an empty picker and a spinner (review N2).
+  const [closing, setClosing] = useState<{
+    pick: AgentKind | null
+    rust: RustOption
+  } | null>(null)
+  const viewPick = open ? pick : (closing?.pick ?? pick)
+  const rust = open ? liveRust : (closing?.rust ?? liveRust)
   // Bumped by every mint and every model re-pin: a re-pin answer applies only
   // if nothing replaced the code on screen while it was in flight.
   const regSeq = useRef(0)
@@ -109,6 +124,22 @@ export function ProvisionDeviceDialog({
     modelId?: string
     n: number
   } | null>(null)
+
+  // The Rust channel is cached per org and workspace for 60 s (review S2). The
+  // dialog is mounted with the Devices page, so warming it here means the
+  // first open usually decides from the cache, without a round trip.
+  const queryClient = useQueryClient()
+  const { orgId, wsId } = useTenant()
+  const prefetchRust = usePrefetchRustChannel()
+  useEffect(() => {
+    prefetchRust()
+  }, [prefetchRust])
+  // A 409 proves the cached "enabled" wrong: the next open asks again.
+  const forgetRustChannel = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: agentChannelKey(orgId, wsId, "rust"),
+    })
+  }, [queryClient, orgId, wsId])
 
   useEffect(() => {
     if (!open || models !== null) return
@@ -131,6 +162,7 @@ export function ProvisionDeviceDialog({
   function handleOpenChange(next: boolean) {
     if (!next) {
       regSeq.current++
+      setClosing({ pick, rust: liveRust })
       setPick(null)
       setModelPick("auto")
       setPinned(false)
@@ -143,9 +175,12 @@ export function ProvisionDeviceDialog({
 
   // Ask once per open whether this stage and workspace can register Rust, and
   // decide the default from the answer: exactly one first mint, for the right
-  // agent. A failed check decides JS at once. A slow one decides JS at the
-  // deadline, so the dialog is never stuck; its late answer still updates the
-  // Rust option, but the pick stays where it is.
+  // agent. A fresh cached answer (this workspace's, under 60 s old) decides at
+  // once; otherwise this asks, joining a prefetch already in flight. A failed
+  // check decides JS at once. A slow one decides JS at the deadline, so the
+  // dialog is never stuck; its late answer still updates the Rust option, but
+  // the pick stays where it is. A stale "enabled" is caught by the 409
+  // fallback below; a stale "disabled" only means JS.
   useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -162,7 +197,7 @@ export function ProvisionDeviceDialog({
     ;(async () => {
       let channel: AgentChannel | null
       try {
-        channel = await fetchAgentChannel("rust")
+        channel = await queryClient.fetchQuery(rustChannelOptions(orgId, wsId))
       } catch {
         channel = null
       }
@@ -175,7 +210,7 @@ export function ProvisionDeviceDialog({
       cancelled = true
       clearTimeout(deadline)
     }
-  }, [open])
+  }, [open, queryClient, orgId, wsId])
 
   async function handleModelPick(value: string) {
     setModelPick(value)
@@ -244,6 +279,7 @@ export function ProvisionDeviceDialog({
           // The stage flag said no for this workspace: disable Rust with the
           // reason and fall back to the default, so the dialog stays usable.
           setRustRefused(true)
+          forgetRustChannel()
           toast.error(`${RUST_REASON_FLAG_OFF}. Showing the JS installer.`)
           setPick("js")
           setMintReq((m) => ({
@@ -260,12 +296,13 @@ export function ProvisionDeviceDialog({
     return () => {
       cancelled = true
     }
-  }, [open, mintReq])
+  }, [open, mintReq, forgetRustChannel])
 
   // The M1 echo guard (D6.2): the command only when the code serves the agent
   // picked. A missing `agent` (an old backend) counts as JS, so the default
   // flow is exactly today's; a Rust pick there never matches and shows none.
-  const commandMatchesPick = pick !== null && registrationMatchesPick(reg, pick)
+  const commandMatchesPick =
+    viewPick !== null && registrationMatchesPick(reg, viewPick)
 
   // Poll until the device claims the code (or it expires). reg.code is stable
   // across polls, so this effect isn't torn down on every status update. No
@@ -342,15 +379,15 @@ export function ProvisionDeviceDialog({
 
         {phase !== "claimed" ? (
           <AgentPicker
-            pick={pick}
+            pick={viewPick}
             onPick={handleAgentPick}
-            busy={pick === null || phase === "creating"}
+            busy={viewPick === null || phase === "creating"}
             rust={rust}
             cm4Picked={cm4Picked}
           />
         ) : null}
 
-        {pick === null || phase === "creating" ? (
+        {viewPick === null || phase === "creating" ? (
           <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
             <Loader2Icon className="size-4 animate-spin" />
             Generating a one-time install command…
@@ -436,7 +473,7 @@ export function ProvisionDeviceDialog({
                 className="text-sm text-destructive"
                 data-testid="agent-echo-mismatch"
               >
-                {pick === "rust"
+                {viewPick === "rust"
                   ? `${RUST_REASON_OLD_API} yet. Pick JS to register this device.`
                   : "This code installs a different agent than the one picked. Generate a new code."}
               </p>
@@ -473,10 +510,13 @@ export function ProvisionDeviceDialog({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Requires sudo. The installer pulls the latest{" "}
-                  {pick === "rust" ? "Rust " : ""}agent build and configures it
-                  to talk to your workspace.
+                  {viewPick === "rust" ? "Rust " : ""}agent build and configures
+                  it to talk to your workspace.
                 </p>
-                <AgentNote pick={pick} rustOffered={rust.state === "enabled"} />
+                <AgentNote
+                  pick={viewPick}
+                  rustOffered={rust.state === "enabled"}
+                />
               </>
             ) : null}
           </>
@@ -515,6 +555,18 @@ function AgentPicker({
   const buttons = useRef<Partial<Record<AgentKind, HTMLButtonElement | null>>>(
     {}
   )
+  // Focus follows the pick while it is inside the group (review S1). The
+  // dialog opens with nothing picked and focuses the first radio (Rust); when
+  // the pick then settles elsewhere (JS on a stage without Rust, or the 409
+  // fallback), focus would otherwise stay on an unchecked, unavailable radio.
+  useEffect(() => {
+    if (pick === null) return
+    const target = buttons.current[pick]
+    const active = document.activeElement
+    if (!target || active === target) return
+    if (Object.values(buttons.current).includes(active as HTMLButtonElement))
+      target.focus()
+  }, [pick])
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     const dir =
       e.key === "ArrowRight" || e.key === "ArrowDown"

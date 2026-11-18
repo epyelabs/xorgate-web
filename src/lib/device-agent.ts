@@ -236,9 +236,12 @@ export const REGISTER_PICK_ORDER: readonly AgentKind[] = ["rust", "js"]
 
 /**
  * How long the dialog waits for the Rust check before it opens on JS anyway.
- * The check normally answers in well under a second; this only bounds a slow
- * one (the SDK's own deadline is 30 s). A late answer still updates the Rust
- * option, but never moves the pick: the default is decided once per open.
+ * It only applies when no fresh cached answer exists (the channel is cached
+ * per workspace for 60 s and prefetched with the Devices page). A warm check
+ * answers in a fraction of a second, but a cold API (Lambda and the Aurora
+ * resume after an idle period) took about 3 s on DEV; this bounds anything
+ * slower (the SDK's own deadline is 30 s). A late answer still updates the
+ * Rust option, but never moves the pick: the default is decided once per open.
  */
 export const RUST_CHECK_DEADLINE_MS = 8000
 

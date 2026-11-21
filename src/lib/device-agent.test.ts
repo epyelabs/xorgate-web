@@ -52,6 +52,7 @@ const {
   isAgentNotEnabled,
   isCm4Model,
   registerPickOptions,
+  registrationBody,
   registrationInput,
   registrationMatchesPick,
   rustOption,
@@ -177,6 +178,81 @@ describe("registrations", () => {
     reply({ status: 200, body: { ...REG_OLD, agent: "js" } })
     await createRegistration({ agent: "js", deviceModelId: "m1" })
     expect(JSON.parse(calls[2].body ?? "null")).toEqual({ deviceModelId: "m1" })
+  })
+
+  it("adds the camera choice for Rust only: a JS registration never carries it", () => {
+    // The API answers a JS registration that sends `cameras` with a 400.
+    const cameras = { cam0: { sensor: "imx708" } }
+    expect(registrationBody({ agent: "rust", cameras })).toEqual({
+      agent: "rust",
+      cameras,
+    })
+    expect(
+      registrationBody({ agent: "rust", deviceModelId: "m1", cameras })
+    ).toEqual({
+      agent: "rust",
+      deviceModelId: "m1",
+      cameras,
+    })
+    expect(registrationBody({ agent: "js", cameras })).toEqual({})
+    expect(
+      registrationBody({ agent: "js", deviceModelId: "m1", cameras })
+    ).toEqual({
+      deviceModelId: "m1",
+    })
+    // Absent keeps a reused code's choice, so it is left out, not sent as null.
+    expect(registrationBody({ agent: "rust" })).toEqual({ agent: "rust" })
+    expect("cameras" in registrationBody({ agent: "rust" })).toBe(false)
+  })
+
+  it("re-pins the camera choice with one POST carrying `cameras`, and reads it back", async () => {
+    const cameras = { cam0: { sensor: "imx708" }, cam1: { sensor: "none" } }
+    reply({ status: 200, body: { ...REG_OLD, agent: "rust", cameras } })
+    const r = await createRegistration({
+      agent: "rust",
+      deviceModelId: "m1",
+      cameras,
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].method).toBe("POST")
+    expect(calls[0].url.pathname).toBe("/v1/device-registrations")
+    expect(JSON.parse(calls[0].body ?? "null")).toEqual({
+      deviceModelId: "m1",
+      agent: "rust",
+      cameras,
+    })
+    expect(r).toMatchObject({ code: "ABCD1234", agent: "rust", cameras })
+  })
+
+  it("sends a JS create exactly as before even when handed a camera choice", async () => {
+    reply({ status: 200, body: { ...REG_OLD, agent: "js" } })
+    await createRegistration({
+      agent: "js",
+      cameras: { cam0: { sensor: "imx708" } },
+    })
+    expect(calls[0].body).toBeUndefined()
+  })
+
+  it("fills agent=js on the camera path too when an old backend omits it", async () => {
+    // An old backend ignores both fields; the echo guard then hides the command.
+    reply({ status: 200, body: REG_OLD })
+    const r = await createRegistration({
+      agent: "rust",
+      cameras: { cam0: { sensor: "imx708" } },
+    })
+    expect(r.agent).toBe("js")
+    expect(registrationMatchesPick(r, "rust")).toBe(false)
+  })
+
+  it("refuses the camera path locally without a workspace too", async () => {
+    current = client(undefined)
+    await expect(
+      createRegistration({
+        agent: "rust",
+        cameras: { cam0: { sensor: "imx708" } },
+      })
+    ).rejects.toMatchObject({ code: "INVALID_CONFIG" })
+    expect(fakeFetch).not.toHaveBeenCalled()
   })
 
   it("N3: refuses locally without a workspace, sending nothing", async () => {

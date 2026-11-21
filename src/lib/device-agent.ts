@@ -28,6 +28,7 @@ import {
   type ReportedAgentKind,
 } from "@xorgate/sdk"
 import { xg } from "@/lib/xorgate"
+import type { RegistrationCameras } from "@/lib/device-cameras"
 
 export function agentLabel(agent: ReportedAgentKind): string {
   return agent === "js" ? "JS" : agent === "rust" ? "Rust" : agent
@@ -60,6 +61,27 @@ export function registrationInput(input: {
 }
 
 /**
+ * The create body including the per-port camera choice
+ * (plans/support-other-camera-models): `registrationInput` plus `cameras`.
+ *
+ * `cameras` is for Rust registrations only: the API answers a JS registration
+ * that carries it with a 400, so it is never added for the JS pick, whatever
+ * the caller passed. Left out (undefined) it keeps a reused code's choice; a
+ * value re-pins it in place on the same code, like `deviceModelId`.
+ */
+export function registrationBody(input: {
+  agent: AgentKind
+  deviceModelId?: string
+  cameras?: RegistrationCameras
+}): CreateDeviceRegistrationInput & { cameras?: RegistrationCameras } {
+  const out: CreateDeviceRegistrationInput & { cameras?: RegistrationCameras } =
+    registrationInput(input)
+  if (input.agent === "rust" && input.cameras !== undefined)
+    out.cameras = input.cameras
+  return out
+}
+
+/**
  * Mint (or reuse) a code for `agent`. Idempotent per workspace AND agent: a
  * pending code for the same agent comes back, a different agent mints a new
  * one (Q-8.2), and passing `deviceModelId` re-pins the pending code in place.
@@ -71,6 +93,8 @@ export function registrationInput(input: {
 export async function createRegistration(input: {
   agent: AgentKind
   deviceModelId?: string
+  /** The per-port camera choice to pin; Rust only. See `registrationBody`. */
+  cameras?: RegistrationCameras
 }): Promise<DeviceRegistration> {
   const client = xg()
   // The SDK refuses this too, but with a developer-facing message; the
@@ -81,7 +105,24 @@ export async function createRegistration(input: {
       message: "Registering a device needs a workspace. Select one first.",
     })
   }
-  return client.deviceRegistrations.create(registrationInput(input))
+  const body = registrationBody(input)
+  if (body.cameras === undefined) {
+    return client.deviceRegistrations.create(registrationInput(input))
+  }
+  // TODO(sdk-camera-sensors): the published SDK's `create()` builds its own
+  // body and drops `cameras`, so a create that carries the choice goes through
+  // the raw request. It answers the registration itself (no envelope); `agent`
+  // is filled in the way the SDK's own normalizer does. Replace with
+  // `deviceRegistrations.create({ ..., cameras })` once the SDK has the field.
+  const reply = await client.request<DeviceRegistration>(
+    "POST",
+    "/device-registrations",
+    {
+      workspaceId: client.workspaceId,
+      body,
+    }
+  )
+  return { ...reply, agent: reply.agent ?? "js" }
 }
 
 /**

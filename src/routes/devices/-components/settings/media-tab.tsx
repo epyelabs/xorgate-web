@@ -32,9 +32,17 @@ import type {
   TelemetryMediaStatus as DeviceMediaStatus,
   TelemetryRecordingStatus as DeviceRecordingStatus,
 } from "@xorgate/react"
+import { cameraPresetProblem } from "@/lib/camera-catalog"
+import {
+  modelCameraPorts,
+  parseReportedCameras,
+  portSensor,
+} from "@/lib/device-cameras"
+import { useDeviceModel } from "@/queries/devices"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 import { SettingsCallout } from "./callout"
-import { VideoOptions } from "./video-options"
+import { CameraSensorsCard } from "./camera-sensors-card"
+import { VideoOptions, type PresetProblem } from "./video-options"
 
 const VIDEO_KEY = "device-recording-video-enabled"
 const MOUNT_KEY = (streamKey: string) => `device-camera-mount-${streamKey}`
@@ -82,6 +90,26 @@ export function MediaTab({
 }) {
   const reportedVideo = reportedMedia?.recording?.value === true
   const mounted = resolveCameraMount(device.config.cameraMount)
+
+  // The device's model names its camera ports (the keys the sensor choice is
+  // made for); the catalog then says what follows from the sensor on a port.
+  const modelQuery = useDeviceModel(device.deviceModelId)
+  const cameraPorts = modelCameraPorts(modelQuery.data?.ioCapabilities)
+  const reportedCameras = parseReportedCameras(device.reportedConfig)
+  const sensorOn = (streamKey: string) =>
+    portSensor(streamKey, device.config, reportedCameras)
+
+  // A preset the catalog says a camera's sensor cannot run, grouped by the
+  // catalog's reason so two cameras on one sensor read as one warning.
+  const presetProblems: PresetProblem[] = []
+  for (const ch of channels ?? []) {
+    if (recording.cameras[ch.streamKey] === false) continue
+    const reason = cameraPresetProblem(sensorOn(ch.streamKey)?.id, recording.preset)
+    if (reason === null) continue
+    const same = presetProblems.find((p) => p.reason === reason)
+    if (same) same.cameras.push(ch.streamKey)
+    else presetProblems.push({ cameras: [ch.streamKey], reason })
+  }
 
   /**
    * Write one camera's rotation, carrying the others through unchanged.
@@ -156,6 +184,17 @@ export function MediaTab({
         </Card>
       ) : null}
 
+      <CameraSensorsCard
+        device={device}
+        ports={cameraPorts}
+        modelState={
+          modelQuery.isPending ? "loading" : modelQuery.isError ? "error" : "ready"
+        }
+        status={configStatus.cameraSensors}
+        isPending={isPending}
+        commit={commit}
+      />
+
       {channels && channels.length > 0 ? (
         <Card>
           <CardHeader>
@@ -174,6 +213,10 @@ export function MediaTab({
             <FieldGroup>
               {channels.map((ch) => {
                 const key = MOUNT_KEY(ch.streamKey)
+                // The catalog knows which sensors apply no flip at all. The
+                // device refuses the rotation for one too; saying it here
+                // saves the operator a save and a reboot to find out.
+                const cannotRotate = sensorOn(ch.streamKey)?.canFlip === false
                 return (
                   <Field key={ch.streamKey} orientation="horizontal">
                     <FieldContent>
@@ -182,15 +225,17 @@ export function MediaTab({
                         is mounted upside down
                       </FieldLabel>
                       <FieldDescription>
-                        Rotates the picture 180°. Takes effect the next time the
-                        device boots — use Reboot Device at the top of this page
-                        once you have set it.
+                        {cannotRotate
+                          ? "This sensor cannot be rotated."
+                          : "Rotates the picture 180°. Takes effect the next time the " +
+                            "device boots — use Reboot Device at the top of this page " +
+                            "once you have set it."}
                       </FieldDescription>
                     </FieldContent>
                     <Switch
                       id={key}
                       checked={mounted[ch.streamKey] === 180}
-                      disabled={isPending(key)}
+                      disabled={isPending(key) || cannotRotate}
                       onCheckedChange={(next) =>
                         commitRotation(ch.streamKey, next ? 180 : 0)
                       }
@@ -249,6 +294,7 @@ export function MediaTab({
             {recording.videoEnabled ? (
               <VideoOptions
                 recording={recording}
+                presetProblems={presetProblems}
                 isPending={isPending}
                 commitRecording={commitRecording}
               />

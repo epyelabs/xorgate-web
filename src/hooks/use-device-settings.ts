@@ -32,6 +32,10 @@ import {
   reportedAgentBuild,
   type DeviceConfigStatus,
 } from "@/lib/device-config-status"
+import {
+  withoutUnheldCameraSensors,
+  type CameraSensorsConfig,
+} from "@/lib/device-cameras"
 // Moved to lib/ so device-config-status.ts can use the same one — a lib
 // importing this hook (which imports that lib) would be a cycle. Re-exported
 // because the change-detection helper is part of this module's surface.
@@ -102,6 +106,15 @@ export interface DeviceSettingsPatch {
    * tab gates on before offering a control.
    */
   obdConfig?: ObdConfig | null
+  /**
+   * Camera sensor per port (plans/support-other-camera-models). Routed like
+   * `cameraMount` (no legacy column); read it from `device.config.cameraSensors`
+   * through `storedCameraSensors`. ALWAYS the whole namespace (it is replaced
+   * whole on write), built by `buildCameraSensorsConfig`. The API refuses it,
+   * `null` included, for a device that does not qualify (`cameraSensorsGate`);
+   * `commit` drops the key for such a device instead of sending a 400.
+   */
+  cameraSensorsConfig?: CameraSensorsConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -128,6 +141,7 @@ const CONFIG_FIELDS = {
   cameraMountConfig: "cameraMount",
   simulationConfig: "simulation",
   obdConfig: "obd",
+  cameraSensorsConfig: "cameraSensors",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
@@ -138,6 +152,17 @@ const UI_PREF_FIELDS = {
 
 type ConfigField = keyof typeof CONFIG_FIELDS
 type UiPrefField = keyof typeof UI_PREF_FIELDS
+
+/**
+ * The config document indexed by any namespace this console routes.
+ *
+ * TODO(sdk-camera-sensors): `cameraSensors` is not in the published SDK's
+ * `DeviceConfig` yet (the cameraMount card went through the same step on SDK
+ * 0.3.0), so the document is read and written through this wider view. Drop
+ * it, and index `device.config` directly, once the SDK carries the namespace.
+ */
+type ConfigDocument = Partial<Record<(typeof CONFIG_FIELDS)[ConfigField], unknown>>
+const configDocument = (device: Device): ConfigDocument => device.config as ConfigDocument
 
 const isConfigField = (k: string): k is ConfigField => k in CONFIG_FIELDS
 const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
@@ -331,9 +356,16 @@ export function useDeviceSettings(id: string): DeviceSettings {
       if (current === null) return
 
       // Drop undefined entries so a spread can never blank a stored field.
-      const updates = Object.fromEntries(
-        Object.entries(patch).filter(([, v]) => v !== undefined)
-      ) as DeviceSettingsPatch
+      // `cameraSensors` is refused (400) for a device that cannot hold it, a
+      // `null` included. No control offers it there; this keeps any caller
+      // that patches several namespaces at once, a revert of everything for
+      // one, from failing the whole save over a namespace the device never had.
+      const updates = withoutUnheldCameraSensors(
+        current,
+        Object.fromEntries(
+          Object.entries(patch).filter(([, v]) => v !== undefined)
+        ) as DeviceSettingsPatch
+      )
       const keys = Object.keys(updates) as (keyof DeviceSettingsPatch)[]
       if (keys.length === 0) return
 
@@ -341,7 +373,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       // top-level duplicates are gone (the SDK's Device carries config/uiPrefs
       // only), so each key resolves into the document that owns it.
       const readField = (device: Device, field: keyof DeviceSettingsPatch) => {
-        if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
+        if (isConfigField(field)) return configDocument(device)[CONFIG_FIELDS[field]] ?? null
         if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
         return device.name
       }
@@ -358,8 +390,8 @@ export function useDeviceSettings(id: string): DeviceSettings {
       for (const [field, value] of Object.entries(updates)) {
         if (isConfigField(field)) {
           const ns = CONFIG_FIELDS[field]
-          if (value === null) delete next.config[ns]
-          else (next.config as Record<string, unknown>)[ns] = value
+          if (value === null) delete configDocument(next)[ns]
+          else configDocument(next)[ns] = value
         } else if (isUiPrefField(field)) {
           const pref = UI_PREF_FIELDS[field]
           if (value === null) delete next.uiPrefs[pref]
@@ -441,7 +473,10 @@ export function useDeviceSettings(id: string): DeviceSettings {
           toast.success("Settings saved")
         } catch (err) {
           generationRef.current += 1
-          toast.error((err as Error).message)
+          // xgMessage, not err.message: a XorgateError's message carries the
+          // "CODE METHOD url:" prefix for logs; the toast wants the API's own
+          // sentence (a refused `cameraSensors` save names the agent needed).
+          toast.error(xgMessage(err))
           // Roll the whole form back to the last server-confirmed values so
           // what is on screen is what the server actually holds.
           if (serverRef.current) applyDevice(serverRef.current)

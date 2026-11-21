@@ -4,6 +4,7 @@ import {
   computeConfigStatus,
   configStateExplanation,
   hasPending,
+  NAMESPACE_TABS,
   parseReportedConfig,
   reportedAgentBuild,
   reportedAgentMode,
@@ -278,6 +279,127 @@ describe("computeConfigStatus — divergence from device defaults", () => {
     // Unlike `adjusted`, the card itself shows the defaults and looks fine —
     // without a count there is no reason to open the tab.
     expect(tabAttentionCounts(status)).toEqual({ telemetry: 1 })
+  })
+})
+
+describe("computeConfigStatus — cameraSensors (plans/support-other-camera-models)", () => {
+  // The namespace exists only for a device whose agent acts on it: a real
+  // device, the Rust agent, the `camera.sensors` capability. Any other agent
+  // ignores the key and sends no status entry, and "present, level on rev, no
+  // status entry" reads as applied. These pin that the badge never says
+  // "Synced" over a setting the agent never looked at.
+  const CAMERAS = { cameraSensors: { cameras: { cam0: { sensor: "imx708" } } } }
+  const capable = { agent: { mode: "real", capabilities: ["camera.sensors"] } }
+  const old = { agent: { mode: "real", capabilities: ["sms.read"] } }
+  const rust = (overrides: Partial<Device> = {}) =>
+    device({
+      agent: "rust",
+      simulated: false,
+      configRev: 5,
+      config: CAMERAS as unknown as Device["config"],
+      ...overrides,
+    } as Partial<Device>)
+
+  it("reads Synced for a capable Rust device that is level and said nothing", () => {
+    const status = computeConfigStatus(
+      rust({ reportedConfig: report({ rev: 5, effective: capable }) })
+    )
+    expect(status.cameraSensors.state).toBe("applied")
+  })
+
+  it("passes the device's own verdict through for a capable device", () => {
+    const detail = "written to the boot config — REBOOT REQUIRED to apply: cam0 imx708"
+    const status = computeConfigStatus(
+      rust({
+        reportedConfig: report({
+          rev: 5,
+          effective: capable,
+          status: { cameraSensors: { state: "adjusted", at: 1, detail } },
+        }),
+      })
+    )
+    expect(status.cameraSensors).toMatchObject({ state: "adjusted", detail })
+    expect(configStateExplanation(status.cameraSensors)).toBe(detail)
+    const rejected = computeConfigStatus(
+      rust({
+        reportedConfig: report({
+          rev: 5,
+          effective: capable,
+          status: { cameraSensors: { state: "rejected", reason: "sensor imx999 is not known" } },
+        }),
+      })
+    )
+    expect(configStateExplanation(rejected.cameraSensors)).toBe("sensor imx999 is not known")
+    expect(tabAttentionCounts(rejected)).toEqual({ media: 1 })
+  })
+
+  it("is pending/queued for a capable device that is behind", () => {
+    const behind = { rev: 4, effective: capable }
+    expect(
+      computeConfigStatus(rust({ status: "online", reportedConfig: report(behind) })).cameraSensors.state
+    ).toBe("pending")
+    expect(
+      computeConfigStatus(rust({ status: "offline", reportedConfig: report(behind) })).cameraSensors.state
+    ).toBe("queued")
+  })
+
+  it.each<[string, Partial<Device>]>([
+    ["a JS device", { agent: "js", reportedConfig: report({ rev: 5, effective: capable }) }],
+    ["an older Rust agent", { reportedConfig: report({ rev: 5, effective: old }) }],
+    ["a Rust agent that reported no agent block", { reportedConfig: report({ rev: 5 }) }],
+    ["a simulator", { simulated: true, reportedConfig: report({ rev: 5, effective: capable }) }],
+  ])("never reads Synced for %s, even holding the key level on rev", (_who, overrides) => {
+    const status = computeConfigStatus(rust(overrides))
+    expect(status.cameraSensors.state).toBe("unset")
+  })
+
+  it("is not marked Applying… by an unrelated pending save on a device that cannot hold it", () => {
+    const status = computeConfigStatus(
+      rust({
+        agent: "js",
+        config: {},
+        configRev: 6,
+        status: "online",
+        reportedConfig: report({ rev: 5 }),
+      })
+    )
+    expect(status.cameraSensors.state).toBe("unset")
+    expect(status.cameraMount.state).toBe("pending")
+  })
+
+  it("does not promise delivery ('No report yet') on a device that cannot hold it", () => {
+    expect(computeConfigStatus(device({ agent: "js" } as Partial<Device>)).cameraSensors.state).toBe("unset")
+    // A never-reported Rust device may hold the choice made at registration.
+    expect(computeConfigStatus(rust()).cameraSensors.state).toBe("no-report")
+  })
+
+  it("never treats the reported-only effective.cameras block as a namespace value", () => {
+    // The truth block sits beside the namespaces, not under the namespace key,
+    // so an unmanaged device is not "Device differs".
+    const status = computeConfigStatus(
+      rust({
+        config: {},
+        reportedConfig: report({
+          rev: 5,
+          effective: { ...capable, cameras: { cam0: { verdict: "ok" } } },
+        }),
+      })
+    )
+    expect(status.cameraSensors.state).toBe("unset")
+  })
+
+  it("diverges when a capable device holds a declaration the cloud does not", () => {
+    const status = computeConfigStatus(
+      rust({
+        config: {},
+        reportedConfig: report({ rev: 5, effective: { ...capable, ...CAMERAS } }),
+      })
+    )
+    expect(status.cameraSensors.state).toBe("diverged")
+  })
+
+  it("is edited on the Media tab", () => {
+    expect(NAMESPACE_TABS.cameraSensors).toEqual(["media"])
   })
 })
 

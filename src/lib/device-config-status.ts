@@ -13,6 +13,7 @@
 import type { Device } from "@xorgate/sdk"
 import type { SettingsTab } from "./device-settings-tabs"
 import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
+import { cameraSensorsGate } from "./device-cameras"
 import { deepEqual } from "./deep-equal"
 
 /** Namespaces of the device-delivered config document, in registry order. */
@@ -32,6 +33,11 @@ export const CONFIG_NAMESPACES = [
   // for a model declaring `peripherals.obd`; elsewhere the cloud never holds
   // it, so it resolves to `unset` like `simulation` on a real device.
   "obd",
+  // Camera sensor per port (plans/support-other-camera-models). Accepted only
+  // for a real device on a Rust agent that can act on it; for every other
+  // device the cloud never holds it and it resolves to `unset` (see
+  // `computeConfigStatus`).
+  "cameraSensors",
 ] as const
 
 export type ConfigNamespace = (typeof CONFIG_NAMESPACES)[number]
@@ -257,7 +263,13 @@ function emptyStatus(state: ConfigState): DeviceConfigStatus {
 export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
   if (device === null) return emptyStatus("no-report")
   const reported = parseReportedConfig(device.reportedConfig)
-  if (reported === null) return emptyStatus("no-report")
+  if (reported === null) {
+    const status = emptyStatus("no-report")
+    // "No report yet" promises that a save here is stored and delivered. For
+    // `cameraSensors` on a device that cannot hold it, that would be untrue.
+    if (!cameraSensorsGate(device).allowed) status.cameraSensors = { state: "unset" }
+    return status
+  }
 
   const behind = device.configRev > reported.rev
   const config = (device.config ?? {}) as Record<string, unknown>
@@ -278,6 +290,19 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
       // neither has nothing to say about it, so an unrelated pending save must
       // not badge the Peripherals tab of (say) an excavator.
       if (ns === "obd" && effective === undefined && config.obd == null) {
+        return [ns, { state: "unset", effective }]
+      }
+      // `cameraSensors` exists only for a device whose agent acts on it (a
+      // real device, the Rust agent, the `camera.sensors` capability). Any
+      // other agent ignores the key and sends no status entry for it, and a
+      // namespace that is present, level on rev and without a status entry
+      // reads as "applied" below. So without this a JS device or an older
+      // Rust agent would show "Synced" over a setting it never looked at
+      // (TOUCH-MAP section 1, "Version skew"). The cloud refuses the namespace
+      // for such a device and does not serve it either; this is the console's
+      // half of the same rule, and it also keeps an unrelated pending save
+      // from marking the namespace "Applying…".
+      if (ns === "cameraSensors" && !cameraSensorsGate(device).allowed) {
         return [ns, { state: "unset", effective }]
       }
       if (behind) {
@@ -331,6 +356,7 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   // Read-only Simulation card on General; switched from the reboot dialog.
   simulation: ["general"],
   obd: ["peripherals"],
+  cameraSensors: ["media"],
 }
 
 /**

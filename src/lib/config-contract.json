@@ -571,6 +571,48 @@
         },
         "additionalProperties": false
       }
+    },
+    "cameraSensors": {
+      "applyClass": "agent-poll",
+      "kind": "object",
+      "description": "Camera sensor per port (`cameraSensors` namespace): which image sensor is attached to each camera port of this device, keyed by stream key. `sensor` is an id of the camera catalog or \"none\" for an empty port; `options` are that sensor's per-board overlay parameters. The agent makes the port's `dtoverlay=` line in /boot/firmware/config.txt match. ⚠️ Applies on the NEXT BOOT: the agent edits the boot config and reports that a reboot is required; it never reboots the device itself. An absent port key is unmanaged (the line is left as found). Accepted only for a real (not simulated) device running the Rust agent that either has not reported yet or advertises the `camera.sensors` capability; otherwise a 400 naming the agent version needed. Replaced WHOLE on write, so send every port you want to keep managed.",
+      "defaults": {
+        "cameras": {}
+      },
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "cameras": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "sensor": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]{1,31}$",
+                  "description": "The image sensor on this port: an id of the camera catalog (camera-catalog.json, `sensors[].id`), or \"none\" for a port declared empty. The catalog, not this schema, is the list of valid ids, so that adding a sensor does not change the config contract. An id the catalog does not list is a 400 naming the ones it does."
+                },
+                "options": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "description": "Per-board overlay parameters of the chosen sensor, by the option keys the catalog lists for it (`sensors[].options[].key`), each set to one of that option's `values`. An option left out uses the overlay default. Not allowed with \"sensor\": \"none\"."
+                }
+              },
+              "required": [
+                "sensor"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Per-port sensor declaration keyed by stream key, e.g. {\"cam0\": {\"sensor\": \"imx708\"}, \"cam1\": {\"sensor\": \"none\"}}. An ABSENT key is UNMANAGED: the device leaves that port's camera line in /boot/firmware/config.txt exactly as it found it. A key must be a camera port the device's model declares. Takes effect on the next boot: the device reports that a reboot is required and never reboots itself."
+          }
+        },
+        "required": [
+          "cameras"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "uiPrefs": {

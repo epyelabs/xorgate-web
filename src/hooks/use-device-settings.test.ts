@@ -193,9 +193,7 @@ describe("commitCameraSensors: built from a fresh read", () => {
       },
       configRev: 6,
     }
-    expect(
-      (settings.device!.config as Record<string, unknown>).cameraSensors
-    ).toEqual({
+    expect(settings.device!.config.cameraSensors).toEqual({
       cameras: { cam0: { sensor: "imx708" }, cam1: { sensor: "imx290" } },
     })
 
@@ -218,9 +216,7 @@ describe("commitCameraSensors: built from a fresh read", () => {
       },
     })
     // The form now shows what the cloud holds, the other writer's port included.
-    expect(
-      (settings.device!.config as Record<string, unknown>).cameraSensors
-    ).toEqual({
+    expect(settings.device!.config.cameraSensors).toEqual({
       cameras: { cam0: { sensor: "imx219" }, cam1: { sensor: "none" } },
     })
     expect(toastSuccess).toHaveBeenCalledWith("Settings saved")
@@ -303,9 +299,7 @@ describe("commitCameraSensors: built from a fresh read", () => {
     expect(writes()).toEqual([])
     expect(toastError).not.toHaveBeenCalled()
     // The form is re-seeded from the fresh row: nothing stored, the new report.
-    expect(
-      (settings.device!.config as Record<string, unknown>).cameraSensors
-    ).toBeUndefined()
+    expect(settings.device!.config.cameraSensors).toBeUndefined()
     expect(settings.configStatus.cameraSensors.state).toBe("unset")
   })
 
@@ -354,9 +348,7 @@ describe("commitCameraSensors: built from a fresh read", () => {
     )
     await settle()
     expect(toastError).toHaveBeenCalledTimes(1)
-    expect(
-      (settings.device!.config as Record<string, unknown>).cameraSensors
-    ).toEqual({
+    expect(settings.device!.config.cameraSensors).toEqual({
       cameras: { cam0: { sensor: "imx708" }, cam1: { sensor: "none" } },
     })
   })

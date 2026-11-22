@@ -4,7 +4,7 @@ import {
   CircleDashedIcon,
   RotateCwIcon,
 } from "lucide-react"
-import type { Device } from "@xorgate/sdk"
+import type { CameraSensorChoice, Device } from "@xorgate/sdk"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -48,7 +48,6 @@ import {
   storedCameraSensors,
   type CameraPort,
   type CameraSensorChange,
-  type CameraSensorEntry,
   type CameraVerdictTone,
   type ReportedCamera,
 } from "@/lib/device-cameras"
@@ -290,7 +289,7 @@ function PortRow({
   connector: string | null
   camera: ReportedCamera | null
   /** The stored declaration for this port; undefined = not managed. */
-  entry: CameraSensorEntry | undefined
+  entry: CameraSensorChoice | undefined
   picker: boolean
   agentVersion: string | null
   /** A save of this card is in flight. */

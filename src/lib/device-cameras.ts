@@ -19,7 +19,17 @@
 // that module asks `cameraSensorsGate` for its "does not qualify" special
 // case, and a lib importing its own importer would be a cycle.
 
-import type { Device, DeviceModel, IoCapabilities } from "@xorgate/sdk"
+import type {
+  CameraSensorChoice,
+  CameraSensorChoices,
+  CameraSensorsConfig,
+  Device,
+  DeviceConfig,
+  DeviceModel,
+  DeviceRegistration,
+  DeviceReportedConfig,
+  IoCapabilities,
+} from "@xorgate/sdk"
 import {
   CAMERA_CATALOG,
   CAMERA_SENSOR_NONE,
@@ -50,41 +60,38 @@ const own = (o: Record<string, unknown>, key: string): boolean =>
 const optionalString = (v: unknown, max: number): string | null =>
   typeof v === "string" && v.trim().length > 0 ? v.slice(0, max) : null
 
-// ---- the namespace (wire types the published SDK does not have yet) --------
+// ---- the namespace ---------------------------------------------------------
+// The wire types are the SDK's: `CameraSensorsConfig` (the namespace),
+// `CameraSensorChoices` (its per-port map, also a registration's `cameras`)
+// and `CameraSensorChoice` (one port).
 
-/** One port's declaration: `options` only when at least one is set. */
-export interface CameraSensorEntry {
-  sensor: string
-  options?: Record<string, number>
-}
-
-/**
- * The `cameraSensors` namespace. Local until the SDK publishes its generated
- * type (TODO(sdk-camera-sensors): replace with the SDK's `CameraSensorsConfig`).
- */
-export interface CameraSensorsConfig {
-  cameras: Record<string, CameraSensorEntry>
-}
+/** The part of a device's config document these rules read. */
+type SensorsConfig = Pick<DeviceConfig, "cameraSensors"> | null | undefined
 
 /**
  * The per-port map of a stored namespace, RAW: entries are passed through as
  * found (unknown sensor ids, unknown option keys and all) so that a save can
  * carry them back unchanged. Only things that are not an entry at all (not an
  * object, no `sensor` string) are left out. `{}` for an absent namespace.
+ *
+ * Read tolerantly although the input is typed: the document comes from an API
+ * that may be newer than this build, and a save built on it is replaced whole.
  */
 export function storedCameraSensors(
-  config: unknown
-): Record<string, CameraSensorEntry> {
-  const namespace = isPlainObject(config) ? config.cameraSensors : undefined
+  config: SensorsConfig
+): CameraSensorChoices {
+  const namespace: unknown = isPlainObject(config)
+    ? config.cameraSensors
+    : undefined
   const cameras = isPlainObject(namespace) ? namespace.cameras : undefined
   if (!isPlainObject(cameras)) return {}
-  const out: Record<string, CameraSensorEntry> = {}
+  const out: CameraSensorChoices = {}
   for (const key of Object.keys(cameras)) {
     // Never a port (the API refuses it), and assigning it would not add a key.
     if (key === "__proto__") continue
     const entry = cameras[key]
     if (!isPlainObject(entry) || typeof entry.sensor !== "string") continue
-    out[key] = entry as unknown as CameraSensorEntry
+    out[key] = entry as CameraSensorChoice
   }
   return out
 }
@@ -95,9 +102,9 @@ export function storedCameraSensors(
  * `constructor` or `toString` must not find an inherited member.
  */
 export function storedCameraSensor(
-  config: unknown,
+  config: SensorsConfig,
   port: string
-): CameraSensorEntry | undefined {
+): CameraSensorChoice | undefined {
   const stored = storedCameraSensors(config)
   return own(stored, port) ? stored[port] : undefined
 }
@@ -141,14 +148,14 @@ export type CameraSensorChange =
  * stored as an empty map, so the card reads "nothing managed", not "synced".
  */
 export function buildCameraSensorsConfig(
-  storedConfig: unknown,
+  storedConfig: SensorsConfig,
   change: CameraSensorChange,
   opts: { ports?: readonly string[] | null } = {}
 ): CameraSensorsConfig | null {
   if ("clear" in change) return null
   const stored = storedCameraSensors(storedConfig)
   const ports = opts.ports ?? null
-  const cameras: Record<string, CameraSensorEntry> = {}
+  const cameras: CameraSensorChoices = {}
   for (const key of Object.keys(stored)) {
     if (ports !== null && !ports.includes(key)) continue
     cameras[key] = stored[key]
@@ -167,7 +174,7 @@ export function buildCameraSensorsConfig(
     }
     if (change.value === null) delete options[change.option]
     else options[change.option] = change.value
-    const next: CameraSensorEntry = { ...current }
+    const next: CameraSensorChoice = { ...current }
     if (Object.keys(options).length > 0) next.options = options
     else delete next.options
     cameras[change.port] = next
@@ -353,26 +360,28 @@ export function registrationCameraPorts(
 
 // ---- registrations ---------------------------------------------------------
 
-/** The registration's `cameras` field: the namespace's per-port map. */
-export type RegistrationCameras = Record<string, CameraSensorEntry>
-
 /**
  * What a registration says about cameras.
  *
  * `supported: false` = the answer has no `cameras` key at all, which is a
  * backend from before the feature (it would ignore a choice): the dialog then
  * offers no camera select. A backend with the feature always sends the key on
- * a Rust registration, as the map or `null`.
+ * a Rust registration, as the map or `null`. (`reg.cameras !== undefined` is
+ * the SDK's documented feature test.)
  */
-export function registrationCameras(reg: unknown): {
+export function registrationCameras(
+  reg: Partial<DeviceRegistration> | null | undefined
+): {
   supported: boolean
-  cameras: RegistrationCameras
+  cameras: CameraSensorChoices
 } {
-  if (!isPlainObject(reg) || !own(reg, "cameras"))
+  if (!isPlainObject(reg) || reg.cameras === undefined)
     return { supported: false, cameras: {} }
   return {
     supported: true,
-    cameras: storedCameraSensors({ cameraSensors: { cameras: reg.cameras } }),
+    cameras: storedCameraSensors(
+      reg.cameras === null ? {} : { cameraSensors: { cameras: reg.cameras } }
+    ),
   }
 }
 
@@ -383,11 +392,11 @@ export function registrationCameras(reg: unknown): {
  * that is finally resolved.
  */
 export function nextRegistrationCameras(
-  current: RegistrationCameras,
+  current: CameraSensorChoices,
   port: string,
   sensor: string
-): RegistrationCameras {
-  const next: RegistrationCameras = {}
+): CameraSensorChoices {
+  const next: CameraSensorChoices = {}
   for (const key of Object.keys(current)) next[key] = current[key]
   if (!own(next, port) || next[port].sensor !== sensor) next[port] = { sensor }
   return next
@@ -426,11 +435,21 @@ const MAX_DETAIL_CHARS = 1000
  * `effective.cameras` as a list in the device's own order. A missing block, a
  * block of the wrong type, or an entry that is not an object yields nothing
  * for it; it never throws inside a render.
+ *
+ * The block is read off the SDK's `reportedConfig.effective.cameras`, and
+ * then parsed as if it were untyped. The SDK's `DeviceReportedCamera` is the
+ * shape a conforming agent sends; nothing validates it in transit, and this
+ * page renders a fleet of mixed agent versions.
  */
 export function parseReportedCameras(
-  reportedConfig: unknown
+  reportedConfig: DeviceReportedConfig | null | undefined
 ): ReportedCamera[] {
-  const block = reportedEffective(reportedConfig).cameras
+  const effective = isPlainObject(reportedConfig)
+    ? reportedConfig.effective
+    : undefined
+  const block: unknown = isPlainObject(effective)
+    ? effective.cameras
+    : undefined
   if (!isPlainObject(block)) return []
   const out: ReportedCamera[] = []
   for (const port of Object.keys(block)) {
@@ -723,7 +742,7 @@ export function cameraRotationSwitch(
  */
 export function portSensor(
   port: string,
-  storedConfig: unknown,
+  storedConfig: SensorsConfig,
   reported: readonly ReportedCamera[],
   catalog: CameraCatalog = CAMERA_CATALOG
 ): CameraSensor | undefined {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import type { Device, DeviceModel, IoCapabilities } from "@xorgate/sdk"
+import type {
+  CameraSensorsConfig,
+  Device,
+  DeviceModel,
+  IoCapabilities,
+} from "@xorgate/sdk"
 import { parseCameraCatalog } from "./camera-catalog"
 import {
   CAMERA_SENSORS_NOT_RECONCILED_DETAIL,
@@ -66,7 +71,10 @@ const CAPABLE = {
 }
 const OLD = { agent: { mode: "real", capabilities: ["sms.read"] } }
 
-const config = (cameras: unknown) => ({ cameraSensors: { cameras } })
+// Typed as the SDK's namespace; several fixtures are deliberately off-type
+// (a newer catalog's ids and options, entries that are not entries).
+const config = (cameras: unknown) =>
+  ({ cameraSensors: { cameras } }) as { cameraSensors: CameraSensorsConfig }
 
 // ---- the builder -----------------------------------------------------------
 
@@ -80,7 +88,8 @@ describe("storedCameraSensors", () => {
       { cameraSensors: { cameras: [] } },
       7,
     ]) {
-      expect(storedCameraSensors(c)).toEqual({})
+      // Off-type on purpose: what must never throw in a render.
+      expect(storedCameraSensors(c as never)).toEqual({})
     }
   })
 
@@ -733,7 +742,8 @@ describe("parseReportedCameras", () => {
       report({ cameras: null }),
       report({ cameras: [] }),
     ]) {
-      expect(parseReportedCameras(rc)).toEqual([])
+      // Off-type on purpose: the block is device-authored.
+      expect(parseReportedCameras(rc as never)).toEqual([])
     }
   })
 

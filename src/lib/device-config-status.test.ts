@@ -297,7 +297,7 @@ describe("computeConfigStatus — cameraSensors (plans/support-other-camera-mode
       agent: "rust",
       simulated: false,
       configRev: 5,
-      config: CAMERAS as unknown as Device["config"],
+      config: CAMERAS,
       ...overrides,
     } as Partial<Device>)
 

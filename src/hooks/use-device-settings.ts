@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   isXorgateError,
   type CameraMountConfig,
+  type CameraSensorsConfig,
   type SimulationConfig,
   type CellularConfig,
   type Device,
@@ -38,7 +39,6 @@ import {
   buildCameraSensorsConfig,
   withoutUnheldCameraSensors,
   type CameraSensorChange,
-  type CameraSensorsConfig,
 } from "@/lib/device-cameras"
 import { useDeviceRebootStore } from "@/store/device-reboot"
 // Moved to lib/ so device-config-status.ts can use the same one — a lib
@@ -114,7 +114,7 @@ export interface DeviceSettingsPatch {
   /**
    * Camera sensor per port (plans/support-other-camera-models). Routed like
    * `cameraMount` (no legacy column); read it from `device.config.cameraSensors`
-   * through `storedCameraSensors`. ALWAYS the whole namespace (it is replaced
+   * (the card reads it through `storedCameraSensors`). ALWAYS the whole namespace (it is replaced
    * whole on write), built by `buildCameraSensorsConfig`. The API refuses it,
    * `null` included, for a device that does not qualify (`cameraSensorsGate`);
    * `commit` drops the key for such a device instead of sending a 400.
@@ -165,17 +165,6 @@ const UI_PREF_FIELDS = {
 type ConfigField = keyof typeof CONFIG_FIELDS
 type UiPrefField = keyof typeof UI_PREF_FIELDS
 
-/**
- * The config document indexed by any namespace this console routes.
- *
- * TODO(sdk-camera-sensors): `cameraSensors` is not in the published SDK's
- * `DeviceConfig` yet (the cameraMount card went through the same step on SDK
- * 0.3.0), so the document is read and written through this wider view. Drop
- * it, and index `device.config` directly, once the SDK carries the namespace.
- */
-type ConfigDocument = Partial<Record<(typeof CONFIG_FIELDS)[ConfigField], unknown>>
-const configDocument = (device: Device): ConfigDocument => device.config as ConfigDocument
-
 const isConfigField = (k: string): k is ConfigField => k in CONFIG_FIELDS
 const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
 
@@ -185,7 +174,7 @@ const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
  * resolves into the document that owns it.
  */
 function readField(device: Device, field: keyof DeviceSettingsPatch) {
-  if (isConfigField(field)) return configDocument(device)[CONFIG_FIELDS[field]] ?? null
+  if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
   if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
   return device.name
 }
@@ -460,8 +449,8 @@ export function useDeviceSettings(id: string): DeviceSettings {
       for (const [field, value] of Object.entries(updates)) {
         if (isConfigField(field)) {
           const ns = CONFIG_FIELDS[field]
-          if (value === null) delete configDocument(next)[ns]
-          else configDocument(next)[ns] = value
+          if (value === null) delete next.config[ns]
+          else (next.config as Record<string, unknown>)[ns] = value
         } else if (isUiPrefField(field)) {
           const pref = UI_PREF_FIELDS[field]
           if (value === null) delete next.uiPrefs[pref]

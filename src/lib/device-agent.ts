@@ -22,6 +22,7 @@ import {
   type AgentBuild,
   type AgentChannel,
   type AgentKind,
+  type CameraSensorChoices,
   type CreateDeviceRegistrationInput,
   type DeviceModel,
   type DeviceRegistration,
@@ -60,9 +61,30 @@ export function registrationInput(input: {
 }
 
 /**
+ * The create body including the per-port camera choice
+ * (plans/support-other-camera-models): `registrationInput` plus `cameras`.
+ *
+ * `cameras` is for Rust registrations only: the API answers a JS registration
+ * that carries it with a 400, so it is never added for the JS pick, whatever
+ * the caller passed. Left out (undefined) it keeps a reused code's choice; a
+ * value re-pins it in place on the same code, like `deviceModelId`.
+ */
+export function registrationBody(input: {
+  agent: AgentKind
+  deviceModelId?: string
+  cameras?: CameraSensorChoices
+}): CreateDeviceRegistrationInput {
+  const out = registrationInput(input)
+  if (input.agent === "rust" && input.cameras !== undefined)
+    out.cameras = input.cameras
+  return out
+}
+
+/**
  * Mint (or reuse) a code for `agent`. Idempotent per workspace AND agent: a
  * pending code for the same agent comes back, a different agent mints a new
- * one (Q-8.2), and passing `deviceModelId` re-pins the pending code in place.
+ * one (Q-8.2), and passing `deviceModelId` or `cameras` re-pins the pending
+ * code in place.
  *
  * Throws `INVALID_CONFIG` locally (sending nothing) without a workspace,
  * `AGENT_NOT_ENABLED` (409) when the stage's Rust flag says no for this
@@ -71,6 +93,8 @@ export function registrationInput(input: {
 export async function createRegistration(input: {
   agent: AgentKind
   deviceModelId?: string
+  /** The per-port camera choice to pin; Rust only. See `registrationBody`. */
+  cameras?: CameraSensorChoices
 }): Promise<DeviceRegistration> {
   const client = xg()
   // The SDK refuses this too, but with a developer-facing message; the
@@ -81,7 +105,7 @@ export async function createRegistration(input: {
       message: "Registering a device needs a workspace. Select one first.",
     })
   }
-  return client.deviceRegistrations.create(registrationInput(input))
+  return client.deviceRegistrations.create(registrationBody(input))
 }
 
 /**

@@ -638,3 +638,108 @@ describe("Register device: races", () => {
     expect(postedAgents()).toEqual(["rust", "rust"])
   })
 })
+
+describe("Register device: the camera selects (plans/support-other-camera-models)", () => {
+  const CM5 = {
+    id: "cm5",
+    name: "Argus CM5",
+    sku: "XG-CM5",
+    ioCapabilities: {
+      schemaVersion: 2,
+      system: { platform: "rpi-cm5" },
+      media: {
+        video: [
+          { key: "cam0", codec: "h264", connector: "csi0", sensor: "imx290" },
+          { key: "cam1", codec: "h264", connector: "csi1", sensor: "imx290" },
+        ],
+      },
+    },
+  }
+  /** As `defaultRoute`, with a model catalog that answers. */
+  function routeWithModels(call: Call): Reply | Promise<Reply> {
+    if (call.url.pathname === "/v1/device-models") {
+      return { status: 200, body: { device_models: [CM5] } }
+    }
+    return defaultRoute(call)
+  }
+  const cameraSelect = (port: string) =>
+    $(`[data-testid=register-camera-${port}]`)
+  const posted = () =>
+    posts().map((c) => (c.body === undefined ? {} : JSON.parse(c.body)))
+
+  beforeEach(() => {
+    route = routeWithModels
+  })
+
+  it("shows one select per port for Rust, pre-set from the model's sensor, and sends no cameras until one is picked", async () => {
+    create = (agent) => ({
+      status: 200,
+      body: agent === "rust" ? { ...reg("rust"), cameras: null } : reg("js"),
+    })
+    render()
+    await settle()
+
+    expect(checked()).toEqual(["Rust"])
+    expect($("[data-testid=register-cameras]")).not.toBeNull()
+    expect(cameraSelect("cam0")?.textContent).toContain("Sony IMX290")
+    expect(cameraSelect("cam1")?.textContent).toContain("Sony IMX290")
+    // The pre-set is a display default: nothing is sent for it.
+    expect(posted()).toEqual([{ agent: "rust" }])
+  })
+
+  it("shows what the code already carries, over the model's default", async () => {
+    create = () => ({
+      status: 200,
+      body: {
+        ...reg("rust"),
+        cameras: { cam0: { sensor: "imx708" }, cam1: { sensor: "none" } },
+      },
+    })
+    render()
+    await settle()
+
+    expect(cameraSelect("cam0")?.textContent).toContain("Sony IMX708")
+    expect(cameraSelect("cam1")?.textContent).toContain("No camera")
+  })
+
+  it("shows no camera select for JS, and a JS create carries no cameras", async () => {
+    channel = () => ({ status: 200, body: CHANNEL_OFF })
+    render()
+    await settle()
+
+    expect(checked()).toEqual(["JS"])
+    expect($("[data-testid=register-cameras]")).toBeNull()
+    expect(posts()).toHaveLength(1)
+    expect(posts()[0].body).toBeUndefined()
+  })
+
+  it("shows no camera select when the API does not carry a camera choice (no `cameras` key)", async () => {
+    // A backend from before the feature would ignore a choice, silently.
+    create = (agent) => ({ status: 200, body: reg(agent) })
+    render()
+    await settle()
+
+    expect(checked()).toEqual(["Rust"])
+    expect(document.body.textContent).toContain("CODE-rust")
+    expect($("[data-testid=register-cameras]")).toBeNull()
+  })
+
+  it("drops the selects when the operator switches to JS, and never sends cameras for it", async () => {
+    create = (agent) => ({
+      status: 200,
+      body:
+        agent === "rust"
+          ? { ...reg("rust"), cameras: { cam0: { sensor: "imx708" } } }
+          : reg("js"),
+    })
+    render()
+    await settle()
+    expect($("[data-testid=register-cameras]")).not.toBeNull()
+
+    act(() => radio("js").click())
+    await settle()
+    expect(checked()).toEqual(["JS"])
+    expect($("[data-testid=register-cameras]")).toBeNull()
+    expect(posted().map((b) => "cameras" in b)).toEqual([false, false])
+  })
+})

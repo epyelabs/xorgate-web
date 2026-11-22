@@ -41,6 +41,17 @@ import {
   RUST_REASON_OLD_API,
   type RustOption,
 } from "@/lib/device-agent"
+import {
+  CAMERA_CATALOG,
+  CAMERA_SENSOR_NONE,
+  cameraSensorHints,
+} from "@/lib/camera-catalog"
+import {
+  nextRegistrationCameras,
+  registrationCameraPorts,
+  registrationCameras,
+  type CameraPort,
+} from "@/lib/device-cameras"
 import { cn } from "@/lib/utils"
 import {
   agentChannelKey,
@@ -88,6 +99,10 @@ export function ProvisionDeviceDialog({
   const [models, setModels] = useState<DeviceModel[] | null>(null)
   const [modelPick, setModelPick] = useState("auto")
   const [pinned, setPinned] = useState(false)
+  // A camera pick whose re-pin is still in flight, so the select shows it at
+  // once. The code on screen is the source of truth: when the answer lands
+  // (or fails) this is dropped and the selects read `reg.cameras` again.
+  const [cameraDraft, setCameraDraft] = useState<Record<string, string>>({})
 
   // Which agent the code installs (dual-agent registration D6), shown as
   // "Language". Null until the Rust check decides the default for this open:
@@ -116,6 +131,10 @@ export function ProvisionDeviceDialog({
   // Bumped by every mint and every model re-pin: a re-pin answer applies only
   // if nothing replaced the code on screen while it was in flight.
   const regSeq = useRef(0)
+  // Camera picks alone, to tell a later camera pick from a model re-pin.
+  const cameraSeq = useRef(0)
+  // Re-pins (model or camera) whose answer has not arrived: the poll waits.
+  const pinsInFlight = useRef(0)
   // What to mint next; null until the default is decided, so nothing is
   // minted on open before the Rust check answers. Bumping `n` mints again
   // (after expiry / error, or for a different agent) without closing.
@@ -173,6 +192,7 @@ export function ProvisionDeviceDialog({
       setPick(null)
       setModelPick("auto")
       setPinned(false)
+      setCameraDraft({})
       setRustRefused(false)
       setRustChannel(undefined)
       setMintReq(null)
@@ -223,6 +243,7 @@ export function ProvisionDeviceDialog({
     setModelPick(value)
     if (value === "auto" || phase !== "pending" || pick === null) return
     const seq = ++regSeq.current
+    pinsInFlight.current++
     try {
       // The endpoint is idempotent and RE-PINS the pending code in place —
       // the code for the agent on screen, so the agent travels with the pin.
@@ -235,6 +256,50 @@ export function ProvisionDeviceDialog({
       setPinned(true)
     } catch (err) {
       toast.error(xgMessage(err))
+    } finally {
+      pinsInFlight.current--
+    }
+  }
+
+  // The camera on a port (plans/support-other-camera-models), Rust only. Sent
+  // with the registration and RE-PINNED IN PLACE on the pending code, exactly
+  // like the model pick above: the installer then writes the right camera
+  // lines before the first boot. Only the ports someone chose are sent; the
+  // claim seeds the rest from the model it resolves.
+  async function handleCameraPick(port: string, sensor: string) {
+    if (phase !== "pending" || pick !== "rust" || reg === null) return
+    // Built on the code's own choice plus any pick still in flight, so two
+    // quick picks on different ports do not undo each other: the later request
+    // carries both, and its answer is the one that is applied.
+    let cameras = registrationCameras(reg).cameras
+    for (const [draftPort, draftSensor] of Object.entries(cameraDraft)) {
+      cameras = nextRegistrationCameras(cameras, draftPort, draftSensor)
+    }
+    cameras = nextRegistrationCameras(cameras, port, sensor)
+    setCameraDraft((d) => ({ ...d, [port]: sensor }))
+    const seq = ++regSeq.current
+    const mine = ++cameraSeq.current
+    pinsInFlight.current++
+    try {
+      const r = await createRegistration({
+        agent: "rust",
+        deviceModelId: modelPick === "auto" ? undefined : modelPick,
+        cameras,
+      })
+      // Stale for the same reasons as a model re-pin (see handleModelPick). A
+      // later pick is then in flight and owns the drafts.
+      if (seq !== regSeq.current) return
+      setReg(r)
+      setCameraDraft({})
+    } catch (err) {
+      toast.error(xgMessage(err))
+      // Back to what the code on screen really carries, unless a LATER camera
+      // pick is in flight and owns the drafts. Judged by the camera picks
+      // alone: a model re-pin sent meanwhile bumps `regSeq` and never clears
+      // drafts, and a failed pick must not leave its sensor on screen for it.
+      if (mine === cameraSeq.current) setCameraDraft({})
+    } finally {
+      pinsInFlight.current--
     }
   }
 
@@ -270,6 +335,7 @@ export function ProvisionDeviceDialog({
     setReg(null)
     setErrorMsg(null)
     setCopied(false)
+    setCameraDraft({})
     ;(async () => {
       try {
         const r = await createRegistration({
@@ -319,9 +385,17 @@ export function ProvisionDeviceDialog({
     const code = reg.code
     let cancelled = false
     const id = setInterval(async () => {
+      // A re-pin (model or camera) is in flight: its answer is the fresher
+      // picture of this code, and a read racing it could come back older.
+      if (pinsInFlight.current > 0) return
+      const seq = regSeq.current
       try {
         const r = await xg().deviceRegistrations.get(code)
         if (cancelled) return
+        // A re-pin was sent while this read was out: the read may predate it,
+        // and applying it would put the older `cameras` back on screen (and
+        // into the next pick's body). The next tick reads again.
+        if (seq !== regSeq.current) return
         setReg(r)
         if (r.status === "claimed" && r.deviceId) {
           setPhase("claimed")
@@ -362,6 +436,14 @@ export function ProvisionDeviceDialog({
   const pickedModel =
     modelPick === "auto" ? null : (models ?? []).find((m) => m.id === modelPick)
   const cm4Picked = isCm4Model(pickedModel)
+
+  // Camera selects: Rust only, and only when the code on screen says the API
+  // carries a camera choice (an older API would ignore one, silently).
+  const regCameras = registrationCameras(reg)
+  const cameraPorts =
+    viewPick === "rust" && commandMatchesPick && regCameras.supported
+      ? registrationCameraPorts(models, modelPick)
+      : []
 
   async function handleCopy() {
     if (!installCommand) return
@@ -475,6 +557,15 @@ export function ProvisionDeviceDialog({
                 </SelectContent>
               </Select>
             </div>
+            {cameraPorts.length > 0 ? (
+              <CameraPicks
+                ports={cameraPorts}
+                chosen={(port) =>
+                  cameraDraft[port] ?? regCameras.cameras[port]?.sensor ?? null
+                }
+                onPick={handleCameraPick}
+              />
+            ) : null}
             {!commandMatchesPick ? (
               <p
                 className="text-sm text-destructive"
@@ -532,6 +623,79 @@ export function ProvisionDeviceDialog({
         <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * One camera select per port, on one row (plans/support-other-camera-models).
+ * Pre-set from the model's sensor, which is only a default: what the code
+ * carries (`chosen`) wins, and a port nobody chose is seeded by the claim from
+ * the model it resolves. No "not managed" here: a new Rust device is managed
+ * from day one.
+ */
+function CameraPicks({
+  ports,
+  chosen,
+  onPick,
+}: {
+  ports: CameraPort[]
+  chosen: (port: string) => string | null
+  onPick: (port: string, sensor: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2" data-testid="register-cameras">
+      <span className="shrink-0 text-xs text-muted-foreground">Cameras</span>
+      {ports.map((port) => {
+        const value = chosen(port.key) ?? port.defaultSensor ?? ""
+        const listed =
+          value === "" ||
+          value === CAMERA_SENSOR_NONE ||
+          CAMERA_CATALOG.sensors.some((s) => s.id === value)
+        return (
+          <div
+            key={port.key}
+            className="flex min-w-0 flex-1 items-center gap-1.5"
+          >
+            <Label
+              htmlFor={`register-camera-${port.key}`}
+              className="shrink-0 font-mono text-xs text-muted-foreground"
+            >
+              {port.key}
+            </Label>
+            <Select value={value} onValueChange={(v) => onPick(port.key, v)}>
+              <SelectTrigger
+                id={`register-camera-${port.key}`}
+                className="h-8 min-w-0 flex-1 text-xs"
+                data-testid={`register-camera-${port.key}`}
+              >
+                <SelectValue placeholder="Model default" />
+              </SelectTrigger>
+              <SelectContent>
+                {CAMERA_CATALOG.sensors.map((s) => {
+                  const hints = cameraSensorHints(s)
+                  return (
+                    <SelectItem
+                      key={s.id}
+                      value={s.id}
+                      description={
+                        hints.length > 0 ? hints.join(" · ") : undefined
+                      }
+                    >
+                      {s.label}
+                    </SelectItem>
+                  )
+                })}
+                {/* A sensor the model or the code names that this console's
+                    catalog does not list: shown, so the select is never blank
+                    over a real value. */}
+                {listed ? null : <SelectItem value={value}>{value}</SelectItem>}
+                <SelectItem value={CAMERA_SENSOR_NONE}>No camera</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

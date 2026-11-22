@@ -22,6 +22,8 @@ import {
 import { Switch } from "@/components/ui/switch"
 import type { DeviceModel, IoCapabilities } from "@xorgate/sdk"
 import { xg, xgMessage } from "@/lib/xorgate"
+import { cameraSensorLabel } from "@/lib/camera-catalog"
+import { modelCameraPorts } from "@/lib/device-cameras"
 import { setupMonaco } from "@/lib/monaco-setup"
 import { cn } from "@/lib/utils"
 
@@ -280,6 +282,15 @@ function Capabilities({ caps }: { caps: IoCapabilities }) {
           })}
         />
       ) : null}
+      {/* The model's `sensor` per port is only the DEFAULT the Register
+          dialog pre-selects (plans/support-other-camera-models): the sensor
+          really on a port is a setting of each device. */}
+      <Chips
+        label="Default sensor"
+        items={(modelCameraPorts(caps) ?? [])
+          .filter((p) => p.defaultSensor !== null)
+          .map((p) => `${p.key}: ${cameraSensorLabel(p.defaultSensor ?? "")}`)}
+      />
       <Chips label="IMU accel" items={accel} />
       <Chips label="IMU quaternion" items={imu?.quaternion} />
       <Chips label="IMU euler" items={imu?.euler} />

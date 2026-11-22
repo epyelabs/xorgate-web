@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   isXorgateError,
   type CameraMountConfig,
+  type CameraSensorsConfig,
   type SimulationConfig,
   type CellularConfig,
   type Device,
@@ -30,8 +31,16 @@ import {
   computeConfigStatus,
   hasPending,
   reportedAgentBuild,
+  waitsForReboot,
   type DeviceConfigStatus,
 } from "@/lib/device-config-status"
+import {
+  CAMERA_SENSORS_SAVE_KEY,
+  buildCameraSensorsConfig,
+  withoutUnheldCameraSensors,
+  type CameraSensorChange,
+} from "@/lib/device-cameras"
+import { useDeviceRebootStore } from "@/store/device-reboot"
 // Moved to lib/ so device-config-status.ts can use the same one — a lib
 // importing this hook (which imports that lib) would be a cycle. Re-exported
 // because the change-detection helper is part of this module's surface.
@@ -102,6 +111,15 @@ export interface DeviceSettingsPatch {
    * tab gates on before offering a control.
    */
   obdConfig?: ObdConfig | null
+  /**
+   * Camera sensor per port (plans/support-other-camera-models). Routed like
+   * `cameraMount` (no legacy column); read it from `device.config.cameraSensors`
+   * (the card reads it through `storedCameraSensors`). ALWAYS the whole namespace (it is replaced
+   * whole on write), built by `buildCameraSensorsConfig`. The API refuses it,
+   * `null` included, for a device that does not qualify (`cameraSensorsGate`);
+   * `commit` drops the key for such a device instead of sending a 400.
+   */
+  cameraSensorsConfig?: CameraSensorsConfig | null
   activeStreamsViewType?: ActiveStreamsViewType
   imuView?: ImuView | null
 }
@@ -116,6 +134,13 @@ const REPORT_POLL_MS = 5000
 /** 6 minutes at REPORT_POLL_MS — a device update is download + npm ci + restart. */
 const AGENT_UPDATE_POLL_TICKS = 72
 const REPORT_POLL_MAX_TICKS = 24
+/**
+ * How long after Reboot Device the page keeps re-reading a device that says it
+ * waits for a reboot. A reboot is offline, boot, reconnect, first report:
+ * about a minute on a CM5, longer over LTE. Past this the device is not coming
+ * back on its own and polling is noise.
+ */
+const REBOOT_POLL_WINDOW_MS = 3 * 60_000
 
 /** Device field -> config namespace (`PATCH /devices/{id}/config`). */
 const CONFIG_FIELDS = {
@@ -128,6 +153,7 @@ const CONFIG_FIELDS = {
   cameraMountConfig: "cameraMount",
   simulationConfig: "simulation",
   obdConfig: "obd",
+  cameraSensorsConfig: "cameraSensors",
 } as const
 
 /** Device field -> ui-pref key (`PATCH /devices/{id}/ui-prefs`). */
@@ -141,6 +167,23 @@ type UiPrefField = keyof typeof UI_PREF_FIELDS
 
 const isConfigField = (k: string): k is ConfigField => k in CONFIG_FIELDS
 const isUiPrefField = (k: string): k is UiPrefField => k in UI_PREF_FIELDS
+
+/**
+ * What a device object holds for a patch key. The legacy top-level duplicates
+ * are gone (the SDK's Device carries config/uiPrefs only), so each key
+ * resolves into the document that owns it.
+ */
+function readField(device: Device, field: keyof DeviceSettingsPatch) {
+  if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
+  if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
+  return device.name
+}
+
+/** Drop undefined entries so a spread can never blank a stored field. */
+const definedOnly = (patch: DeviceSettingsPatch): DeviceSettingsPatch =>
+  Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined)
+  ) as DeviceSettingsPatch
 
 export interface DeviceSettings {
   /** Optimistic device object — the source of truth for every control. */
@@ -163,6 +206,15 @@ export interface DeviceSettings {
   isPending: (key: string) => boolean
   /** Optimistically apply + save. Fire-and-forget; errors surface as a toast. */
   commit: (key: string, patch: DeviceSettingsPatch) => void
+  /**
+   * Same, for the `cameraSensors` namespace: one change on one port, sent as
+   * the whole namespace built from a fresh read of the device. Pending under
+   * `CAMERA_SENSORS_SAVE_KEY`.
+   */
+  commitCameraSensors: (
+    change: CameraSensorChange,
+    ports: readonly string[] | null
+  ) => void
   /** Same, for the `recording` namespace — always PUT whole (see design §3). */
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
   /**
@@ -274,6 +326,33 @@ export function useDeviceSettings(id: string): DeviceSettings {
   const configStatus = computeConfigStatus(device)
   const pendingCount = Object.keys(pending).length
 
+  // Re-read the row and fold in what the SERVER owns: presence, the rev and
+  // the device's report. The rest of the object is the live form state and
+  // must not be reset under the operator's hands. Shared by every background
+  // poll below.
+  const refreshReported = useCallback(
+    async (cancelled: () => boolean) => {
+      try {
+        const fetched = await xg().devices.get(id)
+        if (cancelled()) return
+        serverRef.current = fetched
+        writeThrough(fetched)
+        applyDevice({
+          ...(optimisticRef.current ?? fetched),
+          status: fetched.status,
+          lastSeenAt: fetched.lastSeenAt,
+          configRev: fetched.configRev,
+          reportedConfig: fetched.reportedConfig,
+          reportedAt: fetched.reportedAt,
+        })
+      } catch {
+        // A failed background refresh is not worth a toast — the next tick
+        // (or a reload) retries, and nothing the operator did has failed.
+      }
+    },
+    [id, applyDevice, writeThrough]
+  )
+
   // Reported state arrives out of band (device -> MQTT -> mirror Lambda -> DB),
   // so there is nothing to await after a save: poll while a namespace is
   // pending and stop as soon as it settles. Only ONLINE devices produce a
@@ -294,27 +373,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
       // than this fetch would, and re-seeding from a stale read mid-queue is
       // how optimistic edits get clobbered.
       if (pendingCount > 0) return
-      void (async () => {
-        try {
-          const fetched = await xg().devices.get(id)
-          if (cancelled) return
-          serverRef.current = fetched
-          writeThrough(fetched)
-          // Merge only the server-owned fields. The rest of the object is the
-          // live form state and must not be reset under the operator's hands.
-          applyDevice({
-            ...(optimisticRef.current ?? fetched),
-            status: fetched.status,
-            lastSeenAt: fetched.lastSeenAt,
-            configRev: fetched.configRev,
-            reportedConfig: fetched.reportedConfig,
-            reportedAt: fetched.reportedAt,
-          })
-        } catch {
-          // A failed background refresh is not worth a toast — the next tick
-          // (or a reload) retries, and nothing the operator did has failed.
-        }
-      })()
+      void refreshReported(() => cancelled)
     }, REPORT_POLL_MS)
     return () => {
       cancelled = true
@@ -323,28 +382,60 @@ export function useDeviceSettings(id: string): DeviceSettings {
     // `configStatus` is recomputed every render; keying the effect on the
     // boolean keeps this to one interval per pending episode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, hasPending(configStatus), pendingCount, applyDevice, writeThrough])
+  }, [id, hasPending(configStatus), pendingCount, refreshReported])
+
+  // After Reboot Device. A setting that is written to the boot config (a
+  // camera's sensor line, its rotation) reads `adjusted` "REBOOT REQUIRED"
+  // until the device boots again, and `adjusted` does not poll: nothing is in
+  // flight. So once a reboot was asked for, keep re-reading the row while the
+  // device still says it waits, and stop the moment it no longer does (it came
+  // back and reported) or the window closes. Without this the card kept
+  // saying "Reboot required" over a device that had already rebooted.
+  const rebootRequestedAt = useDeviceRebootStore((s) => s.requestedAt[id])
+  const awaitingReboot =
+    rebootRequestedAt !== undefined && waitsForReboot(device, configStatus)
+  useEffect(() => {
+    if (!awaitingReboot || rebootRequestedAt === undefined) return
+    const deadline = rebootRequestedAt + REBOOT_POLL_WINDOW_MS
+    if (Date.now() >= deadline) return
+    let cancelled = false
+    const timer = setInterval(() => {
+      if (Date.now() >= deadline) {
+        clearInterval(timer)
+        return
+      }
+      if (pendingCount > 0) return
+      void refreshReported(() => cancelled)
+    }, REPORT_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [awaitingReboot, rebootRequestedAt, pendingCount, refreshReported])
 
   const commit = useCallback(
-    (key: string, patch: DeviceSettingsPatch) => {
+    (
+      key: string,
+      patch: DeviceSettingsPatch,
+      /**
+       * `rebuild`: build the patch AGAIN, from a fresh read of the device, at
+       * the moment the save is sent. For a namespace that is replaced whole
+       * and has writers other than this form (see `commitCameraSensors`): the
+       * `patch` argument is then only the optimistic picture, and what goes on
+       * the wire is `rebuild(fresh)`.
+       */
+      opts: { rebuild?: (fresh: Device) => DeviceSettingsPatch } = {}
+    ) => {
       const current = optimisticRef.current
       if (current === null) return
 
-      // Drop undefined entries so a spread can never blank a stored field.
-      const updates = Object.fromEntries(
-        Object.entries(patch).filter(([, v]) => v !== undefined)
-      ) as DeviceSettingsPatch
+      // `cameraSensors` is refused (400) for a device that cannot hold it, a
+      // `null` included. No control offers it there; this keeps any caller
+      // that patches several namespaces at once, a revert of everything for
+      // one, from failing the whole save over a namespace the device never had.
+      const updates = withoutUnheldCameraSensors(current, definedOnly(patch))
       const keys = Object.keys(updates) as (keyof DeviceSettingsPatch)[]
       if (keys.length === 0) return
-
-      // What the device object currently holds for a patch key. The legacy
-      // top-level duplicates are gone (the SDK's Device carries config/uiPrefs
-      // only), so each key resolves into the document that owns it.
-      const readField = (device: Device, field: keyof DeviceSettingsPatch) => {
-        if (isConfigField(field)) return device.config[CONFIG_FIELDS[field]] ?? null
-        if (isUiPrefField(field)) return device.uiPrefs[UI_PREF_FIELDS[field]] ?? null
-        return device.name
-      }
 
       // Nothing actually changed (an incidental blur, a re-select of the value
       // already stored) — don't hit the API.
@@ -380,13 +471,35 @@ export function useDeviceSettings(id: string): DeviceSettings {
           return
         }
         try {
+          // A whole-namespace write with other writers: read the row now and
+          // build the value on what it holds, so this save cannot put back
+          // what someone else (or the device itself) changed meanwhile. The
+          // gate is asked again on the fresh row. When the fresh row already
+          // holds exactly what was asked for, there is nothing to send.
+          let sending = updates
+          let alreadyThere: Device | null = null
+          if (opts.rebuild) {
+            const fresh = await xg().devices.get(id)
+            serverRef.current = fresh
+            sending = withoutUnheldCameraSensors(
+              fresh,
+              definedOnly(opts.rebuild(fresh))
+            )
+            const sendingKeys = Object.keys(sending) as (keyof DeviceSettingsPatch)[]
+            if (sendingKeys.every((k) => deepEqual(readField(fresh, k), sending[k]))) {
+              alreadyThere = fresh
+            }
+          }
+
           // Split the patch by owning endpoint. In practice a control touches
           // one key, but a mixed patch stays correct: the requests run in
           // order and the last response is the freshest device row.
           const configPatch: DeviceConfigPatch = {}
           const uiPrefsPatch: DeviceUiPrefsPatch = {}
           const metaPatch: { name?: string | null } = {}
-          for (const [field, value] of Object.entries(updates)) {
+          for (const [field, value] of Object.entries(
+            alreadyThere ? {} : sending
+          )) {
             if (isConfigField(field)) {
               // `null` means "revert this namespace to device defaults".
               ;(configPatch as Record<string, unknown>)[CONFIG_FIELDS[field]] = value
@@ -397,7 +510,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
             }
           }
 
-          let updated: Device | null = null
+          let updated: Device | null = alreadyThere
           if (Object.keys(metaPatch).length > 0) {
             updated = await xg().devices.update(id, metaPatch)
           }
@@ -430,6 +543,11 @@ export function useDeviceSettings(id: string): DeviceSettings {
           merged.configRev = updated.configRev
           merged.configUpdatedAt = updated.configUpdatedAt
           merged.uiPrefs = updated.uiPrefs
+          // The device's report rides on the same row and is server-owned, as
+          // in every poll here. After a fresh read it can be newer than the
+          // one on screen (an agent that stopped qualifying, a new verdict).
+          merged.reportedConfig = updated.reportedConfig
+          merged.reportedAt = updated.reportedAt
           applyDevice(merged)
           if (keys.includes("name")) {
             // The layout header refreshes on next navigation; the breadcrumb
@@ -438,10 +556,13 @@ export function useDeviceSettings(id: string): DeviceSettings {
               .getState()
               .setDeviceName(updated.name ?? updated.serial)
           }
-          toast.success("Settings saved")
+          if (alreadyThere === null) toast.success("Settings saved")
         } catch (err) {
           generationRef.current += 1
-          toast.error((err as Error).message)
+          // xgMessage, not err.message: a XorgateError's message carries the
+          // "CODE METHOD url:" prefix for logs; the toast wants the API's own
+          // sentence (a refused `cameraSensors` save names the agent needed).
+          toast.error(xgMessage(err))
           // Roll the whole form back to the last server-confirmed values so
           // what is on screen is what the server actually holds.
           if (serverRef.current) applyDevice(serverRef.current)
@@ -451,6 +572,30 @@ export function useDeviceSettings(id: string): DeviceSettings {
       })
     },
     [id, applyDevice, bumpPending, writeThrough]
+  )
+
+  // The `cameraSensors` namespace is replaced whole on write, and this form is
+  // not its only writer: `xorgate-rs set` on the device folds back into the
+  // cloud document, and so does another operator or another tab. So the value
+  // is built from a FRESH read at send time (the simulation save in the device
+  // layout does the same), never from this form's copy, which no poll
+  // refreshes: the other ports are sent as the cloud holds them now.
+  //
+  // One pending key for every control of the card: while a save is in flight
+  // the card is disabled, so a second save can never be built on a form the
+  // first one is about to re-seed.
+  const commitCameraSensors = useCallback(
+    (change: CameraSensorChange, ports: readonly string[] | null) => {
+      const current = optimisticRef.current
+      if (current === null) return
+      const build = (device: Device): DeviceSettingsPatch => ({
+        cameraSensorsConfig: buildCameraSensorsConfig(device.config, change, {
+          ports,
+        }),
+      })
+      commit(CAMERA_SENSORS_SAVE_KEY, build(current), { rebuild: build })
+    },
+    [commit]
   )
 
   const commitRecording = useCallback(
@@ -663,6 +808,7 @@ export function useDeviceSettings(id: string): DeviceSettings {
     notFound,
     isPending,
     commit,
+    commitCameraSensors,
     commitRecording,
     refreshReport,
     refreshing,

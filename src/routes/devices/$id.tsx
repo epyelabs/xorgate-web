@@ -59,6 +59,7 @@ import type { LatestReading } from "@xorgate/sdk"
 import { decodeThrottleBits } from "@/lib/telemetry-meta"
 import { formatRelative } from "@/lib/relative-time"
 import { useBreadcrumbStore } from "@/store/breadcrumb"
+import { useDeviceRebootStore } from "@/store/device-reboot"
 
 // Layout route for /devices/$id. Owns the device query (and its 20s poll) and
 // renders the shared page header + tab bar; the active tab's content renders
@@ -605,6 +606,10 @@ function DeviceLayout() {
           onConfirm={async () => {
             try {
               await xg().devices.reboot(id)
+              // The Settings cards that wait for this reboot (a camera line or
+              // a rotation written to the boot config) re-read the device for
+              // a while from here on.
+              useDeviceRebootStore.getState().markRequested(id)
               toast.success(
                 `Reboot command sent to ${device.name ?? device.serial}`
               )

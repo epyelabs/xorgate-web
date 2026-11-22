@@ -13,6 +13,12 @@
 import type { Device } from "@xorgate/sdk"
 import type { SettingsTab } from "./device-settings-tabs"
 import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
+import {
+  VERDICT_REBOOT_REQUIRED,
+  cameraSensorsGate,
+  cameraSensorsNotReconciled,
+  parseReportedCameras,
+} from "./device-cameras"
 import { deepEqual } from "./deep-equal"
 
 /** Namespaces of the device-delivered config document, in registry order. */
@@ -32,6 +38,11 @@ export const CONFIG_NAMESPACES = [
   // for a model declaring `peripherals.obd`; elsewhere the cloud never holds
   // it, so it resolves to `unset` like `simulation` on a real device.
   "obd",
+  // Camera sensor per port (plans/support-other-camera-models). Accepted only
+  // for a real device on a Rust agent that can act on it; for every other
+  // device the cloud never holds it and it resolves to `unset` (see
+  // `computeConfigStatus`).
+  "cameraSensors",
 ] as const
 
 export type ConfigNamespace = (typeof CONFIG_NAMESPACES)[number]
@@ -82,6 +93,16 @@ export type DeviceConfigStatus = Record<ConfigNamespace, NamespaceStatus>
 
 const REPORTED_STATES = ["applied", "adjusted", "rejected"] as const
 
+/**
+ * Bound on a device-authored status sentence, the same one a camera port's
+ * sentence gets. The mirror caps what it stores, but this parser also reads
+ * rows written before any cap and must not let one sentence take over a card.
+ */
+const MAX_STATUS_SENTENCE_CHARS = 1000
+
+const statusSentence = (v: unknown): string | undefined =>
+  typeof v === "string" ? v.slice(0, MAX_STATUS_SENTENCE_CHARS) : undefined
+
 export interface ReportedConfig {
   ts: number | null
   /** Last desired revision the device applied. 0 = it has never received one. */
@@ -117,8 +138,8 @@ export function parseReportedConfig(
       status[ns] = {
         state: state as ConfigState,
         at: typeof entry.at === "number" ? entry.at : undefined,
-        detail: typeof entry.detail === "string" ? entry.detail : undefined,
-        reason: typeof entry.reason === "string" ? entry.reason : undefined,
+        detail: statusSentence(entry.detail),
+        reason: statusSentence(entry.reason),
       }
     }
   }
@@ -240,6 +261,15 @@ function divergesFromDefaults(ns: ConfigNamespace, effective: unknown): boolean 
   return !deepEqual(resolveOverDefaults(defaults, effective), defaults)
 }
 
+/**
+ * Namespaces where an `applied` verdict for a value the cloud does not hold is
+ * read as the acknowledgement of a revert (see `computeConfigStatus`).
+ */
+const REVERT_ACK_NAMESPACES: ReadonlySet<ConfigNamespace> = new Set<ConfigNamespace>([
+  "cameraSensors",
+  "cameraMount",
+])
+
 function emptyStatus(state: ConfigState): DeviceConfigStatus {
   return Object.fromEntries(
     CONFIG_NAMESPACES.map((ns) => [ns, { state }])
@@ -257,7 +287,13 @@ function emptyStatus(state: ConfigState): DeviceConfigStatus {
 export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
   if (device === null) return emptyStatus("no-report")
   const reported = parseReportedConfig(device.reportedConfig)
-  if (reported === null) return emptyStatus("no-report")
+  if (reported === null) {
+    const status = emptyStatus("no-report")
+    // "No report yet" promises that a save here is stored and delivered. For
+    // `cameraSensors` on a device that cannot hold it, that would be untrue.
+    if (!cameraSensorsGate(device).allowed) status.cameraSensors = { state: "unset" }
+    return status
+  }
 
   const behind = device.configRev > reported.rev
   const config = (device.config ?? {}) as Record<string, unknown>
@@ -280,13 +316,56 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
       if (ns === "obd" && effective === undefined && config.obd == null) {
         return [ns, { state: "unset", effective }]
       }
+      // `cameraSensors` exists only for a device whose agent acts on it (a
+      // real device, the Rust agent, the `camera.sensors` capability). Any
+      // other agent ignores the key and sends no status entry for it, and a
+      // namespace that is present, level on rev and without a status entry
+      // reads as "applied" below. So without this a JS device or an older
+      // Rust agent would show "Synced" over a setting it never looked at
+      // (TOUCH-MAP section 1, "Version skew"). The cloud refuses the namespace
+      // for such a device and does not serve it either; this is the console's
+      // half of the same rule, and it also keeps an unrelated pending save
+      // from marking the namespace "Applying…".
+      if (ns === "cameraSensors" && !cameraSensorsGate(device).allowed) {
+        return [ns, { state: "unset", effective }]
+      }
       if (behind) {
         // Offline is not a failure — the retained message is waiting for the
         // device, which converges on its next connect without anyone re-saving.
         return [ns, { state: device.status === "online" ? "pending" : "queued", effective }]
       }
       const entry = reported.status[ns]
-      if (entry) {
+      // The device has the value and has not reconciled its boot config with
+      // it yet: the instant after a save. It says `adjusted`, because nothing
+      // is in force yet, but there is nothing for an operator to act on, and
+      // the next report (seconds later) carries the real verdict. Shown as
+      // still applying, which also keeps the page polling for that report.
+      if (
+        ns === "cameraSensors" &&
+        entry?.state === "adjusted" &&
+        cameraSensorsNotReconciled(effective, entry.detail)
+      ) {
+        return [
+          ns,
+          {
+            state: device.status === "online" ? "pending" : "queued",
+            at: entry.at,
+            effective,
+          },
+        ]
+      }
+      // A reverted namespace: the cloud holds nothing, and the device's
+      // `applied` is its acknowledgement of that revert, which stays in every
+      // later report. Reading it as "Synced" would badge a card whose every
+      // control says "not managed". It is the silence case below: no badge,
+      // unless the device still runs something other than its defaults.
+      // Limited to the two camera namespaces, where a port going back to "not
+      // managed" makes this an everyday state; any other verdict (`adjusted`:
+      // "asked to revert, but the device is still holding a value") still
+      // comes through.
+      const revertAcknowledged =
+        REVERT_ACK_NAMESPACES.has(ns) && entry?.state === "applied" && config[ns] == null
+      if (entry && !revertAcknowledged) {
         return [
           ns,
           { state: entry.state, detail: entry.detail, reason: entry.reason, at: entry.at, effective },
@@ -331,6 +410,7 @@ export const NAMESPACE_TABS: Record<ConfigNamespace, readonly SettingsTab[]> = {
   // Read-only Simulation card on General; switched from the reboot dialog.
   simulation: ["general"],
   obd: ["peripherals"],
+  cameraSensors: ["media"],
 }
 
 /**
@@ -365,6 +445,34 @@ export function tabAttentionCounts(
     }
   }
   return counts
+}
+
+/** The device's own marker for "written to the boot config, not booted yet". */
+const REBOOT_REQUIRED_RE = /reboot required/i
+
+/** Namespaces whose values live in the boot config and so wait for a reboot. */
+const BOOT_CONFIG_NAMESPACES = ["cameraSensors", "cameraMount"] as const
+
+/**
+ * Whether the device says something is waiting for a reboot: a boot-config
+ * namespace is `adjusted` with the device's "REBOOT REQUIRED" sentence, or a
+ * camera port's verdict is `reboot-required`. The cue to keep re-reading the
+ * device after Reboot Device was asked, until it no longer says so.
+ */
+export function waitsForReboot(
+  device: Pick<Device, "reportedConfig"> | null,
+  status: DeviceConfigStatus
+): boolean {
+  if (device === null) return false
+  for (const ns of BOOT_CONFIG_NAMESPACES) {
+    const entry = status[ns]
+    if (entry.state === "adjusted" && REBOOT_REQUIRED_RE.test(entry.detail ?? "")) {
+      return true
+    }
+  }
+  return parseReportedCameras(device.reportedConfig).some(
+    (camera) => camera.verdict === VERDICT_REBOOT_REQUIRED
+  )
 }
 
 /** True while anything is still in flight — the cue to keep re-fetching. */
@@ -402,12 +510,17 @@ export function configStateExplanation(status: NamespaceStatus): string | null {
       return "Saved and sent — waiting for the device to confirm it applied it."
     case "queued":
       return "Saved. The device is offline; it will pick this up when it reconnects."
+    // The device's own sentence, verbatim. By the rail's convention `adjusted`
+    // carries it under `detail` and `rejected` under `reason`; whichever is
+    // present is shown, so an agent that fills the other one is still heard.
     case "adjusted":
       return (
-        status.detail ?? "The device is running a different value than the one saved here."
+        status.detail ??
+        status.reason ??
+        "The device is running a different value than the one saved here."
       )
     case "rejected":
-      return status.reason ?? "The device could not use the value saved here."
+      return status.reason ?? status.detail ?? "The device could not use the value saved here."
     case "diverged":
       return (
         "Nothing is saved here, so this card is showing the defaults — but the device " +

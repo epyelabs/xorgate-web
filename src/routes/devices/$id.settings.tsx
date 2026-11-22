@@ -55,6 +55,7 @@ function DeviceSettingsPage() {
     notFound,
     isPending,
     commit,
+    commitCameraSensors,
     commitRecording,
     refreshReport,
     refreshing,
@@ -197,6 +198,7 @@ function DeviceSettingsPage() {
                 reportedMedia={reportedMedia}
                 isPending={isPending}
                 commit={commit}
+                commitCameraSensors={commitCameraSensors}
                 commitRecording={commitRecording}
               />
             </TabsContent>

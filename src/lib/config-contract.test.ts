@@ -9,15 +9,23 @@ import {
   DEFAULT_TIME_SYNC_OFFLINE_SOURCES,
   resolveRecording,
 } from "@/lib/device-config-defaults"
+import { CONFIG_NAMESPACES, NAMESPACE_TABS } from "@/lib/device-config-status"
 
 // The committed copy of the backend's generated device-config contract. The
 // web app has no defaults of its own any more — everything a control shows for
 // an unconfigured device comes from here, so these assertions are what stop the
 // UI claiming a device is doing something it isn't.
 
+// `XORGATE_BACKEND_DIR` points the check at another backend checkout: a
+// worktree of this repo is otherwise compared with the backend's MAIN checkout,
+// which lags the backend branch that generated this copy until that branch
+// merges (the usual state of a cross-repo phase).
+const BACKEND_DIR =
+  process.env.XORGATE_BACKEND_DIR ??
+  resolve(__dirname, "../../../../backend/xorgate-core-service")
 const BACKEND_COPY = resolve(
-  __dirname,
-  "../../../../backend/xorgate-core-service/src/config-registry/config-contract.json"
+  BACKEND_DIR,
+  "src/config-registry/config-contract.json"
 )
 
 describe("config-contract.json", () => {
@@ -37,8 +45,12 @@ describe("config-contract.json", () => {
     // (plans/xorgate-device-simulator); its settings card is Phase 5's.
     // `obd` only for a model declaring `peripherals.obd`
     // (plans/obd2-bluetooth-integration); its card is the Peripherals tab.
+    // `cameraSensors` only for a real device on a Rust agent that advertises
+    // `camera.sensors` (plans/support-other-camera-models); its card is on
+    // the Media tab.
     expect(Object.keys(contract.namespaces).sort()).toEqual([
       "cameraMount",
+      "cameraSensors",
       "cellular",
       "gnssAntBias",
       "imuMount",
@@ -48,6 +60,30 @@ describe("config-contract.json", () => {
       "simulation",
       "timeSync",
     ])
+  })
+
+  it("lists exactly the namespaces the status rail computes", () => {
+    // A namespace the contract has and the rail lacks would never get a badge;
+    // one the rail has and the contract lacks would have no defaults to
+    // compare against.
+    expect([...CONFIG_NAMESPACES].sort()).toEqual(
+      Object.keys(contract.namespaces).sort()
+    )
+    expect(Object.keys(NAMESPACE_TABS).sort()).toEqual(
+      [...CONFIG_NAMESPACES].sort()
+    )
+  })
+
+  it("types cameraSensors as the console builds it", () => {
+    // The sensor id list is NOT in the contract (the catalog is what moves);
+    // an unmanaged device holds no port, which is also the default.
+    const ns = contract.namespaces.cameraSensors
+    expect(ns.defaults).toEqual({ cameras: {} })
+    const entry = ns.jsonSchema.properties.cameras.additionalProperties
+    expect(Object.keys(entry.properties).sort()).toEqual(["options", "sensor"])
+    expect(entry.required).toEqual(["sensor"])
+    expect(entry.additionalProperties).toBe(false)
+    expect("enum" in entry.properties.sensor).toBe(false)
   })
 
   it("feeds the exported defaults", () => {

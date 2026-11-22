@@ -74,13 +74,24 @@ const GPS_GATE_OPTIONS: {
 const GPS_GATE_MAX_SECS_OPTIONS = [0, 120, 300, 600, 900, 1800]
 const GPS_GATE_NO_PROGRESS_SECS_OPTIONS = [0, 60, 120, 180, 300, 600]
 
+/**
+ * The selected preset cannot run on the sensor of these cameras, in the camera
+ * catalog's own words (plans/support-other-camera-models).
+ */
+export interface PresetProblem {
+  cameras: string[]
+  reason: string
+}
+
 /** The knobs revealed once "Record video on device" is on. */
 export function VideoOptions({
   recording,
+  presetProblems = [],
   isPending,
   commitRecording,
 }: {
   recording: ResolvedRecording
+  presetProblems?: PresetProblem[]
   isPending: (key: string) => boolean
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
@@ -108,6 +119,16 @@ export function VideoOptions({
             ))}
           </SelectContent>
         </Select>
+        {presetProblems.map((problem) => (
+          <FieldDescription
+            key={problem.reason}
+            className="text-amber-700 dark:text-amber-400"
+            data-testid="preset-problem"
+          >
+            <span className="font-mono">{problem.cameras.join(", ")}</span>:{" "}
+            {problem.reason}
+          </FieldDescription>
+        ))}
       </Field>
 
       <Field>

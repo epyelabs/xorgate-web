@@ -34,9 +34,11 @@ import type {
 } from "@xorgate/react"
 import { cameraPresetProblem } from "@/lib/camera-catalog"
 import {
+  cameraRotationSwitch,
   modelCameraPorts,
   parseReportedCameras,
   portSensor,
+  type CameraSensorChange,
 } from "@/lib/device-cameras"
 import { useDeviceModel } from "@/queries/devices"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
@@ -76,6 +78,7 @@ export function MediaTab({
   reportedMedia,
   isPending,
   commit,
+  commitCameraSensors,
   commitRecording,
 }: {
   device: Device
@@ -86,6 +89,10 @@ export function MediaTab({
   reportedMedia: DeviceMediaStatus | null
   isPending: (key: string) => boolean
   commit: (key: string, patch: DeviceSettingsPatch) => void
+  commitCameraSensors: (
+    change: CameraSensorChange,
+    ports: readonly string[] | null
+  ) => void
   commitRecording: (key: string, mutate: (r: ResolvedRecording) => void) => void
 }) {
   const reportedVideo = reportedMedia?.recording?.value === true
@@ -192,7 +199,7 @@ export function MediaTab({
         }
         status={configStatus.cameraSensors}
         isPending={isPending}
-        commit={commit}
+        commitCameraSensors={commitCameraSensors}
       />
 
       {channels && channels.length > 0 ? (
@@ -215,8 +222,12 @@ export function MediaTab({
                 const key = MOUNT_KEY(ch.streamKey)
                 // The catalog knows which sensors apply no flip at all. The
                 // device refuses the rotation for one too; saying it here
-                // saves the operator a save and a reboot to find out.
-                const cannotRotate = sensorOn(ch.streamKey)?.canFlip === false
+                // saves the operator a save and a reboot to find out. The
+                // switch is never stuck ON, though: see `cameraRotationSwitch`.
+                const { cannotRotate, locked } = cameraRotationSwitch(
+                  sensorOn(ch.streamKey),
+                  mounted[ch.streamKey]
+                )
                 return (
                   <Field key={ch.streamKey} orientation="horizontal">
                     <FieldContent>
@@ -235,7 +246,7 @@ export function MediaTab({
                     <Switch
                       id={key}
                       checked={mounted[ch.streamKey] === 180}
-                      disabled={isPending(key) || cannotRotate}
+                      disabled={isPending(key) || locked}
                       onCheckedChange={(next) =>
                         commitRotation(ch.streamKey, next ? 180 : 0)
                       }

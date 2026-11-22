@@ -33,6 +33,13 @@ import {
 /** The capability string an agent advertises when it acts on the namespace. */
 export const CAMERA_SENSORS_CAPABILITY = "camera.sensors"
 
+/**
+ * The ONE pending key every control of the Camera sensors card saves under
+ * (see `commitCameraSensors` in the settings hook): while it is pending the
+ * whole card is disabled.
+ */
+export const CAMERA_SENSORS_SAVE_KEY = "device-camera-sensors"
+
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v)
 
@@ -82,6 +89,19 @@ export function storedCameraSensors(
   return out
 }
 
+/**
+ * One port's stored declaration, or undefined when the port is not managed.
+ * An OWN key only: the port name can come from a device report, and
+ * `constructor` or `toString` must not find an inherited member.
+ */
+export function storedCameraSensor(
+  config: unknown,
+  port: string
+): CameraSensorEntry | undefined {
+  const stored = storedCameraSensors(config)
+  return own(stored, port) ? stored[port] : undefined
+}
+
 export type CameraSensorChange =
   /** Declare a sensor (a catalog id) or an empty port (`none`). */
   | { port: string; sensor: string }
@@ -94,6 +114,12 @@ export type CameraSensorChange =
    * "set to the default" are different declarations.
    */
   | { port: string; option: string; value: number | null }
+  /**
+   * Clear the whole namespace (`null`). For a value left behind on a device
+   * whose model declares no camera ports: the API refuses every value there
+   * and accepts exactly this.
+   */
+  | { clear: true }
 
 /**
  * The WHOLE namespace to send for one change on one port. The backend replaces
@@ -119,6 +145,7 @@ export function buildCameraSensorsConfig(
   change: CameraSensorChange,
   opts: { ports?: readonly string[] | null } = {}
 ): CameraSensorsConfig | null {
+  if ("clear" in change) return null
   const stored = storedCameraSensors(storedConfig)
   const ports = opts.ports ?? null
   const cameras: Record<string, CameraSensorEntry> = {}
@@ -481,10 +508,14 @@ export function cameraSensorsNotReconciled(
 
 /**
  * Whether the namespace's own callout would only repeat what the ports
- * already say. That is one case: the status is `adjusted` because the boot
- * config was written and waits for a reboot (the device marks that sentence
- * "REBOOT REQUIRED", as it does for `cameraMount`), some port reads
- * `reboot-required` in the device's words, and no port reports a fault.
+ * already say, so that each thing is said once. Two cases:
+ *
+ *  - the status is `adjusted` because the boot config was written and waits
+ *    for a reboot (the device marks that sentence "REBOOT REQUIRED", as it
+ *    does for `cameraMount`), some port reads `reboot-required` in the
+ *    device's words, and no port reports a fault;
+ *  - the callout's sentence is, word for word, a sentence a port already
+ *    shows (with or without the `camN: ` the status puts in front of it).
  *
  * A port in trouble keeps the callout: a sensor whose requirements are
  * missing, or one that is not detected, can ALSO be waiting for a reboot, and
@@ -492,9 +523,25 @@ export function cameraSensorsNotReconciled(
  * Anything this cannot tell apart shows both, which is the harmless side.
  */
 export function cameraSensorsCalloutRepeatsPorts(
-  status: { state: string; detail?: string },
+  status: { state: string; detail?: string; reason?: string },
   cameras: readonly ReportedCamera[]
 ): boolean {
+  const sentence = (
+    status.state === "rejected"
+      ? (status.reason ?? status.detail)
+      : status.state === "adjusted"
+        ? (status.detail ?? status.reason)
+        : undefined
+  )?.trim()
+  if (sentence) {
+    for (const camera of cameras) {
+      // Only a sentence the port actually SHOWS can stand in for the callout.
+      const shown = cameraPortTruth(camera, false).sentence?.trim()
+      if (!shown) continue
+      if (shown === sentence || `${camera.port}: ${shown}` === sentence)
+        return true
+    }
+  }
   if (status.state !== "adjusted") return false
   if (!/reboot required/i.test(status.detail ?? "")) return false
   let waits = false
@@ -569,6 +616,71 @@ export function reportedCameraFacts(camera: ReportedCamera): {
           ? CAPTURE_STATES[state]
           : state,
   }
+}
+
+/** The verdicts of a port with nothing to explain: healthy, or empty on purpose. */
+const SETTLED_VERDICTS: ReadonlySet<string> = new Set(["ok", "empty"])
+
+/**
+ * What a port's row shows of the device's truth, said once.
+ *
+ *  - A healthy port (`ok`) or a deliberately empty one (`empty`) shows its
+ *    state indicator only, with the detected sensor name beside "Working".
+ *    No sentence and no facts: they would say "working" three more ways.
+ *  - Any other verdict shows the indicator, the device's own sentence and the
+ *    facts, which are what an operator diagnoses with. "Declared" is left out
+ *    when the port is managed, because the select above already shows it; on
+ *    an unmanaged port it is the only place config.txt's sensor appears.
+ */
+export function cameraPortTruth(
+  camera: ReportedCamera | null,
+  managed: boolean
+): {
+  verdict: { label: string; tone: CameraVerdictTone } | null
+  /** The detected sensor name, for a healthy port only. */
+  detected: string | null
+  sentence: string | null
+  facts: { label: "Declared" | "Detected" | "Frames"; value: string }[]
+} {
+  if (camera === null)
+    return { verdict: null, detected: null, sentence: null, facts: [] }
+  const verdict = cameraVerdict(camera.verdict)
+  if (camera.verdict !== null && SETTLED_VERDICTS.has(camera.verdict)) {
+    return {
+      verdict,
+      detected: camera.verdict === "ok" ? camera.detected : null,
+      sentence: null,
+      facts: [],
+    }
+  }
+  const facts: { label: "Declared" | "Detected" | "Frames"; value: string }[] =
+    []
+  // A block with none of the three facts in it (only a verdict, or a shape
+  // this build cannot read) gets no row of dashes.
+  if (camera.declared?.sensor || camera.detected || camera.capture) {
+    const all = reportedCameraFacts(camera)
+    if (!managed) facts.push({ label: "Declared", value: all.declared })
+    facts.push({ label: "Detected", value: all.detected })
+    facts.push({ label: "Frames", value: all.frames })
+  }
+  return { verdict, detected: null, sentence: camera.detail, facts }
+}
+
+/**
+ * The Camera mounting switch for a port whose sensor may not flip.
+ *
+ * `cannotRotate`: the catalog says the sensor applies no flip, so the line
+ * "This sensor cannot be rotated." is shown. `locked`: the switch is disabled.
+ * It is locked only while it is OFF. A 180 stored before the port got such a
+ * sensor is refused by the device, and turning the switch off is the only way
+ * to clear it from the console, so a switch that is on always stays operable.
+ */
+export function cameraRotationSwitch(
+  sensor: Pick<CameraSensor, "canFlip"> | undefined,
+  storedDeg: number | undefined
+): { cannotRotate: boolean; locked: boolean } {
+  const cannotRotate = sensor?.canFlip === false
+  return { cannotRotate, locked: cannotRotate && storedDeg !== 180 }
 }
 
 /**

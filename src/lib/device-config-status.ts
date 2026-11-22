@@ -13,7 +13,12 @@
 import type { Device } from "@xorgate/sdk"
 import type { SettingsTab } from "./device-settings-tabs"
 import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
-import { cameraSensorsGate, cameraSensorsNotReconciled } from "./device-cameras"
+import {
+  VERDICT_REBOOT_REQUIRED,
+  cameraSensorsGate,
+  cameraSensorsNotReconciled,
+  parseReportedCameras,
+} from "./device-cameras"
 import { deepEqual } from "./deep-equal"
 
 /** Namespaces of the device-delivered config document, in registry order. */
@@ -88,6 +93,16 @@ export type DeviceConfigStatus = Record<ConfigNamespace, NamespaceStatus>
 
 const REPORTED_STATES = ["applied", "adjusted", "rejected"] as const
 
+/**
+ * Bound on a device-authored status sentence, the same one a camera port's
+ * sentence gets. The mirror caps what it stores, but this parser also reads
+ * rows written before any cap and must not let one sentence take over a card.
+ */
+const MAX_STATUS_SENTENCE_CHARS = 1000
+
+const statusSentence = (v: unknown): string | undefined =>
+  typeof v === "string" ? v.slice(0, MAX_STATUS_SENTENCE_CHARS) : undefined
+
 export interface ReportedConfig {
   ts: number | null
   /** Last desired revision the device applied. 0 = it has never received one. */
@@ -123,8 +138,8 @@ export function parseReportedConfig(
       status[ns] = {
         state: state as ConfigState,
         at: typeof entry.at === "number" ? entry.at : undefined,
-        detail: typeof entry.detail === "string" ? entry.detail : undefined,
-        reason: typeof entry.reason === "string" ? entry.reason : undefined,
+        detail: statusSentence(entry.detail),
+        reason: statusSentence(entry.reason),
       }
     }
   }
@@ -430,6 +445,34 @@ export function tabAttentionCounts(
     }
   }
   return counts
+}
+
+/** The device's own marker for "written to the boot config, not booted yet". */
+const REBOOT_REQUIRED_RE = /reboot required/i
+
+/** Namespaces whose values live in the boot config and so wait for a reboot. */
+const BOOT_CONFIG_NAMESPACES = ["cameraSensors", "cameraMount"] as const
+
+/**
+ * Whether the device says something is waiting for a reboot: a boot-config
+ * namespace is `adjusted` with the device's "REBOOT REQUIRED" sentence, or a
+ * camera port's verdict is `reboot-required`. The cue to keep re-reading the
+ * device after Reboot Device was asked, until it no longer says so.
+ */
+export function waitsForReboot(
+  device: Pick<Device, "reportedConfig"> | null,
+  status: DeviceConfigStatus
+): boolean {
+  if (device === null) return false
+  for (const ns of BOOT_CONFIG_NAMESPACES) {
+    const entry = status[ns]
+    if (entry.state === "adjusted" && REBOOT_REQUIRED_RE.test(entry.detail ?? "")) {
+      return true
+    }
+  }
+  return parseReportedCameras(device.reportedConfig).some(
+    (camera) => camera.verdict === VERDICT_REBOOT_REQUIRED
+  )
 }
 
 /** True while anything is still in flight — the cue to keep re-fetching. */

@@ -5,6 +5,7 @@ import {
   RotateCwIcon,
 } from "lucide-react"
 import type { Device } from "@xorgate/sdk"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/card"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
@@ -28,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { DeviceSettingsPatch } from "@/hooks/use-device-settings"
 import {
   CAMERA_CATALOG,
   CAMERA_SENSOR_NONE,
@@ -40,13 +39,12 @@ import {
   type CameraSensorOption,
 } from "@/lib/camera-catalog"
 import {
-  VERDICT_REBOOT_REQUIRED,
-  buildCameraSensorsConfig,
+  CAMERA_SENSORS_SAVE_KEY,
+  cameraPortTruth,
   cameraSensorsCalloutRepeatsPorts,
   cameraSensorsGate,
-  cameraVerdict,
   parseReportedCameras,
-  reportedCameraFacts,
+  storedCameraSensor,
   storedCameraSensors,
   type CameraPort,
   type CameraSensorChange,
@@ -60,7 +58,7 @@ import { InfoRow } from "../info-row"
 import { SettingsCallout } from "./callout"
 import { ConfigStatusBadge, ConfigStatusCallout } from "./config-status"
 
-const SENSOR_KEY = (port: string) => `device-camera-sensor-${port}`
+const SENSOR_ID = (port: string) => `device-camera-sensor-${port}`
 
 /**
  * Select value for "this port is not managed" (the key is absent). Not a
@@ -99,14 +97,24 @@ const TONE: Record<
  *
  *  - the choice, written to the `cameraSensors` namespace. Offered only where
  *    the API accepts it (`cameraSensorsGate`): a real device on a Rust agent
- *    that advertises `camera.sensors`. Everywhere else there is no picker, and
- *    one line says which agent is needed.
- *  - the truth, from `effective.cameras`: one state indicator per port derived
- *    from the device's verdict, three facts, and the device's own sentence
- *    verbatim. The console never writes a second explanation of its own.
+ *    that advertises `camera.sensors`, on a model that declares the port.
+ *  - the truth, from `effective.cameras`: one state indicator per port from
+ *    the device's verdict. A port with something to explain adds the device's
+ *    own sentence verbatim and the facts to diagnose with; a healthy or
+ *    deliberately empty one says it once (`cameraPortTruth`).
  *
- * A change takes effect at the device's next boot. The device says so itself
- * (verdict `reboot-required`), and the card points at Reboot Device.
+ * The card says each thing once. It never writes a second explanation of its
+ * own beside the device's, and the namespace's callout is left out when it
+ * would only repeat a port.
+ *
+ * Who sees it: a simulator has no camera ports and a JS device has nothing to
+ * choose and reports nothing here, so neither gets the card. A Rust agent
+ * from before the feature gets the truth it reports and one line naming the
+ * version needed.
+ *
+ * Every control saves under ONE pending key: the namespace is replaced whole
+ * on write, so while a save is in flight the whole card is disabled and a
+ * second save can never be built on a form the first is about to re-seed.
  */
 export function CameraSensorsCard({
   device,
@@ -114,7 +122,7 @@ export function CameraSensorsCard({
   modelState,
   status,
   isPending,
-  commit,
+  commitCameraSensors,
 }: {
   device: Device
   /**
@@ -127,18 +135,27 @@ export function CameraSensorsCard({
   modelState: "loading" | "ready" | "error"
   status: NamespaceStatus
   isPending: (key: string) => boolean
-  commit: (key: string, patch: DeviceSettingsPatch) => void
+  commitCameraSensors: (
+    change: CameraSensorChange,
+    ports: readonly string[] | null
+  ) => void
 }) {
   const gate = cameraSensorsGate(device)
-  const modelLoading = modelState === "loading"
   const reported = parseReportedCameras(device.reportedConfig)
-  const stored = storedCameraSensors(device.config)
+  const hasStored = Object.keys(storedCameraSensors(device.config)).length > 0
+  const saving = isPending(CAMERA_SENSORS_SAVE_KEY)
 
-  // A simulator has no camera ports and reports no camera block: nothing to
-  // choose and nothing to show.
-  if (!gate.allowed && gate.reason === "simulated") return null
+  // Nothing to choose and nothing reported: a simulator has no camera ports,
+  // and the JS agent neither acts on the setting nor reports the ports.
+  if (!gate.allowed && gate.reason !== "agent-version") return null
 
   const canChoose = gate.allowed && ports !== null && ports.length > 0
+  // The model is loaded and declares no camera port: every value is refused
+  // there, and only a clear (`null`) is accepted.
+  const noPorts =
+    gate.allowed &&
+    modelState === "ready" &&
+    (ports === null || ports.length === 0)
   // Model ports first, in model order, then any port only the device reports.
   const rows: {
     key: string
@@ -157,35 +174,25 @@ export function CameraSensorsCard({
     rows.push({ key: camera.port, connector: camera.connector, camera })
   }
 
-  // A qualifying device on a model with no cameras at all, and nothing reported.
-  if (gate.allowed && !modelLoading && ports !== null && rows.length === 0)
+  // A capable device with no cameras at all: no port, nothing reported,
+  // nothing stored and nothing the device has said about the setting.
+  if (noPorts && rows.length === 0 && !hasStored && status.state === "unset") {
     return null
-
-  function change(next: CameraSensorChange) {
-    commit(SENSOR_KEY(next.port), {
-      cameraSensorsConfig: buildCameraSensorsConfig(device.config, next, {
-        ports: ports?.map((p) => p.key) ?? null,
-      }),
-    })
   }
 
-  // The namespace's own callout is the device's sentence about the SETTING
-  // (`detail` when adjusted, `reason` when rejected, verbatim). It is left out
-  // in the one case where it would only repeat the ports: written, waiting
-  // for a reboot, and every port that waits says so itself.
-  const showRailCallout =
-    canChoose && !cameraSensorsCalloutRepeatsPorts(status, reported)
+  const change = (next: CameraSensorChange) =>
+    commitCameraSensors(next, ports?.map((p) => p.key) ?? null)
 
   return (
     <Card data-testid="camera-sensors-card">
       <CardHeader>
         <CardTitle>Camera sensors</CardTitle>
         <CardDescription>
-          Which image sensor is attached to each camera port. A change is
-          written to the device&rsquo;s boot configuration and takes effect the
-          next time it boots.
+          Which image sensor is attached to each camera port.
         </CardDescription>
-        {canChoose ? (
+        {/* Whenever the device may hold the namespace, whatever the model
+            says: a refusal is never hidden behind a model without ports. */}
+        {gate.allowed ? (
           <CardAction>
             <ConfigStatusBadge status={status} />
           </CardAction>
@@ -193,7 +200,7 @@ export function CameraSensorsCard({
       </CardHeader>
       <CardContent>
         <FieldGroup>
-          {gate.allowed && modelLoading && rows.length === 0 ? (
+          {gate.allowed && modelState === "loading" && rows.length === 0 ? (
             <Skeleton className="h-16 w-full" />
           ) : null}
           {rows.map((row, i) => (
@@ -203,10 +210,10 @@ export function CameraSensorsCard({
                 port={row.key}
                 connector={row.connector}
                 camera={row.camera}
-                entry={stored[row.key]}
+                entry={storedCameraSensor(device.config, row.key)}
                 picker={canChoose && ports.some((p) => p.key === row.key)}
                 agentVersion={device.agentVersion}
-                pending={isPending(SENSOR_KEY(row.key))}
+                disabled={saving}
                 onChange={change}
               />
             </div>
@@ -215,18 +222,49 @@ export function CameraSensorsCard({
             <SettingsCallout>
               <span data-testid="camera-sensors-gate">{gate.message}</span>
             </SettingsCallout>
-          ) : !modelLoading && ports === null ? (
+          ) : modelState === "error" && ports === null ? (
             <SettingsCallout>
               <span data-testid="camera-sensors-gate">
-                {modelState === "error"
-                  ? "This device's model could not be loaded, so its camera ports are unknown."
-                  : "This device's model declares no camera ports, so a sensor cannot be chosen per port."}
+                This device&rsquo;s model could not be loaded, so its camera
+                ports are unknown.
+              </span>
+            </SettingsCallout>
+          ) : noPorts && hasStored ? (
+            // A value left behind, usually by a model reassignment. Nothing
+            // can be chosen here, and the stored value cannot be edited
+            // either: the one thing the API accepts is clearing it.
+            <SettingsCallout>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span data-testid="camera-sensors-gate">
+                  This device&rsquo;s model declares no camera ports, but a
+                  camera sensor setting is still stored for it.
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  data-testid="camera-sensors-clear"
+                  onClick={() => change({ clear: true })}
+                >
+                  Clear the setting
+                </Button>
+              </div>
+            </SettingsCallout>
+          ) : noPorts ? (
+            <SettingsCallout>
+              <span data-testid="camera-sensors-gate">
+                This device&rsquo;s model declares no camera ports, so a sensor
+                cannot be chosen per port.
               </span>
             </SettingsCallout>
           ) : null}
-          {/* A refusal can name several ports and quote paths and whole
-              config.txt lines: it must wrap inside the card, never widen it. */}
-          {showRailCallout ? (
+          {/* The device's sentence about the SETTING (`detail` when adjusted,
+              `reason` when rejected, verbatim), unless a port already says it.
+              A refusal can name several ports and quote paths and whole
+              config.txt lines: it wraps inside the card, never widens it. */}
+          {gate.allowed &&
+          !cameraSensorsCalloutRepeatsPorts(status, reported) ? (
             <ConfigStatusCallout
               status={status}
               className="[overflow-wrap:anywhere]"
@@ -245,7 +283,7 @@ function PortRow({
   entry,
   picker,
   agentVersion,
-  pending,
+  disabled,
   onChange,
 }: {
   port: string
@@ -255,20 +293,15 @@ function PortRow({
   entry: CameraSensorEntry | undefined
   picker: boolean
   agentVersion: string | null
-  pending: boolean
+  /** A save of this card is in flight. */
+  disabled: boolean
   onChange: (change: CameraSensorChange) => void
 }) {
-  const selectId = SENSOR_KEY(port)
-  const verdict = cameraVerdict(camera?.verdict ?? null)
-  const tone = verdict ? TONE[verdict.tone] : null
-  // A block with none of the three facts in it (an agent that sent only a
-  // verdict, or a shape this build cannot read) gets no row of dashes.
-  const facts =
-    camera && (camera.declared?.sensor || camera.detected || camera.capture)
-      ? reportedCameraFacts(camera)
-      : null
+  const selectId = SENSOR_ID(port)
+  // "Declared" would repeat the select of a managed port.
+  const truth = cameraPortTruth(camera, picker && entry !== undefined)
+  const tone = truth.verdict ? TONE[truth.verdict.tone] : null
   const sensor = entry ? cameraSensor(entry.sensor) : undefined
-  const hints = sensor ? cameraSensorHints(sensor) : []
   const value = entry === undefined ? UNMANAGED : entry.sensor
   // A stored id this console cannot offer (a newer backend catalog, or a
   // sensor that is only planned) still has to be IN the select, or the control
@@ -278,6 +311,9 @@ function PortRow({
     entry !== undefined &&
     entry.sensor !== CAMERA_SENSOR_NONE &&
     sensor === undefined
+  const whyNotOffered = notOffered
+    ? CAMERA_CATALOG.unavailable.find((s) => s.id === entry.sensor)?.why
+    : undefined
 
   return (
     <div className="flex flex-col gap-2" data-testid={`camera-port-${port}`}>
@@ -290,18 +326,29 @@ function PortRow({
             </span>
           ) : null}
         </FieldLabel>
-        {verdict && tone ? (
-          <span
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 font-medium",
-              tone.text,
-              "[&_svg]:size-3.5 [&_svg]:shrink-0"
-            )}
-            data-testid={`camera-verdict-${port}`}
-            data-verdict={camera?.verdict ?? ""}
-          >
-            {tone.icon}
-            {verdict.label}
+        {truth.verdict && tone ? (
+          <span className="flex min-w-0 shrink-0 items-center gap-2">
+            {/* A healthy port's whole truth: what was found, and that it works. */}
+            {truth.detected ? (
+              <span
+                className="truncate font-mono text-muted-foreground"
+                data-testid={`camera-detected-${port}`}
+              >
+                {truth.detected}
+              </span>
+            ) : null}
+            <span
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 font-medium",
+                tone.text,
+                "[&_svg]:size-3.5 [&_svg]:shrink-0"
+              )}
+              data-testid={`camera-verdict-${port}`}
+              data-verdict={camera?.verdict ?? ""}
+            >
+              {tone.icon}
+              {truth.verdict.label}
+            </span>
           </span>
         ) : null}
       </div>
@@ -311,7 +358,7 @@ function PortRow({
           <Field>
             <Select
               value={value}
-              disabled={pending}
+              disabled={disabled}
               onValueChange={(next) =>
                 onChange(
                   next === UNMANAGED
@@ -347,7 +394,13 @@ function PortRow({
                 {notOffered ? (
                   <SelectItem
                     value={entry.sensor}
-                    description="not known to this console"
+                    description={
+                      whyNotOffered === "planned"
+                        ? "not supported yet"
+                        : whyNotOffered === "newer"
+                          ? "needs a newer console"
+                          : "not known to this console"
+                    }
                   >
                     {cameraSensorLabel(entry.sensor)}
                   </SelectItem>
@@ -366,11 +419,6 @@ function PortRow({
                 </SelectItem>
               </SelectContent>
             </Select>
-            {hints.length > 0 ? (
-              <FieldDescription data-testid={`camera-sensor-hint-${port}`}>
-                This sensor {hints.join(" and ")}.
-              </FieldDescription>
-            ) : null}
           </Field>
           {sensor && entry
             ? sensor.options.map((option) => (
@@ -379,7 +427,7 @@ function PortRow({
                   port={port}
                   option={option}
                   stored={entry.options?.[option.key]}
-                  pending={pending}
+                  disabled={disabled}
                   onChange={onChange}
                 />
               ))
@@ -387,48 +435,38 @@ function PortRow({
         </div>
       ) : null}
 
-      {facts ? (
-        <dl
-          className="grid max-w-2xl grid-cols-3 gap-x-6"
-          data-testid={`camera-facts-${port}`}
-        >
-          <InfoRow
-            label="Declared"
-            value={facts.declared}
-            title={facts.declared}
-          />
-          <InfoRow
-            label="Detected"
-            value={facts.detected}
-            title={facts.detected}
-          />
-          <InfoRow label="Frames" value={facts.frames} />
-        </dl>
-      ) : null}
-      {/* The device's own sentence, verbatim. The indicator above carries the
-          colour; the sentence only steps up from muted when the port needs
-          the operator. */}
-      {camera?.detail ? (
+      {/* The device's own sentence, verbatim: only for a port with something
+          to explain. The indicator above carries the colour; the sentence
+          steps up from muted when the port needs the operator. It can quote a
+          whole config.txt line or a path, so it wraps anywhere. */}
+      {truth.sentence ? (
         <p
           className={cn(
-            // The sentence can quote a whole config.txt line or a path.
             "[overflow-wrap:anywhere]",
-            verdict?.tone === "problem" || verdict?.tone === "action"
+            truth.verdict?.tone === "problem" ||
+              truth.verdict?.tone === "action"
               ? "text-foreground"
               : "text-muted-foreground"
           )}
           data-testid={`camera-detail-${port}`}
         >
-          {camera.detail}
+          {truth.sentence}
         </p>
       ) : null}
-      {camera?.verdict === VERDICT_REBOOT_REQUIRED ? (
-        <p
-          className="text-muted-foreground"
-          data-testid={`camera-reboot-${port}`}
+      {truth.facts.length > 0 ? (
+        <dl
+          className="grid max-w-2xl grid-cols-3 gap-x-6"
+          data-testid={`camera-facts-${port}`}
         >
-          Use Reboot Device at the top of this page to apply it.
-        </p>
+          {truth.facts.map((fact) => (
+            <InfoRow
+              key={fact.label}
+              label={fact.label}
+              value={fact.value}
+              title={fact.value}
+            />
+          ))}
+        </dl>
       ) : null}
     </div>
   )
@@ -454,17 +492,17 @@ function OptionField({
   port,
   option,
   stored,
-  pending,
+  disabled,
   onChange,
 }: {
   port: string
   option: CameraSensorOption
   /** The value the setting names; undefined = not named (as found). */
   stored: number | undefined
-  pending: boolean
+  disabled: boolean
   onChange: (change: CameraSensorChange) => void
 }) {
-  const id = `${SENSOR_KEY(port)}-${option.key}`
+  const id = `${SENSOR_ID(port)}-${option.key}`
   const named = typeof stored === "number"
   // A named value the catalog does not list (a newer catalog) is shown as it
   // is and never rewritten unless the operator picks another.
@@ -483,7 +521,7 @@ function OptionField({
       </FieldLabel>
       <Select
         value={named ? String(stored) : AS_FOUND}
-        disabled={pending}
+        disabled={disabled}
         onValueChange={(next) =>
           onChange({
             port,

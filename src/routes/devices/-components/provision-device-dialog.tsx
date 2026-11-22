@@ -131,6 +131,10 @@ export function ProvisionDeviceDialog({
   // Bumped by every mint and every model re-pin: a re-pin answer applies only
   // if nothing replaced the code on screen while it was in flight.
   const regSeq = useRef(0)
+  // Camera picks alone, to tell a later camera pick from a model re-pin.
+  const cameraSeq = useRef(0)
+  // Re-pins (model or camera) whose answer has not arrived: the poll waits.
+  const pinsInFlight = useRef(0)
   // What to mint next; null until the default is decided, so nothing is
   // minted on open before the Rust check answers. Bumping `n` mints again
   // (after expiry / error, or for a different agent) without closing.
@@ -239,6 +243,7 @@ export function ProvisionDeviceDialog({
     setModelPick(value)
     if (value === "auto" || phase !== "pending" || pick === null) return
     const seq = ++regSeq.current
+    pinsInFlight.current++
     try {
       // The endpoint is idempotent and RE-PINS the pending code in place —
       // the code for the agent on screen, so the agent travels with the pin.
@@ -251,6 +256,8 @@ export function ProvisionDeviceDialog({
       setPinned(true)
     } catch (err) {
       toast.error(xgMessage(err))
+    } finally {
+      pinsInFlight.current--
     }
   }
 
@@ -271,6 +278,8 @@ export function ProvisionDeviceDialog({
     cameras = nextRegistrationCameras(cameras, port, sensor)
     setCameraDraft((d) => ({ ...d, [port]: sensor }))
     const seq = ++regSeq.current
+    const mine = ++cameraSeq.current
+    pinsInFlight.current++
     try {
       const r = await createRegistration({
         agent: "rust",
@@ -284,8 +293,13 @@ export function ProvisionDeviceDialog({
       setCameraDraft({})
     } catch (err) {
       toast.error(xgMessage(err))
-      // Back to what the code on screen really carries.
-      if (seq === regSeq.current) setCameraDraft({})
+      // Back to what the code on screen really carries, unless a LATER camera
+      // pick is in flight and owns the drafts. Judged by the camera picks
+      // alone: a model re-pin sent meanwhile bumps `regSeq` and never clears
+      // drafts, and a failed pick must not leave its sensor on screen for it.
+      if (mine === cameraSeq.current) setCameraDraft({})
+    } finally {
+      pinsInFlight.current--
     }
   }
 
@@ -371,9 +385,17 @@ export function ProvisionDeviceDialog({
     const code = reg.code
     let cancelled = false
     const id = setInterval(async () => {
+      // A re-pin (model or camera) is in flight: its answer is the fresher
+      // picture of this code, and a read racing it could come back older.
+      if (pinsInFlight.current > 0) return
+      const seq = regSeq.current
       try {
         const r = await xg().deviceRegistrations.get(code)
         if (cancelled) return
+        // A re-pin was sent while this read was out: the read may predate it,
+        // and applying it would put the older `cameras` back on screen (and
+        // into the next pick's body). The next tick reads again.
+        if (seq !== regSeq.current) return
         setReg(r)
         if (r.status === "claimed" && r.deviceId) {
           setPhase("claimed")

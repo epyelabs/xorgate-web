@@ -4,6 +4,8 @@ import { parseCameraCatalog } from "./camera-catalog"
 import {
   CAMERA_SENSORS_NOT_RECONCILED_DETAIL,
   buildCameraSensorsConfig,
+  cameraPortTruth,
+  cameraRotationSwitch,
   cameraSensorsCalloutRepeatsPorts,
   cameraSensorsGate,
   cameraSensorsNotReconciled,
@@ -15,6 +17,7 @@ import {
   registrationCameraPorts,
   registrationCameras,
   reportedCameraFacts,
+  storedCameraSensor,
   storedCameraSensors,
   withoutUnheldCameraSensors,
 } from "./device-cameras"
@@ -92,6 +95,23 @@ describe("storedCameraSensors", () => {
       cam0: { sensor: "imx999", options: { futureOption: 3 } },
       cam1: { sensor: "none" },
     })
+  })
+})
+
+describe("storedCameraSensor", () => {
+  it("reads one port's own entry, and nothing inherited", () => {
+    const c = config({ cam0: { sensor: "imx708" } })
+    expect(storedCameraSensor(c, "cam0")).toEqual({ sensor: "imx708" })
+    expect(storedCameraSensor(c, "cam1")).toBeUndefined()
+    // Port names can come from a device report.
+    for (const port of [
+      "constructor",
+      "toString",
+      "__proto__",
+      "hasOwnProperty",
+    ]) {
+      expect(storedCameraSensor(c, port)).toBeUndefined()
+    }
   })
 })
 
@@ -263,6 +283,31 @@ describe("buildCameraSensorsConfig", () => {
       cameras: {
         cam0: { sensor: "imx290", options: { clockFrequency: 37125000 } },
       },
+    })
+  })
+
+  it("clears the whole namespace on request, whatever is stored", () => {
+    // A value left behind on a model with no camera ports: every value is
+    // refused there, and the API accepts exactly `null`.
+    expect(buildCameraSensorsConfig(stored, { clear: true })).toBeNull()
+    expect(
+      buildCameraSensorsConfig(stored, { clear: true }, { ports: null })
+    ).toBeNull()
+    expect(buildCameraSensorsConfig({}, { clear: true })).toBeNull()
+  })
+
+  it("builds on whatever config it is handed: a fresh read keeps another writer's port", () => {
+    // The form's copy says cam1 is imx290. Meanwhile `xorgate-rs set` on the
+    // device (or another tab) made it `none`. The save is built from the
+    // FRESH row, so changing cam0 here does not put the old cam1 back.
+    const fresh = config({
+      cam0: { sensor: "imx708", options: { linkFrequency: 447000000 } },
+      cam1: { sensor: "none" },
+    })
+    expect(
+      buildCameraSensorsConfig(fresh, { port: "cam0", sensor: "imx219" })
+    ).toEqual({
+      cameras: { cam0: { sensor: "imx219" }, cam1: { sensor: "none" } },
     })
   })
 
@@ -940,6 +985,61 @@ describe("cameraSensorsCalloutRepeatsPorts", () => {
     expect(cameraSensorsCalloutRepeatsPorts(REBOOT, [])).toBe(false)
   })
 
+  it("is true when the callout's sentence is word for word what a port shows", () => {
+    const sentence =
+      'this agent build does not know the camera sensor "imx335" (it knows: imx290, imx219, ' +
+      "imx708); update the agent or choose another sensor. config.txt is left as it is"
+    const cams = parseReportedCameras(
+      report({
+        cameras: { cam0: { verdict: "unknown-sensor", detail: sentence } },
+      })
+    )
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "rejected", reason: sentence },
+        cams
+      )
+    ).toBe(true)
+    // …with the `camN: ` the status puts in front of a port's sentence.
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "rejected", reason: `cam0: ${sentence}` },
+        cams
+      )
+    ).toBe(true)
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "adjusted", detail: sentence },
+        cams
+      )
+    ).toBe(true)
+    // Different words, or two ports joined, are not the same text.
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "rejected", reason: `cam0: ${sentence}; cam1: x` },
+        cams
+      )
+    ).toBe(false)
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "rejected", reason: "another" },
+        cams
+      )
+    ).toBe(false)
+  })
+
+  it("does not count a sentence the port does not show (a healthy port shows none)", () => {
+    const cams = parseReportedCameras(
+      report({ cameras: { cam0: { verdict: "ok", detail: "same words" } } })
+    )
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        { state: "rejected", reason: "same words" },
+        cams
+      )
+    ).toBe(false)
+  })
+
   it("keeps every other sentence of the rail", () => {
     const waiting = ports("reboot-required")
     for (const status of [
@@ -963,6 +1063,109 @@ describe("cameraSensorsCalloutRepeatsPorts", () => {
       { state: "applied" },
     ]) {
       expect(cameraSensorsCalloutRepeatsPorts(status, waiting)).toBe(false)
+    }
+  })
+})
+
+describe("cameraPortTruth (each thing said once)", () => {
+  const one = (block: unknown) =>
+    parseReportedCameras(report({ cameras: { cam0: block } }))[0]
+
+  it("says a healthy port once: the indicator and the detected sensor name", () => {
+    expect(cameraPortTruth(one(OK), true)).toEqual({
+      verdict: { label: "Working", tone: "ok" },
+      detected: "imx708",
+      sentence: null,
+      facts: [],
+    })
+    // The same on an unmanaged port: the detected name is the sensor there.
+    expect(cameraPortTruth(one(OK), false).facts).toEqual([])
+    expect(cameraPortTruth(one(OK), false).sentence).toBeNull()
+  })
+
+  it("says a deliberately empty port once: the indicator alone", () => {
+    expect(cameraPortTruth(one(EMPTY), true)).toEqual({
+      verdict: { label: "No camera", tone: "neutral" },
+      detected: null,
+      sentence: null,
+      facts: [],
+    })
+  })
+
+  it("shows the device's sentence and the facts for every other verdict", () => {
+    const truth = cameraPortTruth(one(NOT_DETECTED), false)
+    expect(truth.verdict).toEqual({ label: "Not detected", tone: "problem" })
+    expect(truth.detected).toBeNull()
+    expect(truth.sentence).toBe(NOT_DETECTED.detail)
+    expect(truth.facts).toEqual([
+      { label: "Declared", value: "imx335 · config.txt" },
+      { label: "Detected", value: "None" },
+      { label: "Frames", value: "None" },
+    ])
+  })
+
+  it("leaves 'Declared' out on a managed port: the select above already says it", () => {
+    expect(cameraPortTruth(one(NO_FRAMES), true).facts).toEqual([
+      { label: "Detected", value: "imx290" },
+      { label: "Frames", value: "Failing" },
+    ])
+    expect(
+      cameraPortTruth(one(NO_FRAMES), false).facts.map((f) => f.label)
+    ).toEqual(["Declared", "Detected", "Frames"])
+  })
+
+  it("keeps the sentence of a verdict it does not know, and shows no row of dashes", () => {
+    const unknown = cameraPortTruth(
+      one({ verdict: "lens-fogged", detail: "Wipe it." }),
+      true
+    )
+    expect(unknown).toMatchObject({
+      verdict: { label: "Lens fogged", tone: "neutral" },
+      sentence: "Wipe it.",
+      facts: [],
+    })
+    expect(cameraPortTruth(one({}), false)).toEqual({
+      verdict: null,
+      detected: null,
+      sentence: null,
+      facts: [],
+    })
+    expect(cameraPortTruth(null, true).verdict).toBeNull()
+  })
+})
+
+describe("cameraRotationSwitch", () => {
+  const fixed = { canFlip: false }
+  const flips = { canFlip: true }
+
+  it("locks the switch for a sensor that cannot flip only while it is off", () => {
+    expect(cameraRotationSwitch(fixed, 0)).toEqual({
+      cannotRotate: true,
+      locked: true,
+    })
+    expect(cameraRotationSwitch(fixed, undefined)).toEqual({
+      cannotRotate: true,
+      locked: true,
+    })
+  })
+
+  it("never leaves a stored 180 stuck: the switch stays operable so it can be cleared", () => {
+    expect(cameraRotationSwitch(fixed, 180)).toEqual({
+      cannotRotate: true,
+      locked: false,
+    })
+  })
+
+  it("leaves every other sensor alone", () => {
+    for (const deg of [0, 180, undefined]) {
+      expect(cameraRotationSwitch(flips, deg)).toEqual({
+        cannotRotate: false,
+        locked: false,
+      })
+      expect(cameraRotationSwitch(undefined, deg)).toEqual({
+        cannotRotate: false,
+        locked: false,
+      })
     }
   })
 })

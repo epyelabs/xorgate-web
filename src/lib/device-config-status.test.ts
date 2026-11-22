@@ -9,6 +9,7 @@ import {
   reportedAgentBuild,
   reportedAgentMode,
   tabAttentionCounts,
+  waitsForReboot,
 } from "./device-config-status"
 
 // Only the fields the status computation reads; the rest of Device is
@@ -546,6 +547,83 @@ describe("computeConfigStatus — cameraSensors (plans/support-other-camera-mode
       })
     )
     expect(status.cameraSensors.state).toBe("diverged")
+  })
+
+  describe("waitsForReboot", () => {
+    const waiting = (overrides: Record<string, unknown>) => {
+      const d = rust({ reportedConfig: report({ rev: 5, effective: capable, ...overrides }) })
+      return waitsForReboot(d, computeConfigStatus(d))
+    }
+
+    it("is true while the setting says REBOOT REQUIRED", () => {
+      expect(
+        waiting({ status: { cameraSensors: { state: "adjusted", detail: REBOOT_DETAIL } } })
+      ).toBe(true)
+    })
+
+    it("is true for a rotation written to the boot config, on any agent", () => {
+      const d = device({
+        agent: "js",
+        configRev: 5,
+        config: { cameraMount: { cameras: { cam0: { rotationDeg: 180 } } } },
+        reportedConfig: report({
+          rev: 5,
+          status: {
+            cameraMount: {
+              state: "adjusted",
+              detail: "written to the boot config — REBOOT REQUIRED to apply: cam0 180° (running 0°)",
+            },
+          },
+        }),
+      } as Partial<Device>)
+      expect(waitsForReboot(d, computeConfigStatus(d))).toBe(true)
+    })
+
+    it("is true while a port reads reboot-required", () => {
+      expect(
+        waiting({
+          effective: { ...capable, cameras: { cam0: { verdict: "reboot-required" } } },
+          status: { cameraSensors: { state: "applied" } },
+        })
+      ).toBe(true)
+    })
+
+    it("is false once the device came back: applied, ports ok", () => {
+      expect(
+        waiting({
+          effective: { ...capable, cameras: { cam0: { verdict: "ok" } } },
+          status: { cameraSensors: { state: "applied" } },
+        })
+      ).toBe(false)
+      expect(waitsForReboot(null, computeConfigStatus(null))).toBe(false)
+    })
+
+    it("is false for any other adjusted sentence", () => {
+      expect(
+        waiting({
+          status: {
+            cameraSensors: {
+              state: "adjusted",
+              detail: "asked to revert to defaults, but the device is still holding a value",
+            },
+          },
+        })
+      ).toBe(false)
+    })
+  })
+
+  it("caps a status sentence, as a port's sentence is capped", () => {
+    const long = "x".repeat(5000)
+    const parsed = parseReportedConfig(
+      report({
+        status: {
+          cameraSensors: { state: "rejected", reason: long },
+          cameraMount: { state: "adjusted", detail: long },
+        },
+      })
+    )
+    expect(parsed!.status.cameraSensors.reason).toHaveLength(1000)
+    expect(parsed!.status.cameraMount.detail).toHaveLength(1000)
   })
 
   it("is edited on the Media tab", () => {

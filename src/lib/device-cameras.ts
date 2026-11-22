@@ -618,15 +618,28 @@ export function reportedCameraFacts(camera: ReportedCamera): {
   }
 }
 
-/** The verdicts of a port with nothing to explain: healthy, or empty on purpose. */
-const SETTLED_VERDICTS: ReadonlySet<string> = new Set(["ok", "empty"])
+/**
+ * The indicator of an `ok` port whose capture is NOT streaming, by capture
+ * state. The device's verdict is `ok` whenever the right sensor is detected,
+ * which also covers a camera that is switched off in settings and one whose
+ * capture has not started yet (a minute or more after a boot on a device with
+ * a boot gate). "Working" would be untrue for both.
+ */
+const OK_NOT_STREAMING_LABELS: Record<string, string> = {
+  off: "Off",
+  starting: "Starting",
+}
 
 /**
  * What a port's row shows of the device's truth, said once.
  *
- *  - A healthy port (`ok`) or a deliberately empty one (`empty`) shows its
- *    state indicator only, with the detected sensor name beside "Working".
+ *  - A healthy port (`ok`, capture `streaming`) shows the detected sensor name
+ *    beside "Working", and a deliberately empty one (`empty`) its indicator.
  *    No sentence and no facts: they would say "working" three more ways.
+ *  - An `ok` port that is not streaming is detected, not working: a neutral
+ *    indicator named after the capture state ("Off", "Starting", otherwise
+ *    "Detected"), the detected sensor name, and the device's own sentence,
+ *    which says why. No facts.
  *  - A port that only waits for a reboot (`reboot-required`) shows the
  *    indicator and the device's sentence. Nothing is wrong with it, and what
  *    is detected now belongs to the line the device booted with, so the facts
@@ -641,7 +654,7 @@ export function cameraPortTruth(
   managed: boolean
 ): {
   verdict: { label: string; tone: CameraVerdictTone } | null
-  /** The detected sensor name, for a healthy port only. */
+  /** The detected sensor name, for an `ok` port only. */
   detected: string | null
   sentence: string | null
   facts: { label: "Declared" | "Detected" | "Frames"; value: string }[]
@@ -649,11 +662,22 @@ export function cameraPortTruth(
   if (camera === null)
     return { verdict: null, detected: null, sentence: null, facts: [] }
   const verdict = cameraVerdict(camera.verdict)
-  if (camera.verdict !== null && SETTLED_VERDICTS.has(camera.verdict)) {
+  if (camera.verdict === "empty") {
+    return { verdict, detected: null, sentence: null, facts: [] }
+  }
+  if (camera.verdict === "ok") {
+    if (camera.capture === "streaming") {
+      return { verdict, detected: camera.detected, sentence: null, facts: [] }
+    }
+    const state = camera.capture
+    const label =
+      state !== null && own(OK_NOT_STREAMING_LABELS, state)
+        ? OK_NOT_STREAMING_LABELS[state]
+        : "Detected"
     return {
-      verdict,
-      detected: camera.verdict === "ok" ? camera.detected : null,
-      sentence: null,
+      verdict: { label, tone: "neutral" },
+      detected: camera.detected,
+      sentence: camera.detail,
       facts: [],
     }
   }

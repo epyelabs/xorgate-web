@@ -193,6 +193,75 @@ describe("each thing is said once", () => {
     expect(text()).not.toContain("detected and streaming")
   })
 
+  it("does not say Working for a detected camera that is switched off: Off, and the device's sentence", () => {
+    // Bench 1, cam1: detected, disabled in settings. The verdict is `ok`.
+    const sentence =
+      "imx290 on csi1 is detected; capture is off: the camera is disabled in settings."
+    render({
+      device: device({
+        reportedConfig: cameras({
+          cam0: {
+            declared: { sensor: "imx290", source: "boot-config" },
+            bound: { listed: "imx290" },
+            capture: { state: "streaming" },
+            verdict: "ok",
+            detail: "imx290 on csi0 is detected and streaming.",
+          },
+          cam1: {
+            declared: { sensor: "imx290", source: "boot-config" },
+            bound: { listed: "imx290" },
+            capture: { state: "off" },
+            verdict: "ok",
+            detail: sentence,
+          },
+        }),
+      }),
+    })
+    expect($("camera-verdict-cam0")?.textContent).toBe("Working")
+    expect($("camera-detail-cam0")).toBeNull()
+    expect($("camera-verdict-cam1")?.textContent).toBe("Off")
+    expect($("camera-detected-cam1")?.textContent).toBe("imx290")
+    expect($("camera-detail-cam1")?.textContent).toBe(sentence)
+    expect($("camera-facts-cam1")).toBeNull()
+    expect(text().split("Working").length - 1).toBe(1)
+  })
+
+  it("reads Starting while capture has not started, and Detected for a state it does not know", () => {
+    render({
+      device: device({
+        config: sensors({
+          cam0: { sensor: "imx219" },
+          cam1: { sensor: "imx290" },
+        }),
+        reportedConfig: cameras({
+          cam0: {
+            bound: { listed: "imx219" },
+            capture: { state: "starting" },
+            verdict: "ok",
+            detail: "imx219 on csi0 is detected; capture is starting.",
+          },
+          cam1: {
+            bound: { listed: "imx290" },
+            capture: { state: "calibrating" },
+            verdict: "ok",
+            detail: "imx290 on csi1 is detected; calibrating.",
+          },
+        }),
+      }),
+    })
+    expect($("camera-verdict-cam0")?.textContent).toBe("Starting")
+    expect($("camera-detail-cam0")?.textContent).toBe(
+      "imx219 on csi0 is detected; capture is starting."
+    )
+    expect($("camera-verdict-cam1")?.textContent).toBe("Detected")
+    expect($("camera-detail-cam1")?.textContent).toBe(
+      "imx290 on csi1 is detected; calibrating."
+    )
+    expect($("camera-facts-cam0")).toBeNull()
+    expect($("camera-facts-cam1")).toBeNull()
+    expect(text()).not.toContain("Working")
+  })
+
   it("says a deliberately empty port once: the indicator alone", () => {
     render({
       device: device({

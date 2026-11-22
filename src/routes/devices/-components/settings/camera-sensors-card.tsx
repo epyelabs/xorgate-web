@@ -328,7 +328,9 @@ function PortRow({
         </FieldLabel>
         {truth.verdict && tone ? (
           <span className="flex min-w-0 shrink-0 items-center gap-2">
-            {/* A healthy port's whole truth: what was found, and that it works. */}
+            {/* What was found on a port the device calls `ok`, beside whether
+                it works: a camera that is off or still starting is detected,
+                not working (`cameraPortTruth`). */}
             {truth.detected ? (
               <span
                 className="truncate font-mono text-muted-foreground"

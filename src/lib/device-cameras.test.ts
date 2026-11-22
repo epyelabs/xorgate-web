@@ -1030,7 +1030,15 @@ describe("cameraSensorsCalloutRepeatsPorts", () => {
 
   it("does not count a sentence the port does not show (a healthy port shows none)", () => {
     const cams = parseReportedCameras(
-      report({ cameras: { cam0: { verdict: "ok", detail: "same words" } } })
+      report({
+        cameras: {
+          cam0: {
+            verdict: "ok",
+            capture: { state: "streaming" },
+            detail: "same words",
+          },
+        },
+      })
     )
     expect(
       cameraSensorsCalloutRepeatsPorts(
@@ -1081,6 +1089,92 @@ describe("cameraPortTruth (each thing said once)", () => {
     // The same on an unmanaged port: the detected name is the sensor there.
     expect(cameraPortTruth(one(OK), false).facts).toEqual([])
     expect(cameraPortTruth(one(OK), false).sentence).toBeNull()
+  })
+
+  describe("an `ok` port that is not streaming is detected, not working", () => {
+    // The device's verdict is `ok` whenever the right sensor is detected.
+    // Bench 1 and bench 2, as reported on 2026-11-22:
+    const OFF = {
+      connector: "csi1",
+      declared: { sensor: "imx290", source: "boot-config" },
+      bound: { driver: true, listed: "imx290" },
+      capture: { state: "off" },
+      verdict: "ok",
+      detail:
+        "imx290 on csi1 is detected; capture is off: the camera is disabled in settings.",
+    }
+    const STARTING = {
+      connector: "csi1",
+      declared: { sensor: "imx219", source: "config" },
+      bound: { driver: true, listed: "imx219" },
+      capture: { state: "starting" },
+      verdict: "ok",
+      detail: "imx219 on csi1 is detected; capture is starting.",
+    }
+
+    it("reads Off for a camera switched off in settings, with the device's sentence", () => {
+      expect(cameraPortTruth(one(OFF), false)).toEqual({
+        verdict: { label: "Off", tone: "neutral" },
+        detected: "imx290",
+        sentence: OFF.detail,
+        facts: [],
+      })
+    })
+
+    it("reads Starting while capture has not started yet (after every boot)", () => {
+      expect(cameraPortTruth(one(STARTING), true)).toEqual({
+        verdict: { label: "Starting", tone: "neutral" },
+        detected: "imx219",
+        sentence: STARTING.detail,
+        facts: [],
+      })
+    })
+
+    it("reads Detected for a capture state it does not know, or none at all", () => {
+      const unknown = {
+        ...OFF,
+        capture: { state: "calibrating" },
+        detail: "imx290 is detected; calibrating.",
+      }
+      expect(cameraPortTruth(one(unknown), false)).toEqual({
+        verdict: { label: "Detected", tone: "neutral" },
+        detected: "imx290",
+        sentence: "imx290 is detected; calibrating.",
+        facts: [],
+      })
+      const none = { verdict: "ok", bound: { listed: "imx290" } }
+      expect(cameraPortTruth(one(none), false)).toEqual({
+        verdict: { label: "Detected", tone: "neutral" },
+        detected: "imx290",
+        sentence: null,
+        facts: [],
+      })
+      // An inherited name is not a known state.
+      expect(
+        cameraPortTruth(
+          one({ ...OFF, capture: { state: "constructor" } }),
+          false
+        ).verdict
+      ).toEqual({ label: "Detected", tone: "neutral" })
+    })
+
+    it("still reads Working, and says nothing more, only when frames flow", () => {
+      const streaming = { ...OFF, capture: { state: "streaming" } }
+      expect(cameraPortTruth(one(streaming), false)).toEqual({
+        verdict: { label: "Working", tone: "ok" },
+        detected: "imx290",
+        sentence: null,
+        facts: [],
+      })
+    })
+
+    it("is the same whether or not the port is managed: never a facts grid", () => {
+      for (const block of [OFF, STARTING]) {
+        expect(cameraPortTruth(one(block), true)).toEqual(
+          cameraPortTruth(one(block), false)
+        )
+      }
+    })
   })
 
   it("says a deliberately empty port once: the indicator alone", () => {

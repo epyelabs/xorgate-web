@@ -276,6 +276,8 @@ describe("each thing is said once", () => {
     })
     expect($("camera-verdict-cam1")?.textContent).toBe("Reboot required")
     expect($("camera-detail-cam1")?.textContent).toBe(REBOOT_SENTENCE)
+    // No facts under it: they would read "None / None".
+    expect($("camera-facts-cam1")).toBeNull()
     // No console line of its own, and no callout repeating the reboot.
     expect(text()).not.toContain("Use Reboot Device")
     expect(text()).not.toContain("REBOOT REQUIRED")

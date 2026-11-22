@@ -627,6 +627,10 @@ const SETTLED_VERDICTS: ReadonlySet<string> = new Set(["ok", "empty"])
  *  - A healthy port (`ok`) or a deliberately empty one (`empty`) shows its
  *    state indicator only, with the detected sensor name beside "Working".
  *    No sentence and no facts: they would say "working" three more ways.
+ *  - A port that only waits for a reboot (`reboot-required`) shows the
+ *    indicator and the device's sentence. Nothing is wrong with it, and what
+ *    is detected now belongs to the line the device booted with, so the facts
+ *    would read "None / None" under a sentence that already says what to do.
  *  - Any other verdict shows the indicator, the device's own sentence and the
  *    facts, which are what an operator diagnoses with. "Declared" is left out
  *    when the port is managed, because the select above already shows it; on
@@ -657,7 +661,10 @@ export function cameraPortTruth(
     []
   // A block with none of the three facts in it (only a verdict, or a shape
   // this build cannot read) gets no row of dashes.
-  if (camera.declared?.sensor || camera.detected || camera.capture) {
+  if (
+    camera.verdict !== VERDICT_REBOOT_REQUIRED &&
+    (camera.declared?.sensor || camera.detected || camera.capture)
+  ) {
     const all = reportedCameraFacts(camera)
     if (!managed) facts.push({ label: "Declared", value: all.declared })
     facts.push({ label: "Detected", value: all.detected })

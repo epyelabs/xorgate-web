@@ -1114,6 +1114,28 @@ describe("cameraPortTruth (each thing said once)", () => {
     ).toEqual(["Declared", "Detected", "Frames"])
   })
 
+  it("gives a port that only waits for a reboot the device's sentence, and no facts", () => {
+    // What is detected now belongs to the line the device booted with: the
+    // facts would read "None / None" under a sentence that says what to do.
+    const waiting = {
+      connector: "csi1",
+      declared: { sensor: "imx290", source: "config" },
+      bound: { driver: false, listed: null },
+      capture: { state: "absent" },
+      verdict: "reboot-required",
+      detail:
+        "The camera line of csi1 in config.txt was added since this device booted (the file now says `dtoverlay=imx290,cam1,rotation=0`). Reboot to apply.",
+    }
+    for (const managed of [true, false]) {
+      expect(cameraPortTruth(one(waiting), managed)).toEqual({
+        verdict: { label: "Reboot required", tone: "action" },
+        detected: null,
+        sentence: waiting.detail,
+        facts: [],
+      })
+    }
+  })
+
   it("keeps the sentence of a verdict it does not know, and shows no row of dashes", () => {
     const unknown = cameraPortTruth(
       one({ verdict: "lens-fogged", detail: "Wipe it." }),

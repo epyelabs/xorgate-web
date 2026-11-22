@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 import type { Device, DeviceModel, IoCapabilities } from "@xorgate/sdk"
 import { parseCameraCatalog } from "./camera-catalog"
 import {
+  CAMERA_SENSORS_NOT_RECONCILED_DETAIL,
   buildCameraSensorsConfig,
+  cameraSensorsCalloutRepeatsPorts,
   cameraSensorsGate,
+  cameraSensorsNotReconciled,
   cameraVerdict,
   modelCameraPorts,
   nextRegistrationCameras,
@@ -205,6 +208,61 @@ describe("buildCameraSensorsConfig", () => {
       buildCameraSensorsConfig({}, { port: "cam1", sensor: "imx219" })
     ).toEqual({
       cameras: { cam1: { sensor: "imx219" } },
+    })
+  })
+
+  it("stops naming an option: the key goes, and `options` with the last one", () => {
+    // Not named = left as the device's config.txt line has it ("as found").
+    // That is a different declaration from "set to the default".
+    const two = config({
+      cam0: {
+        sensor: "imx708",
+        options: { linkFrequency: 447000000, futureOption: 9 },
+      },
+      cam1: { sensor: "imx290", options: { clockFrequency: 74250000 } },
+    })
+    expect(
+      buildCameraSensorsConfig(two, {
+        port: "cam0",
+        option: "linkFrequency",
+        value: null,
+      })
+    ).toEqual({
+      cameras: {
+        cam0: { sensor: "imx708", options: { futureOption: 9 } },
+        cam1: { sensor: "imx290", options: { clockFrequency: 74250000 } },
+      },
+    })
+    const last = buildCameraSensorsConfig(two, {
+      port: "cam1",
+      option: "clockFrequency",
+      value: null,
+    })
+    expect(last?.cameras.cam1).toEqual({ sensor: "imx290" })
+    expect("options" in last!.cameras.cam1).toBe(false)
+    // Un-naming what was never named changes nothing.
+    const bare = config({ cam0: { sensor: "imx290" } })
+    expect(
+      buildCameraSensorsConfig(bare, {
+        port: "cam0",
+        option: "clockFrequency",
+        value: null,
+      })
+    ).toEqual(bare.cameraSensors)
+  })
+
+  it("names the catalog default explicitly when the operator picks it", () => {
+    const bare = config({ cam0: { sensor: "imx290" } })
+    expect(
+      buildCameraSensorsConfig(bare, {
+        port: "cam0",
+        option: "clockFrequency",
+        value: 37125000,
+      })
+    ).toEqual({
+      cameras: {
+        cam0: { sensor: "imx290", options: { clockFrequency: 37125000 } },
+      },
     })
   })
 
@@ -749,10 +807,19 @@ describe("cameraVerdict", () => {
     ["requirements-missing", "Requirements missing", "problem"],
     ["unknown-sensor", "Unknown sensor", "problem"],
     ["empty", "No camera", "neutral"],
-    ["unmanaged", "Not managed", "neutral"],
     ["unchecked", "Not checked", "neutral"],
   ])("%s reads '%s' (%s)", (verdict, label, tone) => {
     expect(cameraVerdict(verdict)).toEqual({ label, tone })
+  })
+
+  it("has no label of its own for `unmanaged`: the agent has no such verdict", () => {
+    // An unmanaged port reports `ok` (or a fault) with `declared.source`
+    // `boot-config` or `model`. If the word ever arrived it would be shown
+    // like any other unknown one.
+    expect(cameraVerdict("unmanaged")).toEqual({
+      label: "Unmanaged",
+      tone: "neutral",
+    })
   })
 
   it("shows a verdict it does not know under its own word, neutrally", () => {
@@ -773,6 +840,130 @@ describe("cameraVerdict", () => {
       label: "Constructor",
       tone: "neutral",
     })
+  })
+})
+
+describe("cameraSensorsNotReconciled", () => {
+  it("is true on the agent's flag or on its sentence", () => {
+    expect(
+      cameraSensorsNotReconciled({ cameras: {}, reconciled: false }, undefined)
+    ).toBe(true)
+    expect(
+      cameraSensorsNotReconciled(
+        undefined,
+        CAMERA_SENSORS_NOT_RECONCILED_DETAIL
+      )
+    ).toBe(true)
+    expect(CAMERA_SENSORS_NOT_RECONCILED_DETAIL).toBe(
+      "saved; the device has not reconciled its boot config yet"
+    )
+  })
+
+  it("is false once reconciled, and for anything it cannot read", () => {
+    expect(
+      cameraSensorsNotReconciled({ cameras: {}, rebootRequired: true }, "x")
+    ).toBe(false)
+    expect(cameraSensorsNotReconciled({ reconciled: true }, undefined)).toBe(
+      false
+    )
+    for (const junk of [
+      null,
+      undefined,
+      7,
+      "false",
+      [],
+      { reconciled: "false" },
+    ]) {
+      expect(cameraSensorsNotReconciled(junk, undefined)).toBe(false)
+    }
+  })
+})
+
+describe("cameraSensorsCalloutRepeatsPorts", () => {
+  const REBOOT = {
+    state: "adjusted",
+    detail:
+      "written to the boot config — REBOOT REQUIRED to apply: cam0 imx708, cam1 none",
+  }
+  const ports = (...verdicts: (string | null)[]) =>
+    parseReportedCameras(
+      report({
+        cameras: Object.fromEntries(
+          verdicts.map((verdict, i) => [`cam${i}`, { verdict }])
+        ),
+      })
+    )
+
+  it("is true when the setting waits for a reboot and the ports say so themselves", () => {
+    expect(
+      cameraSensorsCalloutRepeatsPorts(REBOOT, ports("reboot-required", "ok"))
+    ).toBe(true)
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        REBOOT,
+        ports("reboot-required", "empty")
+      )
+    ).toBe(true)
+  })
+
+  it("keeps the callout when a port in trouble also waits for a reboot", () => {
+    // `requirements-missing` (and a real fault) outrank the pending change in
+    // the port's verdict; the callout is then the place that names every port
+    // that waits.
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        REBOOT,
+        ports("requirements-missing", "ok")
+      )
+    ).toBe(false)
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        REBOOT,
+        ports("reboot-required", "requirements-missing")
+      )
+    ).toBe(false)
+    expect(
+      cameraSensorsCalloutRepeatsPorts(
+        REBOOT,
+        ports("reboot-required", "not-detected")
+      )
+    ).toBe(false)
+    expect(cameraSensorsCalloutRepeatsPorts(REBOOT, ports("no-frames"))).toBe(
+      false
+    )
+  })
+
+  it("keeps the callout when no port says reboot, or none is reported", () => {
+    expect(cameraSensorsCalloutRepeatsPorts(REBOOT, ports("ok", "ok"))).toBe(
+      false
+    )
+    expect(cameraSensorsCalloutRepeatsPorts(REBOOT, [])).toBe(false)
+  })
+
+  it("keeps every other sentence of the rail", () => {
+    const waiting = ports("reboot-required")
+    for (const status of [
+      {
+        state: "adjusted",
+        detail:
+          "asked to revert to defaults, but the device is still holding a value",
+      },
+      {
+        state: "adjusted",
+        detail: "the device clamped or normalized the delivered value",
+      },
+      { state: "adjusted" },
+      {
+        state: "rejected",
+        reason:
+          "cam0: …; written to the boot config and waiting for a reboot: cam1 none",
+      },
+      { state: "rejected", detail: REBOOT.detail },
+      { state: "pending" },
+      { state: "applied" },
+    ]) {
+      expect(cameraSensorsCalloutRepeatsPorts(status, waiting)).toBe(false)
+    }
   })
 })
 

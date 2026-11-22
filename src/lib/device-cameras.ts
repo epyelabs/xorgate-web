@@ -87,8 +87,13 @@ export type CameraSensorChange =
   | { port: string; sensor: string }
   /** Return the port to "not managed": the key is removed. */
   | { port: string; unmanaged: true }
-  /** Set one option of the sensor already declared on the port. */
-  | { port: string; option: string; value: number }
+  /**
+   * Name one option of the sensor already declared on the port, or stop naming
+   * it (`value: null`). An option the setting does not name is left as the
+   * device's own `config.txt` line has it ("as found"), so "not named" and
+   * "set to the default" are different declarations.
+   */
+  | { port: string; option: string; value: number | null }
 
 /**
  * The WHOLE namespace to send for one change on one port. The backend replaces
@@ -98,8 +103,9 @@ export type CameraSensorChange =
  *  - every OTHER port is carried through exactly as stored, including a
  *    sensor id or option this console build does not know (a newer catalog);
  *  - on the touched port, changing an option keeps the other options (known or
- *    not); changing the sensor starts a fresh entry, because options belong to
- *    the sensor they were set for;
+ *    not); un-naming one removes just that key, and `options` itself when it
+ *    was the last; changing the sensor starts a fresh entry, because options
+ *    belong to the sensor they were set for;
  *  - a port the device's model no longer declares (left behind by a model
  *    reassignment) is dropped: the backend refuses a save that carries one,
  *    so keeping it would make the card unsaveable. `ports: null` = the model's
@@ -129,13 +135,15 @@ export function buildCameraSensorsConfig(
     if (current?.sensor !== change.sensor)
       cameras[change.port] = { sensor: change.sensor }
   } else if (current !== undefined && current.sensor !== CAMERA_SENSOR_NONE) {
-    cameras[change.port] = {
-      ...current,
-      options: {
-        ...(isPlainObject(current.options) ? current.options : {}),
-        [change.option]: change.value,
-      },
+    const options: Record<string, number> = {
+      ...(isPlainObject(current.options) ? current.options : {}),
     }
+    if (change.value === null) delete options[change.option]
+    else options[change.option] = change.value
+    const next: CameraSensorEntry = { ...current }
+    if (Object.keys(options).length > 0) next.options = options
+    else delete next.options
+    cameras[change.port] = next
   }
   return Object.keys(cameras).length > 0 ? { cameras } : null
 }
@@ -431,7 +439,7 @@ export type CameraVerdictTone =
   | "action"
   /** The port does not work as declared. */
   | "problem"
-  /** Nothing to judge: an empty, unmanaged or unchecked port, or a new word. */
+  /** Nothing to judge: an empty or unchecked port, or a word this build does not know. */
   | "neutral"
 
 const VERDICTS: Record<string, { label: string; tone: CameraVerdictTone }> = {
@@ -443,12 +451,59 @@ const VERDICTS: Record<string, { label: string; tone: CameraVerdictTone }> = {
   "requirements-missing": { label: "Requirements missing", tone: "problem" },
   "unknown-sensor": { label: "Unknown sensor", tone: "problem" },
   empty: { label: "No camera", tone: "neutral" },
-  unmanaged: { label: "Not managed", tone: "neutral" },
   unchecked: { label: "Not checked", tone: "neutral" },
 }
 
 /** The verdict that tells the operator to reboot. */
 export const VERDICT_REBOOT_REQUIRED = "reboot-required"
+
+/**
+ * The agent's `adjusted` detail for "delivered, but the reconciler has not
+ * looked at it yet": a moment right after a save, not a disagreement.
+ */
+export const CAMERA_SENSORS_NOT_RECONCILED_DETAIL =
+  "saved; the device has not reconciled its boot config yet"
+
+/**
+ * Whether the device holds the namespace but has not reconciled its boot
+ * config with it yet. The agent says so twice: `effective.cameraSensors`
+ * carries `reconciled: false` until the first pass, and the status entry is
+ * `adjusted` with the sentence above. Either is enough; the page then shows
+ * the namespace as still applying rather than as adjusted.
+ */
+export function cameraSensorsNotReconciled(
+  effective: unknown,
+  detail: string | undefined
+): boolean {
+  if (isPlainObject(effective) && effective.reconciled === false) return true
+  return detail === CAMERA_SENSORS_NOT_RECONCILED_DETAIL
+}
+
+/**
+ * Whether the namespace's own callout would only repeat what the ports
+ * already say. That is one case: the status is `adjusted` because the boot
+ * config was written and waits for a reboot (the device marks that sentence
+ * "REBOOT REQUIRED", as it does for `cameraMount`), some port reads
+ * `reboot-required` in the device's words, and no port reports a fault.
+ *
+ * A port in trouble keeps the callout: a sensor whose requirements are
+ * missing, or one that is not detected, can ALSO be waiting for a reboot, and
+ * then the callout is the only place that names every port that waits.
+ * Anything this cannot tell apart shows both, which is the harmless side.
+ */
+export function cameraSensorsCalloutRepeatsPorts(
+  status: { state: string; detail?: string },
+  cameras: readonly ReportedCamera[]
+): boolean {
+  if (status.state !== "adjusted") return false
+  if (!/reboot required/i.test(status.detail ?? "")) return false
+  let waits = false
+  for (const camera of cameras) {
+    if (camera.verdict === VERDICT_REBOOT_REQUIRED) waits = true
+    else if (cameraVerdict(camera.verdict)?.tone === "problem") return false
+  }
+  return waits
+}
 
 /**
  * The ONE state indicator of a port, derived from its verdict. A verdict this

@@ -35,12 +35,14 @@ import {
   agentPredatesSensor,
   cameraSensor,
   cameraSensorHints,
+  cameraSensorLabel,
   formatCameraOptionValue,
   type CameraSensorOption,
 } from "@/lib/camera-catalog"
 import {
   VERDICT_REBOOT_REQUIRED,
   buildCameraSensorsConfig,
+  cameraSensorsCalloutRepeatsPorts,
   cameraSensorsGate,
   cameraVerdict,
   parseReportedCameras,
@@ -167,14 +169,12 @@ export function CameraSensorsCard({
     })
   }
 
-  // The rail's own callout would repeat a port that already says "reboot
-  // required" in the device's words. Everything else the rail has to say
-  // (not delivered yet, refused, changed on the device) has no per-port twin.
-  const portSaysReboot = rows.some(
-    (r) => r.camera?.verdict === VERDICT_REBOOT_REQUIRED
-  )
+  // The namespace's own callout is the device's sentence about the SETTING
+  // (`detail` when adjusted, `reason` when rejected, verbatim). It is left out
+  // in the one case where it would only repeat the ports: written, waiting
+  // for a reboot, and every port that waits says so itself.
   const showRailCallout =
-    canChoose && !(status.state === "adjusted" && portSaysReboot)
+    canChoose && !cameraSensorsCalloutRepeatsPorts(status, reported)
 
   return (
     <Card data-testid="camera-sensors-card">
@@ -224,7 +224,14 @@ export function CameraSensorsCard({
               </span>
             </SettingsCallout>
           ) : null}
-          {showRailCallout ? <ConfigStatusCallout status={status} /> : null}
+          {/* A refusal can name several ports and quote paths and whole
+              config.txt lines: it must wrap inside the card, never widen it. */}
+          {showRailCallout ? (
+            <ConfigStatusCallout
+              status={status}
+              className="[overflow-wrap:anywhere]"
+            />
+          ) : null}
         </FieldGroup>
       </CardContent>
     </Card>
@@ -263,13 +270,14 @@ function PortRow({
   const sensor = entry ? cameraSensor(entry.sensor) : undefined
   const hints = sensor ? cameraSensorHints(sensor) : []
   const value = entry === undefined ? UNMANAGED : entry.sensor
-  // A stored id this console's catalog does not list (a newer backend catalog)
-  // still has to be IN the select, or the control would show nothing.
-  const unknownStored =
+  // A stored id this console cannot offer (a newer backend catalog, or a
+  // sensor that is only planned) still has to be IN the select, or the control
+  // would show nothing. It is the only way such an id ever appears there:
+  // sensors that cannot be chosen are not listed.
+  const notOffered =
     entry !== undefined &&
     entry.sensor !== CAMERA_SENSOR_NONE &&
-    sensor === undefined &&
-    !CAMERA_CATALOG.unavailable.some((s) => s.id === entry.sensor)
+    sensor === undefined
 
   return (
     <div className="flex flex-col gap-2" data-testid={`camera-port-${port}`}>
@@ -299,7 +307,7 @@ function PortRow({
       </div>
 
       {picker ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid items-start gap-3 sm:grid-cols-2">
           <Field>
             <Select
               value={value}
@@ -336,26 +344,12 @@ function PortRow({
                     </SelectItem>
                   )
                 })}
-                {CAMERA_CATALOG.unavailable.map((s) => (
-                  <SelectItem
-                    key={s.id}
-                    value={s.id}
-                    disabled={s.id !== value}
-                    description={
-                      s.why === "planned"
-                        ? "not available yet"
-                        : "needs a newer console"
-                    }
-                  >
-                    {s.label}
-                  </SelectItem>
-                ))}
-                {unknownStored ? (
+                {notOffered ? (
                   <SelectItem
                     value={entry.sensor}
                     description="not known to this console"
                   >
-                    {entry.sensor}
+                    {cameraSensorLabel(entry.sensor)}
                   </SelectItem>
                 ) : null}
                 <SelectItem
@@ -416,11 +410,13 @@ function PortRow({
           the operator. */}
       {camera?.detail ? (
         <p
-          className={
+          className={cn(
+            // The sentence can quote a whole config.txt line or a path.
+            "[overflow-wrap:anywhere]",
             verdict?.tone === "problem" || verdict?.tone === "action"
               ? "text-foreground"
               : "text-muted-foreground"
-          }
+          )}
           data-testid={`camera-detail-${port}`}
         >
           {camera.detail}
@@ -438,7 +434,22 @@ function PortRow({
   )
 }
 
-/** One per-board parameter of the declared sensor, defaulted and compact. */
+/**
+ * Select value for "this option is not named by the setting". Not a number,
+ * so it cannot collide with an option value.
+ */
+const AS_FOUND = "~as-found"
+
+/**
+ * One per-board parameter of the declared sensor, compact.
+ *
+ * An option the setting does not name is left as the device's own config.txt
+ * line has it: the agent does not reset it to the overlay default. So the
+ * first choice is "As found on the device", which is what an entry without the
+ * key means, and it is what the select shows then; the catalog default is
+ * never shown as if it were set. Picking a value names it (the default
+ * included: that is a declaration too); picking "As found" removes the key.
+ */
 function OptionField({
   port,
   option,
@@ -448,18 +459,19 @@ function OptionField({
 }: {
   port: string
   option: CameraSensorOption
-  /** The stored value; undefined = the overlay default. */
+  /** The value the setting names; undefined = not named (as found). */
   stored: number | undefined
   pending: boolean
   onChange: (change: CameraSensorChange) => void
 }) {
   const id = `${SENSOR_KEY(port)}-${option.key}`
-  const value = typeof stored === "number" ? stored : option.default
-  // A stored value the catalog does not list (a newer catalog) is shown as it
+  const named = typeof stored === "number"
+  // A named value the catalog does not list (a newer catalog) is shown as it
   // is and never rewritten unless the operator picks another.
-  const values = option.values.includes(value)
-    ? option.values
-    : [...option.values, value]
+  const values =
+    !named || option.values.includes(stored)
+      ? option.values
+      : [...option.values, stored]
   return (
     <Field orientation="horizontal" className="items-center">
       <FieldLabel
@@ -470,16 +482,21 @@ function OptionField({
         {option.label}
       </FieldLabel>
       <Select
-        value={String(value)}
+        value={named ? String(stored) : AS_FOUND}
         disabled={pending}
         onValueChange={(next) =>
-          onChange({ port, option: option.key, value: Number(next) })
+          onChange({
+            port,
+            option: option.key,
+            value: next === AS_FOUND ? null : Number(next),
+          })
         }
       >
         <SelectTrigger id={id}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value={AS_FOUND}>As found on the device</SelectItem>
           {values.map((v) => (
             <SelectItem key={v} value={String(v)}>
               {formatCameraOptionValue(option, v)}

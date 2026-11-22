@@ -13,7 +13,7 @@
 import type { Device } from "@xorgate/sdk"
 import type { SettingsTab } from "./device-settings-tabs"
 import { CONFIG_NAMESPACE_DEFAULTS } from "./device-config-defaults"
-import { cameraSensorsGate } from "./device-cameras"
+import { cameraSensorsGate, cameraSensorsNotReconciled } from "./device-cameras"
 import { deepEqual } from "./deep-equal"
 
 /** Namespaces of the device-delivered config document, in registry order. */
@@ -246,6 +246,15 @@ function divergesFromDefaults(ns: ConfigNamespace, effective: unknown): boolean 
   return !deepEqual(resolveOverDefaults(defaults, effective), defaults)
 }
 
+/**
+ * Namespaces where an `applied` verdict for a value the cloud does not hold is
+ * read as the acknowledgement of a revert (see `computeConfigStatus`).
+ */
+const REVERT_ACK_NAMESPACES: ReadonlySet<ConfigNamespace> = new Set<ConfigNamespace>([
+  "cameraSensors",
+  "cameraMount",
+])
+
 function emptyStatus(state: ConfigState): DeviceConfigStatus {
   return Object.fromEntries(
     CONFIG_NAMESPACES.map((ns) => [ns, { state }])
@@ -311,7 +320,37 @@ export function computeConfigStatus(device: Device | null): DeviceConfigStatus {
         return [ns, { state: device.status === "online" ? "pending" : "queued", effective }]
       }
       const entry = reported.status[ns]
-      if (entry) {
+      // The device has the value and has not reconciled its boot config with
+      // it yet: the instant after a save. It says `adjusted`, because nothing
+      // is in force yet, but there is nothing for an operator to act on, and
+      // the next report (seconds later) carries the real verdict. Shown as
+      // still applying, which also keeps the page polling for that report.
+      if (
+        ns === "cameraSensors" &&
+        entry?.state === "adjusted" &&
+        cameraSensorsNotReconciled(effective, entry.detail)
+      ) {
+        return [
+          ns,
+          {
+            state: device.status === "online" ? "pending" : "queued",
+            at: entry.at,
+            effective,
+          },
+        ]
+      }
+      // A reverted namespace: the cloud holds nothing, and the device's
+      // `applied` is its acknowledgement of that revert, which stays in every
+      // later report. Reading it as "Synced" would badge a card whose every
+      // control says "not managed". It is the silence case below: no badge,
+      // unless the device still runs something other than its defaults.
+      // Limited to the two camera namespaces, where a port going back to "not
+      // managed" makes this an everyday state; any other verdict (`adjusted`:
+      // "asked to revert, but the device is still holding a value") still
+      // comes through.
+      const revertAcknowledged =
+        REVERT_ACK_NAMESPACES.has(ns) && entry?.state === "applied" && config[ns] == null
+      if (entry && !revertAcknowledged) {
         return [
           ns,
           { state: entry.state, detail: entry.detail, reason: entry.reason, at: entry.at, effective },
@@ -428,12 +467,17 @@ export function configStateExplanation(status: NamespaceStatus): string | null {
       return "Saved and sent — waiting for the device to confirm it applied it."
     case "queued":
       return "Saved. The device is offline; it will pick this up when it reconnects."
+    // The device's own sentence, verbatim. By the rail's convention `adjusted`
+    // carries it under `detail` and `rejected` under `reason`; whichever is
+    // present is shown, so an agent that fills the other one is still heard.
     case "adjusted":
       return (
-        status.detail ?? "The device is running a different value than the one saved here."
+        status.detail ??
+        status.reason ??
+        "The device is running a different value than the one saved here."
       )
     case "rejected":
-      return status.reason ?? "The device could not use the value saved here."
+      return status.reason ?? status.detail ?? "The device could not use the value saved here."
     case "diverged":
       return (
         "Nothing is saved here, so this card is showing the defaults — but the device " +

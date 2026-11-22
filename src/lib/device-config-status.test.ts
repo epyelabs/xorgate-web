@@ -307,30 +307,180 @@ describe("computeConfigStatus — cameraSensors (plans/support-other-camera-mode
     expect(status.cameraSensors.state).toBe("applied")
   })
 
-  it("passes the device's own verdict through for a capable device", () => {
-    const detail = "written to the boot config — REBOOT REQUIRED to apply: cam0 imx708"
-    const status = computeConfigStatus(
+  // The agent's real status entries (phase-2/agent-report.md, "The agent-side
+  // wire"): `adjusted` carries the sentence under `detail`, `rejected` under
+  // `reason`. The page shows whichever is there, verbatim.
+  const REBOOT_DETAIL =
+    "written to the boot config — REBOOT REQUIRED to apply: cam0 imx708, cam1 none"
+  const MULTI_PORT_REASON =
+    'cam0: this agent build does not know the camera sensor "imx999" (it knows: imx290, imx219, ' +
+    "imx708, imx335); update the agent or choose another sensor. config.txt is left as it is; " +
+    'cam7: this device has no camera "cam7"; config.txt is left as it is; ' +
+    "written to the boot config and waiting for a reboot: cam1 none"
+  const withStatus = (entry: Record<string, unknown>, effective: Record<string, unknown> = {}) =>
+    computeConfigStatus(
       rust({
         reportedConfig: report({
           rev: 5,
-          effective: capable,
-          status: { cameraSensors: { state: "adjusted", at: 1, detail } },
+          effective: { ...capable, ...effective },
+          status: { cameraSensors: entry },
         }),
       })
     )
-    expect(status.cameraSensors).toMatchObject({ state: "adjusted", detail })
-    expect(configStateExplanation(status.cameraSensors)).toBe(detail)
-    const rejected = computeConfigStatus(
+
+  it("shows a pending reboot as adjusted, with the device's detail verbatim", () => {
+    const status = withStatus(
+      { state: "adjusted", at: 1, detail: REBOOT_DETAIL },
+      { cameraSensors: { ...CAMERAS.cameraSensors, rebootRequired: true } }
+    )
+    expect(status.cameraSensors).toMatchObject({ state: "adjusted", detail: REBOOT_DETAIL })
+    expect(configStateExplanation(status.cameraSensors)).toBe(REBOOT_DETAIL)
+    // `adjusted` is on the card itself; it does not badge the tab.
+    expect(tabAttentionCounts(status)).toEqual({})
+  })
+
+  it("shows a refusal as rejected, with the device's multi-port reason verbatim", () => {
+    const status = withStatus({ state: "rejected", at: 1, reason: MULTI_PORT_REASON })
+    expect(status.cameraSensors.state).toBe("rejected")
+    expect(configStateExplanation(status.cameraSensors)).toBe(MULTI_PORT_REASON)
+    expect(tabAttentionCounts(status)).toEqual({ media: 1 })
+  })
+
+  it("reads 'saved, not reconciled yet' as still applying, not as adjusted", () => {
+    // The instant after a save: the device has the value and its reconciler
+    // has not looked at config.txt yet. Nothing for an operator to act on.
+    const entry = {
+      state: "adjusted",
+      at: 1,
+      detail: "saved; the device has not reconciled its boot config yet",
+    }
+    const flagged = { cameraSensors: { ...CAMERAS.cameraSensors, reconciled: false } }
+    const status = withStatus(entry, flagged)
+    expect(status.cameraSensors.state).toBe("pending")
+    expect(status.cameraSensors.detail).toBeUndefined()
+    expect(configStateExplanation(status.cameraSensors)).toBe(
+      "Saved and sent — waiting for the device to confirm it applied it."
+    )
+    // Either signal is enough: the flag without the sentence, the sentence
+    // without the flag.
+    expect(withStatus({ state: "adjusted", detail: "x" }, flagged).cameraSensors.state).toBe("pending")
+    expect(withStatus(entry).cameraSensors.state).toBe("pending")
+    // And it keeps the page polling for the report that follows.
+    expect(hasPending(status)).toBe(true)
+    // A device that went offline in that instant is waiting, not applying.
+    const offline = computeConfigStatus(
       rust({
+        status: "offline",
         reportedConfig: report({
           rev: 5,
-          effective: capable,
-          status: { cameraSensors: { state: "rejected", reason: "sensor imx999 is not known" } },
+          effective: { ...capable, ...flagged },
+          status: { cameraSensors: entry },
         }),
       })
     )
-    expect(configStateExplanation(rejected.cameraSensors)).toBe("sensor imx999 is not known")
-    expect(tabAttentionCounts(rejected)).toEqual({ media: 1 })
+    expect(offline.cameraSensors.state).toBe("queued")
+  })
+
+  it("never turns another verdict into 'applying' on the reconciled flag alone", () => {
+    const flagged = { cameraSensors: { ...CAMERAS.cameraSensors, reconciled: false } }
+    expect(withStatus({ state: "rejected", reason: "r" }, flagged).cameraSensors.state).toBe("rejected")
+    expect(withStatus({ state: "applied" }, flagged).cameraSensors.state).toBe("applied")
+    // Once reconciled, `adjusted` is adjusted.
+    expect(
+      withStatus(
+        { state: "adjusted", detail: REBOOT_DETAIL },
+        { cameraSensors: { ...CAMERAS.cameraSensors, rebootRequired: true } }
+      ).cameraSensors.state
+    ).toBe("adjusted")
+  })
+
+  it("shows whichever of detail and reason the device filled, for both states", () => {
+    expect(configStateExplanation({ state: "adjusted", reason: "only a reason" })).toBe("only a reason")
+    expect(configStateExplanation({ state: "rejected", detail: "only a detail" })).toBe("only a detail")
+    // The rail's own field wins when both are there.
+    expect(configStateExplanation({ state: "adjusted", detail: "d", reason: "r" })).toBe("d")
+    expect(configStateExplanation({ state: "rejected", detail: "d", reason: "r" })).toBe("r")
+  })
+
+  describe("a cleared namespace", () => {
+    // A revert leaves `status.<ns> = {"state":"applied"}` in every later
+    // report: the device's acknowledgement that it dropped the value.
+    const cleared = (
+      ns: "cameraSensors" | "cameraMount",
+      entry: Record<string, unknown>,
+      effective: Record<string, unknown> = {}
+    ) =>
+      computeConfigStatus(
+        rust({
+          config: {},
+          reportedConfig: report({
+            rev: 5,
+            effective: { ...capable, ...effective },
+            status: { [ns]: entry },
+          }),
+        })
+      )
+
+    it.each(["cameraSensors", "cameraMount"] as const)(
+      "shows no badge for %s when the cloud holds nothing and the device acknowledged the revert",
+      (ns) => {
+        const status = cleared(ns, { state: "applied", at: 1 })
+        expect(status[ns].state).toBe("unset")
+        expect(configStateExplanation(status[ns])).toBeNull()
+        expect(tabAttentionCounts(status)).toEqual({})
+      }
+    )
+
+    it("still says so when the device kept a value it was asked to drop", () => {
+      const detail = "asked to revert to defaults, but the device is still holding a value"
+      const status = cleared(
+        "cameraSensors",
+        { state: "adjusted", at: 1, detail },
+        { cameraSensors: { ...CAMERAS.cameraSensors, rebootRequired: false } }
+      )
+      expect(status.cameraSensors).toMatchObject({ state: "adjusted", detail })
+      expect(configStateExplanation(status.cameraSensors)).toBe(detail)
+    })
+
+    it("reads as 'Device differs' when the acknowledged device still reports a value", () => {
+      const status = cleared(
+        "cameraSensors",
+        { state: "applied" },
+        { cameraSensors: { ...CAMERAS.cameraSensors, rebootRequired: false } }
+      )
+      expect(status.cameraSensors.state).toBe("diverged")
+    })
+
+    it("keeps `applied` as Synced while the cloud does hold the namespace", () => {
+      expect(withStatus({ state: "applied", at: 1 }).cameraSensors.state).toBe("applied")
+      const mount = computeConfigStatus(
+        rust({
+          config: { cameraMount: { cameras: { cam0: { rotationDeg: 0 } } } },
+          reportedConfig: report({
+            rev: 5,
+            effective: capable,
+            status: { cameraMount: { state: "applied" } },
+          }),
+        })
+      )
+      expect(mount.cameraMount.state).toBe("applied")
+    })
+
+    it("is still Applying… while the revert itself is in flight", () => {
+      const status = computeConfigStatus(
+        rust({
+          config: {},
+          configRev: 6,
+          status: "online",
+          reportedConfig: report({
+            rev: 5,
+            effective: capable,
+            status: { cameraSensors: { state: "applied" } },
+          }),
+        })
+      )
+      expect(status.cameraSensors.state).toBe("pending")
+    })
   })
 
   it("is pending/queued for a capable device that is behind", () => {

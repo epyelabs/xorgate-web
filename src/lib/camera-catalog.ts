@@ -15,8 +15,8 @@
 //      not know (the catalog is then unusable as a whole);
 //   2. an enum member this build does not know (`tier`, `identity`, an OS
 //      release, a `nativeAspect`) means "this ENTRY is not usable by this
-//      build": it is shown as unavailable, never guessed at, and never a parse
-//      failure of the whole catalog;
+//      build": it is not offered, never guessed at, and never a parse failure
+//      of the whole catalog;
 //   3. never write an option value the catalog does not list.
 //
 // DOM-free on purpose: the frontend vitest has no DOM, so the rules live here
@@ -71,7 +71,10 @@ export interface CameraSensor {
   unsupportedPresets: { preset: string; reason: string }[]
 }
 
-/** A sensor the catalog names but this build cannot offer. */
+/**
+ * A sensor the catalog names but this build cannot offer. Never listed in a
+ * select; kept so that an id already stored on a device still gets its label.
+ */
 export interface UnavailableCameraSensor {
   id: string
   label: string

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 3,
+  "catalogVersion": 4,
   "generatedBy": "backend/xorgate-core-service: npm run contract:generate",
   "sensors": [
     {
@@ -40,7 +40,8 @@
       },
       "requires": {
         "os": [
-          "bookworm"
+          "bookworm",
+          "trixie"
         ],
         "packageSet": null
       },
@@ -85,7 +86,8 @@
       },
       "requires": {
         "os": [
-          "bookworm"
+          "bookworm",
+          "trixie"
         ],
         "packageSet": null
       },
@@ -148,7 +150,8 @@
       },
       "requires": {
         "os": [
-          "bookworm"
+          "bookworm",
+          "trixie"
         ],
         "packageSet": null
       },
@@ -207,7 +210,8 @@
       },
       "requires": {
         "os": [
-          "bookworm"
+          "bookworm",
+          "trixie"
         ],
         "packageSet": "arducam-libcamera"
       },
@@ -246,7 +250,8 @@
         ]
       },
       "notes": [
-        "Not available yet. It needs a device image built on Debian Trixie."
+        "Not available. The one board tried did not answer on its I2C bus, so nothing about this sensor has been verified.",
+        "It would need Debian Trixie with kernel 6.18.60 or later. Its overlay is imx662; the device-tree node is starvis2, and the default rotation is 180 (read in the device tree)."
       ]
     }
   ],
@@ -258,7 +263,8 @@
       "notes": [
         "Replaces the stock libcamera0.5 and libcamera-ipa packages of the same name. Nothing else changes; the stock GStreamer plugin keeps working against them.",
         "Needs an apt hold on both packages: a newer stock libcamera would otherwise replace them on an upgrade and remove the IMX335 helper. The hold also keeps later stock libcamera fixes off that device.",
-        "Fetched from Arducam's GitHub release and checked against the pinned sha256. Release assets can be replaced upstream; a file that no longer matches is refused."
+        "Fetched from Arducam's GitHub release and checked against the pinned sha256. Release assets can be replaced upstream; a file that no longer matches is refused.",
+        "On Debian Trixie the pair is libcamera0.8 and libcamera-ipa 0.8.0, Arducam's build of the stock 0.8.0. The two releases cannot share files: each OS has its own pinned pair."
       ],
       "targets": [
         {
@@ -278,6 +284,26 @@
               "url": "https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/libcamera-v0.0.5/libcamera-ipa_0.5.2+rpt20250909-1_arm64.deb",
               "sha256": "247961da888ab177dfac1ceb8e0e75edf2cd2f8722be2fd46984041e87d12503",
               "bytes": 600732
+            }
+          ]
+        },
+        {
+          "os": "trixie",
+          "arch": "arm64",
+          "packages": [
+            {
+              "name": "libcamera0.8",
+              "version": "0.8.0+rpt20261106-2",
+              "url": "https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/libcamera-v0.0.5/libcamera0.8_0.8.0+rpt20261106-2_arm64.deb",
+              "sha256": "8f591a09c3faf866821eb421c4f601a1ff9029ff36baa8aeb32de3467b7728eb",
+              "bytes": 591404
+            },
+            {
+              "name": "libcamera-ipa",
+              "version": "0.8.0+rpt20261106-2",
+              "url": "https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/libcamera-v0.0.5/libcamera-ipa_0.8.0+rpt20261106-2_arm64.deb",
+              "sha256": "5145f1961c195f1bf782e7f1233afb605c1afe97ceae79888ec5557ddfd26ccc",
+              "bytes": 659076
             }
           ]
         }

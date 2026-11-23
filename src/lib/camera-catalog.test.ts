@@ -124,6 +124,22 @@ describe("camera-catalog.json (the vendored copy)", () => {
     ])
     expect(cameraSensor("imx219")?.options).toEqual([])
   })
+
+  it("offers every sensor on both OS releases the catalog names (catalog 4)", () => {
+    // Catalog 4 added `trixie` to `requires.os`; an OS release this build did
+    // not know would silently move the sensor to "needs a newer console".
+    for (const s of rawCatalog.sensors) {
+      expect(s.requires.os).toEqual(["bookworm", "trixie"])
+      expect(cameraSensor(s.id)?.id).toBe(s.id)
+    }
+    // The IMX662 is named, never offered.
+    expect(cameraSensor("imx662")).toBeUndefined()
+    expect(CAMERA_CATALOG.unavailable).toContainEqual({
+      id: "imx662",
+      label: cameraSensorLabel("imx662"),
+      why: "planned",
+    })
+  })
 })
 
 describe("parseCameraCatalog — the compatibility rule", () => {
@@ -203,6 +219,18 @@ describe("parseCameraCatalog — the compatibility rule", () => {
       ])
     }
   )
+
+  it("offers a sensor on either known OS release, or both", () => {
+    const parsed = catalog([
+      sensor({ id: "imx401", requires: { os: ["trixie"], packageSet: null } }),
+      sensor({
+        id: "imx402",
+        requires: { os: ["bookworm", "trixie"], packageSet: "arducam" },
+      }),
+    ])
+    expect(parsed.sensors.map((s) => s.id)).toEqual(["imx401", "imx402"])
+    expect(parsed.unavailable).toEqual([])
+  })
 
   it("leaves a sensor to a newer console when it cannot read its overlay or an option", () => {
     const parsed = catalog([
@@ -326,6 +354,10 @@ describe("agent versions", () => {
     expect(parseSemver("0.2.0")).toEqual([0, 2, 0])
     expect(parseSemver("v1.10.3")).toEqual([1, 10, 3])
     expect(parseSemver("0.2.0-rc1")).toEqual([0, 2, 0])
+    // The Rust agent's own report: version, then build sha and channel.
+    expect(parseSemver("0.2.1 (bb9aa30, dev)")).toEqual([0, 2, 1])
+    expect(parseSemver("v0.2.1 (bb9aa30, dev)")).toEqual([0, 2, 1])
+    expect(parseSemver("  v0.2.0\n")).toEqual([0, 2, 0])
     for (const not of ["c92d4f4", "0.2", "1.2.3.4", "", null, undefined, 7]) {
       expect(parseSemver(not)).toBeNull()
     }
@@ -347,6 +379,14 @@ describe("agent versions", () => {
     expect(agentPredatesSensor(s, "v0.2.0")).toBe(true)
     expect(agentPredatesSensor(s, "0.3.0")).toBe(false)
     expect(agentPredatesSensor(s, "v0.10.0")).toBe(false)
+    expect(agentPredatesSensor(s, "0.2.1 (bb9aa30, dev)")).toBe(true)
+    expect(agentPredatesSensor(s, "v0.3.0 (bb9aa30, dev)")).toBe(false)
+    // Against the shipped catalog (every minAgent 0.2.0).
+    for (const real of CAMERA_CATALOG.sensors) {
+      expect(agentPredatesSensor(real, "v0.2.0")).toBe(false)
+      expect(agentPredatesSensor(real, "0.2.1 (bb9aa30, dev)")).toBe(false)
+      expect(agentPredatesSensor(real, "v0.1.1")).toBe(true)
+    }
     // A CI sha has no order, and no report says nothing: left to the device.
     expect(agentPredatesSensor(s, "c92d4f4")).toBe(false)
     expect(agentPredatesSensor(s, null)).toBe(false)
